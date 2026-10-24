@@ -24,6 +24,23 @@ export async function getPromo() {
   };
 }
 
+// 🔥 الدالة الجديدة اللي هتسحب نصوص الموقع
+export async function getFrontendSettings() {
+  await ensureSeed();
+  const rows = await db.select().from(settings);
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  return {
+    heroTitleAr: map.hero_title_ar,
+    heroTitleEn: map.hero_title_en,
+    heroSubAr: map.hero_sub_ar,
+    heroSubEn: map.hero_sub_en,
+    marqueeAr: map.marquee_ar,
+    marqueeEn: map.marquee_en,
+    aboutAr: map.about_ar,
+    aboutEn: map.about_en,
+  };
+}
+
 export async function getPassData(code: string) {
   await ensureSeed();
   const [cust] = await db.select().from(customers).where(eq(customers.customerCode, code)).limit(1);
