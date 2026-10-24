@@ -1,4 +1,4 @@
-import { getMenuData, getPromo } from "@/db/queries";
+import { getMenuData, getPromo, getFrontendSettings } from "@/db/queries";
 import StoreChrome from "@/components/StoreChrome";
 import HeroSlider from "@/components/HeroSlider";
 import QuickBar from "@/components/QuickBar";
@@ -11,14 +11,19 @@ import ChefCta from "@/components/ChefCta";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [{ categories, items, zones }, promo] = await Promise.all([getMenuData(), getPromo()]);
+  // بنجيب كل الداتا المطلوبة في وقت واحد
+  const [{ categories, items, zones }, promo, frontend] = await Promise.all([
+    getMenuData(), 
+    getPromo(),
+    getFrontendSettings()
+  ]);
   const best = items.filter((i) => i.isBestSeller && i.isAvailable);
 
   return (
-    <StoreChrome zones={zones} promo={promo}>
-      <HeroSlider />
+    <StoreChrome zones={zones} promo={promo} aboutAr={frontend.aboutAr} aboutEn={frontend.aboutEn}>
+      <HeroSlider frontend={frontend} />
       <QuickBar />
-      <MarqueeStrip />
+      <MarqueeStrip marqueeAr={frontend.marqueeAr} marqueeEn={frontend.marqueeEn} />
       <BestSellers items={best} />
       <div className="border-t border-line bg-surface">
         <MenuPreview categories={categories} items={items.filter((i) => i.isAvailable)} />
