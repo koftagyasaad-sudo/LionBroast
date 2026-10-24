@@ -6,9 +6,13 @@ import { BRAND, HOTLINE, WHATSAPP_NUMBER } from "@/lib/constants";
 import { waLink } from "@/lib/utils";
 import { useDict, useIsAr } from "@/lib/hooks";
 
-export default function Footer() {
+export default function Footer({ aboutAr, aboutEn }: { aboutAr?: string; aboutEn?: string }) {
   const t = useDict();
   const isAr = useIsAr();
+  
+  // استخدام النص الجاي من الداتا بيز، ولو فاضي نستخدم النص الافتراضي
+  const aboutText = isAr ? (aboutAr || t.footer.about) : (aboutEn || t.footer.about);
+
   return (
     <footer id="contact" className="relative mt-24 border-t border-line bg-surface">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-500/70 to-transparent" />
@@ -22,7 +26,7 @@ export default function Footer() {
               <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-500">{isAr ? BRAND.name : BRAND.nameAr}</p>
             </div>
           </div>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">{t.footer.about}</p>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">{aboutText}</p>
           <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-cheese-400/40 bg-cheese-400/10 px-3 py-1.5 text-xs font-bold text-cheese-400">
             <Flame className="size-3.5" /> {t.footer.made}
           </p>
