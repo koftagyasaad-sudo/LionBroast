@@ -6,12 +6,25 @@ import { BRAND, HOTLINE, WHATSAPP_NUMBER } from "@/lib/constants";
 import { waLink } from "@/lib/utils";
 import { useDict, useIsAr } from "@/lib/hooks";
 
-export default function Footer({ aboutAr, aboutEn }: { aboutAr?: string; aboutEn?: string }) {
+export default function Footer({ 
+  aboutAr, 
+  aboutEn,
+  dbHotline,
+  dbWhatsapp 
+}: { 
+  aboutAr?: string; 
+  aboutEn?: string;
+  dbHotline?: string;
+  dbWhatsapp?: string;
+}) {
   const t = useDict();
   const isAr = useIsAr();
   
-  // استخدام النص الجاي من الداتا بيز، ولو فاضي نستخدم النص الافتراضي
   const aboutText = isAr ? (aboutAr || t.footer.about) : (aboutEn || t.footer.about);
+  
+  // بنستخدم الرقم الجاي من لوحة التحكم لو موجود، ولو مش موجود نستخدم الأساسي
+  const activeHotline = dbHotline || HOTLINE;
+  const activeWhatsapp = dbWhatsapp || WHATSAPP_NUMBER;
 
   return (
     <footer id="contact" className="relative mt-24 border-t border-line bg-surface">
@@ -46,12 +59,12 @@ export default function Footer({ aboutAr, aboutEn }: { aboutAr?: string; aboutEn
           <ul className="space-y-3 text-sm font-semibold">
             <li className="flex items-center gap-2">
               <PhoneCall className="size-4 shrink-0 text-brand-500" />
-              <span dir="ltr">{t.footer.hotline}: {HOTLINE}</span>
+              <span dir="ltr">{t.footer.hotline}: {activeHotline}</span>
             </li>
             <li className="flex items-center gap-2">
               <MessageCircle className="size-4 shrink-0 text-[#25D366]" />
-              <a href={waLink(WHATSAPP_NUMBER, "مرحباً")} target="_blank" rel="noreferrer" className="transition hover:text-[#25D366]" dir="ltr">
-                +{WHATSAPP_NUMBER}
+              <a href={waLink(activeWhatsapp, "مرحباً")} target="_blank" rel="noreferrer" className="transition hover:text-[#25D366]" dir="ltr">
+                +{activeWhatsapp}
               </a>
             </li>
             <li className="flex items-start gap-2">
