@@ -8,8 +8,8 @@ import { asc, eq } from "drizzle-orm";
 import type { ItemSize } from "@/db/schema";
 
 function assertAdmin(token: string) {
-  const expected = process.env.ADMIN_PASSCODE || "asad2024";
-  if (token !== expected) throw new Error("UNAUTHORIZED");
+  const expected = process.env.ADMIN_PASSCODE;
+  if (!expected || token !== expected) throw new Error("UNAUTHORIZED");
 }
 
 /** One-shot bundle for the dashboard boot. */
@@ -136,7 +136,7 @@ export async function adminSetSettingAction(token: string, key: string, value: s
 }
 
 /* ------------------------------------------------------------------ */
-/* AI OCR Menu Scanner — simulated Vision-LLM parse pipeline           */
+/* AI OCR Menu Scanner — REAL Vision-LLM (GPT-4o)                      */
 /* ------------------------------------------------------------------ */
 
 export interface ScannedRow {
@@ -152,75 +152,155 @@ export interface ScannedRow {
   confidence: number;
 }
 
-const SCAN_POOL: ScannedRow[] = [
-  {
-    categoryEn: "Legendary Broast", categoryAr: "البروست الأسطوري",
-    nameEn: "Mega Broast Box", nameAr: "ميجا بروست بوكس",
-    descriptionEn: "6 crunchy pieces, fries, coleslaw & fire sauce.",
-    descriptionAr: "٦ قطع كرسبي، بطاطس، كول سلو وصوص نار.",
-    price: 235, sizes: [
-      { id: "box", ar: "بوكس", en: "Box", price: 235 },
-      { id: "mega", ar: "ميجا", en: "Mega", price: 295 },
-    ], spicyOption: true, confidence: 0.98,
-  },
-  {
-    categoryEn: "Crunchy Sandwiches", categoryAr: "ساندوتشات كرانشي",
-    nameEn: "Buffalo Blaze", nameAr: "بافلو بليز",
-    descriptionEn: "Crispy fillet tossed in buffalo sauce with blue cheese.",
-    descriptionAr: "فيليه كرسبي بصوص البافلو مع جبنة زرقا.",
-    price: 118, sizes: [], spicyOption: true, confidence: 0.96,
-  },
-  {
-    categoryEn: "Legendary Broast", categoryAr: "البروست الأسطوري",
-    nameEn: "Chicken Tenders Classic", nameAr: "تندرز كلاسيك",
-    descriptionEn: "Buttermilk tenders with honey-mustard dip.",
-    descriptionAr: "تندرز بتر ميلك مع ديب هني ماسترد.",
-    price: 105, sizes: [
-      { id: "4pc", ar: "٤ قطع", en: "4 pcs", price: 105 },
-      { id: "6pc", ar: "٦ قطع", en: "6 pcs", price: 148 },
-    ], spicyOption: false, confidence: 0.94,
-  },
-  {
-    categoryEn: "Sides & Sauces", categoryAr: "المقبلات والصوصات",
-    nameEn: "Cheese Molten Fries", nameAr: "بطاطس بالجبنة السايحة",
-    descriptionEn: "Lion fries buried under molten cheddar waterfall.",
-    descriptionAr: "بطاطس الأسد مغطاة بشلال شيدر سايح.",
-    price: 68, sizes: [], spicyOption: false, confidence: 0.97,
-  },
-  {
-    categoryEn: "Beverages", categoryAr: "المشروبات",
-    nameEn: "Iced Spanish Latte", nameAr: "سبانيش لاتيه ساقع",
-    descriptionEn: "Double espresso over condensed milk & ice.",
-    descriptionAr: "إسبريسو دبل على لبن مكثف وتلج.",
-    price: 55, sizes: [], spicyOption: false, confidence: 0.93,
-  },
-  {
-    categoryEn: "Meals & Combos", categoryAr: "الوجبات والكومبو",
-    nameEn: "Solo Hero Meal", nameAr: "وجبة البطل",
-    descriptionEn: "Zinger + fries + fire sauce + drink. One-person feast.",
-    descriptionAr: "زنجر + بطاطس + صوص نار + مشروب. وليمة فرد واحد.",
-    price: 152, sizes: [], spicyOption: true, confidence: 0.95,
-  },
-];
-
-/** Simulates Vision OCR latency + slight extraction variance. */
-export async function adminScanMenuAction(token: string, fileName: string) {
+export async function adminScanMenuAction(
+  token: string,
+  payload: { fileName: string; imageBase64: string; mimeType: string },
+) {
   assertAdmin(token);
-  await new Promise((r) => setTimeout(r, 1400));
-  const seed = [...(fileName || "menu")].reduce((a, c) => a + c.charCodeAt(0), 0);
-  const count = 3 + (seed % 3); // 3..5 rows
-  const rows: ScannedRow[] = [];
-  for (let i = 0; i < count; i++) {
-    const src = SCAN_POOL[(seed + i) % SCAN_POOL.length];
-    const jitter = ((seed + i * 7) % 3) * 5; // 0 | 5 | 10 EGP
-    rows.push({
-      ...src,
-      price: src.price + jitter,
-      sizes: src.sizes.map((s) => ({ ...s, price: s.price + jitter })),
-      confidence: Math.round((src.confidence - jitter / 1000) * 100) / 100,
-    });
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured in environment variables");
   }
-  return { rows, engine: "LionVision-OCR v2.3", fileName };
+
+  // Load existing categories so the model must map into them
+  await ensureSeed();
+  const existingCats = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.isActive, true))
+    .orderBy(asc(categories.sortOrder));
+
+  const catList = existingCats
+    .map((c) => `- "${c.nameEn}" / "${c.nameAr}"`)
+    .join("\n");
+
+  const systemPrompt = `You are a precise restaurant menu OCR and data-extraction engine for an Egyptian broast/fried-chicken restaurant.
+You MUST return ONLY valid JSON. No markdown, no commentary, no code fences.
+
+TASK:
+Read the menu image and extract EVERY distinct sellable item.
+
+OUTPUT SCHEMA (strict):
+{
+  "rows": [
+    {
+      "categoryEn": string,
+      "categoryAr": string,
+      "nameEn": string,
+      "nameAr": string,
+      "descriptionEn": string,
+      "descriptionAr": string,
+      "price": number,
+      "sizes": [{ "id": string, "ar": string, "en": string, "price": number }],
+      "spicyOption": boolean,
+      "confidence": number
+    }
+  ]
+}
+
+HARD RULES:
+1. categoryEn MUST be one of the existing categories below. If unsure, pick the closest match. NEVER invent a new category name.
+2. Prices are Egyptian Pounds (EGP). Use the number only (e.g. 120 not "120 EGP").
+3. If an item has size variants (Small/Large, Box/Mega, 4pcs/6pcs), put the cheapest as "price" and list ALL variants in "sizes". If no sizes, use [].
+4. size.id must be a short slug like "sm", "lg", "box", "4pc".
+5. nameAr and descriptionAr must be proper Arabic. If the menu is English-only, translate accurately to Egyptian Arabic restaurant style.
+6. nameEn must be proper English. If the menu is Arabic-only, translate accurately.
+7. spicyOption = true only if the item is clearly spicy / hot / fire / buffalo / jalapeño related.
+8. confidence is 0.0–1.0 reflecting how sure you are about that row.
+9. Extract ALL items visible. Do not skip, do not hallucinate items that are not on the menu.
+10. Ignore headers, footers, phone numbers, addresses, social media, and decorative text.
+
+EXISTING CATEGORIES (map into these ONLY):
+${catList || '- "Legendary Broast" / "البروست الأسطوري"\n- "Crunchy Sandwiches" / "ساندوتشات كرانشي"\n- "Meals & Combos" / "الوجبات والكومبو"\n- "Sides & Sauces" / "المقبلات والصوصات"\n- "Beverages" / "المشروبات"'}
+`;
+
+  const userText = `Extract the full structured menu from this image. File name hint: ${payload.fileName}`;
+
+  const body = {
+    model: "gpt-4o",
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userText },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${payload.mimeType};base64,${payload.imageBase64}`,
+              detail: "high",
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const json = await res.json();
+  const content = json.choices?.[0]?.message?.content || "{}";
+
+  let parsed: { rows?: ScannedRow[] };
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error("AI returned invalid JSON");
+  }
+
+  const catByEn = new Map(existingCats.map((c) => [c.nameEn.toLowerCase(), c]));
+  const catByAr = new Map(existingCats.map((c) => [c.nameAr, c]));
+
+  const rows: ScannedRow[] = (parsed.rows || [])
+    .filter((r) => r && (r.nameAr || r.nameEn) && Number(r.price) >= 0)
+    .map((r) => {
+      // Force category to an existing one
+      let matched =
+        catByEn.get((r.categoryEn || "").toLowerCase()) ||
+        catByAr.get(r.categoryAr || "") ||
+        existingCats[0];
+
+      const sizes: ItemSize[] = Array.isArray(r.sizes)
+        ? r.sizes
+            .filter((s) => s && (s.en || s.ar) && Number(s.price) >= 0)
+            .map((s, idx) => ({
+              id: String(s.id || `s${idx}`).slice(0, 24),
+              ar: String(s.ar || s.en || ""),
+              en: String(s.en || s.ar || ""),
+              price: Number(s.price) || 0,
+            }))
+        : [];
+
+      return {
+        categoryEn: matched?.nameEn || r.categoryEn || "Other",
+        categoryAr: matched?.nameAr || r.categoryAr || "أخرى",
+        nameEn: String(r.nameEn || r.nameAr || "").trim(),
+        nameAr: String(r.nameAr || r.nameEn || "").trim(),
+        descriptionEn: String(r.descriptionEn || "").trim(),
+        descriptionAr: String(r.descriptionAr || "").trim(),
+        price: Number(r.price) || 0,
+        sizes,
+        spicyOption: Boolean(r.spicyOption),
+        confidence: Math.max(0, Math.min(1, Number(r.confidence) || 0.85)),
+      };
+    });
+
+  return { rows, engine: "GPT-4o Vision", fileName: payload.fileName };
 }
 
 /** Batch-publish approved scan rows to the live menu. */
@@ -231,8 +311,21 @@ export async function adminPublishScanAction(token: string, rows: ScannedRow[]) 
   const byEn = new Map(cats.map((c) => [c.nameEn, c.id]));
   let inserted = 0;
   for (const r of rows) {
-    const categoryId = byEn.get(r.categoryEn);
-    if (!categoryId) continue;
+    let categoryId = byEn.get(r.categoryEn);
+    // Auto-create category if somehow missing
+    if (!categoryId) {
+      const [created] = await db
+        .insert(categories)
+        .values({
+          nameAr: r.categoryAr || r.categoryEn,
+          nameEn: r.categoryEn,
+          sortOrder: 99,
+          isActive: true,
+        })
+        .returning();
+      categoryId = created.id;
+      byEn.set(r.categoryEn, categoryId);
+    }
     await db.insert(menuItems).values({
       categoryId,
       nameAr: r.nameAr,
