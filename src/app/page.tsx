@@ -11,7 +11,6 @@ import ChefCta from "@/components/ChefCta";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  // بنجيب كل الداتا المطلوبة في وقت واحد
   const [{ categories, items, zones }, promo, frontend] = await Promise.all([
     getMenuData(), 
     getPromo(),
@@ -20,7 +19,14 @@ export default async function HomePage() {
   const best = items.filter((i) => i.isBestSeller && i.isAvailable);
 
   return (
-    <StoreChrome zones={zones} promo={promo} aboutAr={frontend.aboutAr} aboutEn={frontend.aboutEn}>
+    <StoreChrome 
+      zones={zones} 
+      promo={promo} 
+      aboutAr={frontend.aboutAr} 
+      aboutEn={frontend.aboutEn}
+      dbHotline={frontend.hotline}
+      dbWhatsapp={frontend.whatsapp}
+    >
       <HeroSlider frontend={frontend} />
       <QuickBar />
       <MarqueeStrip marqueeAr={frontend.marqueeAr} marqueeEn={frontend.marqueeEn} />
