@@ -10,16 +10,26 @@ import { cn } from "@/lib/utils";
 
 const HERO_IMGS = [IMG.heroClassic, IMG.heroSpicy, IMG.heroCombo];
 
-export default function HeroSlider() {
+export default function HeroSlider({ frontend }: { frontend?: any }) {
   const t = useDict();
   const isAr = useIsAr();
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  const slides = t.hero.slides;
-  const count = slides.length;
+  // سحب الشرائح الأساسية وتعديل الشريحة الأولى بالبيانات الجاية من الداتا بيز
+  const rawSlides = t.hero.slides;
+  const slides = [...rawSlides];
+  
+  if (frontend) {
+    slides[0] = {
+      ...slides[0],
+      title: isAr ? (frontend.heroTitleAr || slides[0].title) : (frontend.heroTitleEn || slides[0].title),
+      sub: isAr ? (frontend.heroSubAr || slides[0].sub) : (frontend.heroSubEn || slides[0].sub),
+    };
+  }
 
+  const count = slides.length;
   const go = useCallback((i: number) => setIndex((i + count) % count), [count]);
 
   useEffect(() => {
@@ -37,7 +47,6 @@ export default function HeroSlider() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Background slides */}
       <AnimatePresence mode="sync">
         <motion.div
           key={index}
@@ -53,14 +62,12 @@ export default function HeroSlider() {
       </AnimatePresence>
       <div className="hero-vignette absolute inset-0" />
 
-      {/* Giant outline word */}
       <div className="pointer-events-none absolute inset-x-0 top-24 select-none overflow-hidden text-center">
         <span className="text-outline-faint whitespace-nowrap text-[19vw] font-extrabold leading-none tracking-tight opacity-70 md:text-[11rem]">
           {isAr ? "كرسبي" : "CRISPY"}
         </span>
       </div>
 
-      {/* Content */}
       <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-16 pt-40 md:px-8 md:pb-20">
         <AnimatePresence mode="wait">
           <motion.div
@@ -125,33 +132,17 @@ export default function HeroSlider() {
         </AnimatePresence>
       </div>
 
-      {/* Controls */}
       <div className="absolute bottom-8 z-10 flex items-center gap-4 end-4 md:end-8">
         <div className="flex gap-2">
           {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => go(i)}
-              aria-label={`slide ${i + 1}`}
-              className="group relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25"
-            >
-              <span
-                className={cn(
-                  "absolute inset-y-0 start-0 rounded-full bg-gradient-to-r from-cheese-300 to-brand-500 transition-all duration-500",
-                  i === index ? "w-full" : "w-0",
-                )}
-              />
+            <button key={i} onClick={() => go(i)} aria-label={`slide ${i + 1}`} className="group relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25">
+              <span className={cn("absolute inset-y-0 start-0 rounded-full bg-gradient-to-r from-cheese-300 to-brand-500 transition-all duration-500", i === index ? "w-full" : "w-0")} />
             </button>
           ))}
         </div>
         <div className="flex gap-2">
           {[prev, next].map((fn, i) => (
-            <button
-              key={i}
-              onClick={fn}
-              aria-label={i === 0 ? "previous" : "next"}
-              className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:border-brand-500 hover:bg-brand-500"
-            >
+            <button key={i} onClick={fn} aria-label={i === 0 ? "previous" : "next"} className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:border-brand-500 hover:bg-brand-500">
               {(i === 0) === isAr ? <ChevronRight className="size-5" /> : <ChevronLeft className="size-5" />}
             </button>
           ))}
