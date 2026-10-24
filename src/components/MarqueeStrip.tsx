@@ -3,12 +3,28 @@
 import { Flame } from "lucide-react";
 import { useIsAr } from "@/lib/hooks";
 
-export default function MarqueeStrip() {
+export default function MarqueeStrip({ 
+  marqueeAr, 
+  marqueeEn 
+}: { 
+  marqueeAr?: string; 
+  marqueeEn?: string 
+}) {
   const isAr = useIsAr();
-  const words = isAr
-    ? ["كرسبي ١٠٠٪", "دجاج طازج يومياً", "تتبيلة سرية من 1998", "حار بجد", "توصيل 30 دقيقة", "زيت نظيف كل يوم"]
-    : ["100% CRISPY", "Fresh chicken daily", "Secret recipe since 1998", "Seriously hot", "30-min delivery", "Fresh oil every day"];
-  const row = [...words, ...words];
+  
+  // نصوص افتراضية في حالة إن لوحة التحكم لسه فاضية
+  const defaultAr = "كرسبي ١٠٠٪ 🔥 دجاج طازج يومياً 🔥 تتبيلة سرية من 1998 🔥 حار بجد";
+  const defaultEn = "100% CRISPY 🔥 Fresh chicken daily 🔥 Secret recipe since 1998 🔥 Seriously hot";
+
+  // اختيار النص حسب اللغة
+  const rawText = isAr ? (marqueeAr || defaultAr) : (marqueeEn || defaultEn);
+
+  // تقسيم النص بناءً على رمز النار عشان الشريط يشتغل صح
+  const words = rawText.split('🔥').map(w => w.trim()).filter(Boolean);
+  
+  // تكرار الكلمات عشان حركة الشريط تفضل شغالة بدون تقطيع
+  const row = [...words, ...words, ...words, ...words]; 
+
   return (
     <div className="relative mt-16 overflow-hidden border-y border-line bg-surface py-4">
       <div className="marquee-track items-center gap-8">
