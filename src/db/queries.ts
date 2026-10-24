@@ -24,7 +24,6 @@ export async function getPromo() {
   };
 }
 
-// 🔥 الدالة الجديدة اللي هتسحب نصوص الموقع
 export async function getFrontendSettings() {
   await ensureSeed();
   const rows = await db.select().from(settings);
@@ -38,6 +37,9 @@ export async function getFrontendSettings() {
     marqueeEn: map.marquee_en,
     aboutAr: map.about_ar,
     aboutEn: map.about_en,
+    // 👇 السطرين الجداد
+    hotline: map.hotline,
+    whatsapp: map.whatsapp,
   };
 }
 
