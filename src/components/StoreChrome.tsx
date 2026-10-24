@@ -17,13 +17,24 @@ interface Promo {
   textEn: string;
 }
 
-/** Shared storefront chrome: header, footer, drawers, modals, floating dock. */
-export default function StoreChrome({ children, zones, promo }: { children: ReactNode; zones: ZoneDTO[]; promo: Promo }) {
+export default function StoreChrome({ 
+  children, 
+  zones, 
+  promo,
+  aboutAr,
+  aboutEn 
+}: { 
+  children: ReactNode; 
+  zones: ZoneDTO[]; 
+  promo: Promo;
+  aboutAr?: string;
+  aboutEn?: string;
+}) {
   return (
     <>
       <Header />
       <main>{children}</main>
-      <Footer />
+      <Footer aboutAr={aboutAr} aboutEn={aboutEn} />
       <CartDrawer zones={zones} />
       <OnboardingModal zones={zones} />
       <LionPassDrawer />
