@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, MonitorSmartphone, Save, Type, MessageSquare } from "lucide-react";
+import { Check, MonitorSmartphone, Save, Type, MessageSquare, PhoneCall } from "lucide-react";
 import type { TabProps } from "@/components/admin/AdminShell";
 import { adminSetSettingAction } from "@/app/admin-actions";
 
@@ -9,7 +9,6 @@ const input =
   "rounded-xl border border-white/10 bg-carbon-950 px-3 py-2 text-sm font-semibold outline-none placeholder:text-white/30 focus:border-brand-500 w-full";
 
 export default function FrontendTab({ token, data, refresh }: TabProps) {
-  // بنجيب البيانات الحالية من قاعدة البيانات
   const settingsMap = Object.fromEntries(data.settings.map((s) => [s.key, s.value]));
   
   const [content, setContent] = useState({
@@ -21,6 +20,8 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
     marqueeEn: settingsMap.marquee_en ?? "Fresh Chicken Daily 🔥 Secret Recipe since 1998 🔥 100% Crispy",
     aboutAr: settingsMap.about_ar ?? "من قلب دسوق للبيوت المصرية — بروست بكراسة سرية من 1998، دجاج طازج يومياً، وزيت بيتغير كل شوية.",
     aboutEn: settingsMap.about_en ?? "From the heart of Desouk to Egyptian homes — broast with a secret recipe since 1998.",
+    hotline: settingsMap.hotline ?? "19955",
+    whatsapp: settingsMap.whatsapp ?? "201000001555",
   });
 
   const [saving, setSaving] = useState(false);
@@ -28,7 +29,6 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
 
   const saveContent = async () => {
     setSaving(true);
-    // حفظ كل النصوص في الداتا بيز
     await adminSetSettingAction(token, "hero_title_ar", content.heroTitleAr);
     await adminSetSettingAction(token, "hero_title_en", content.heroTitleEn);
     await adminSetSettingAction(token, "hero_sub_ar", content.heroSubAr);
@@ -37,6 +37,8 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
     await adminSetSettingAction(token, "marquee_en", content.marqueeEn);
     await adminSetSettingAction(token, "about_ar", content.aboutAr);
     await adminSetSettingAction(token, "about_en", content.aboutEn);
+    await adminSetSettingAction(token, "hotline", content.hotline);
+    await adminSetSettingAction(token, "whatsapp", content.whatsapp);
     
     setSaved(true);
     setSaving(false);
@@ -47,12 +49,11 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       
-      {/* القسم الأول: الهيرو (الواجهة الرئيسية) */}
+      {/* القسم الأول: الهيرو */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
         <h2 className="flex items-center gap-2 text-lg font-extrabold">
-          <Type className="size-5 text-brand-500" /> الواجهة الرئيسية · Hero Section
+          <Type className="size-5 text-brand-500" /> الواجهة الرئيسية
         </h2>
-        <p className="mt-1 text-xs text-white/45">النصوص الأساسية اللي بتظهر للعميل أول ما يفتح الموقع.</p>
 
         <div className="mt-5 space-y-4">
           <div>
@@ -64,7 +65,7 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
             <input className={input} dir="ltr" value={content.heroTitleEn} onChange={(e) => setContent({ ...content, heroTitleEn: e.target.value })} />
           </div>
           <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الوصف تحت العنوان (عربي)</p>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الوصف (عربي)</p>
             <textarea className={input} rows={2} value={content.heroSubAr} onChange={(e) => setContent({ ...content, heroSubAr: e.target.value })} />
           </div>
           <div>
@@ -74,37 +75,44 @@ export default function FrontendTab({ token, data, refresh }: TabProps) {
         </div>
       </div>
 
-      {/* القسم الثاني: الشريط المتحرك ووصف الفوتر */}
+      {/* القسم الثاني: إعدادات إضافية وأرقام التواصل */}
       <div className="flex flex-col gap-5">
         <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
           <h2 className="flex items-center gap-2 text-lg font-extrabold">
-            <MessageSquare className="size-5 text-cheese-400" /> نصوص إضافية · Extra Text
+            <MessageSquare className="size-5 text-cheese-400" /> نصوص وإعدادات إضافية
           </h2>
 
           <div className="mt-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                 <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1"><PhoneCall className="size-3"/> الخط الساخن</p>
+                 <input className={input} dir="ltr" value={content.hotline} onChange={(e) => setContent({ ...content, hotline: e.target.value })} />
+              </div>
+              <div>
+                 <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1"><PhoneCall className="size-3 text-[#25D366]"/> الواتساب (بالكود)</p>
+                 <input className={input} dir="ltr" placeholder="2010..." value={content.whatsapp} onChange={(e) => setContent({ ...content, whatsapp: e.target.value })} />
+              </div>
+            </div>
+
             <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الشريط المتحرك (عربي) - افصل بـ 🔥</p>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الشريط المتحرك (افصل بـ 🔥)</p>
               <textarea className={input} rows={2} value={content.marqueeAr} onChange={(e) => setContent({ ...content, marqueeAr: e.target.value })} />
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Marquee (English) - Sep by 🔥</p>
-              <textarea className={input} rows={2} dir="ltr" value={content.marqueeEn} onChange={(e) => setContent({ ...content, marqueeEn: e.target.value })} />
-            </div>
-            <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">وصف المطعم في الفوتر (عربي)</p>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">وصف الفوتر (عربي)</p>
               <textarea className={input} rows={2} value={content.aboutAr} onChange={(e) => setContent({ ...content, aboutAr: e.target.value })} />
             </div>
           </div>
         </div>
 
-        {/* زر الحفظ الرئيسي */}
+        {/* زر الحفظ */}
         <button
           onClick={saveContent}
           disabled={saving}
           className="glow-brand flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-4 text-sm font-extrabold text-white transition hover:scale-[1.01] disabled:opacity-50"
         >
           {saved ? <Check className="size-5" /> : <Save className="size-5" />}
-          {saved ? "تم الحفظ بنجاح" : "حفظ كل التعديلات المباشرة"}
+          {saved ? "تم الحفظ بنجاح" : "حفظ كل التعديلات"}
         </button>
       </div>
 
