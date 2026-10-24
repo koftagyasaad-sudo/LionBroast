@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock4, Flame, MapPin, MessageCircle, PhoneCall, Settings2 } from "lucide-react";
+import { Clock4, Flame, MapPin, MessageCircle, PhoneCall } from "lucide-react";
 import { BRAND, HOTLINE, WHATSAPP_NUMBER } from "@/lib/constants";
 import { waLink } from "@/lib/utils";
 import { useDict, useIsAr } from "@/lib/hooks";
@@ -34,7 +34,6 @@ export default function Footer() {
             <li><Link className="transition hover:text-brand-500" href="/menu">{t.nav.menu}</Link></li>
             <li><Link className="transition hover:text-brand-500" href="/#best">{t.nav.best}</Link></li>
             <li><Link className="transition hover:text-brand-500" href="/#zones">{t.nav.zones}</Link></li>
-            <li><Link className="flex items-center gap-1.5 text-ink-2 transition hover:text-brand-500" href="/admin"><Settings2 className="size-3.5" /> {t.nav.admin}</Link></li>
           </ul>
         </div>
 
