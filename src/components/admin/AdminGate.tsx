@@ -69,7 +69,7 @@ export default function AdminGate() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="Admin passcode"
+              placeholder="Enter Admin Passcode"
               className="w-full rounded-2xl border border-white/10 bg-carbon-950 py-3.5 ps-11 pe-4 text-sm font-bold outline-none placeholder:text-white/30 focus:border-brand-500"
             />
           </div>
@@ -83,8 +83,7 @@ export default function AdminGate() {
           {busy ? <Loader2 className="size-4.5 animate-spin" /> : <Lock className="size-4.5" />}
           Enter the Den
         </button>
-        {denied && <p className="mt-3 text-xs font-bold text-red-400">Wrong passcode — wrong den.</p>}
-        <p className="mt-4 text-[10px] text-white/30">Default: asad2024 — set ADMIN_PASSCODE env var in production.</p>
+        {denied && <p className="mt-3 text-xs font-bold text-red-400">Wrong passcode — access denied.</p>}
       </motion.div>
     </div>
   );
