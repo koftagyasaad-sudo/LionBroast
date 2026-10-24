@@ -1,0 +1,30 @@
+import { getMenuData, getPromo } from "@/db/queries";
+import StoreChrome from "@/components/StoreChrome";
+import HeroSlider from "@/components/HeroSlider";
+import QuickBar from "@/components/QuickBar";
+import MarqueeStrip from "@/components/MarqueeStrip";
+import BestSellers from "@/components/BestSellers";
+import MenuPreview from "@/components/MenuPreview";
+import ZonesSection from "@/components/ZonesSection";
+import ChefCta from "@/components/ChefCta";
+
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const [{ categories, items, zones }, promo] = await Promise.all([getMenuData(), getPromo()]);
+  const best = items.filter((i) => i.isBestSeller && i.isAvailable);
+
+  return (
+    <StoreChrome zones={zones} promo={promo}>
+      <HeroSlider />
+      <QuickBar />
+      <MarqueeStrip />
+      <BestSellers items={best} />
+      <div className="border-t border-line bg-surface">
+        <MenuPreview categories={categories} items={items.filter((i) => i.isAvailable)} />
+      </div>
+      <ZonesSection zones={zones} />
+      <ChefCta />
+    </StoreChrome>
+  );
+}

@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ */
+/* Theme tokens — semantic surface/ink vars flip with .dark            */
+/* ------------------------------------------------------------------ */
+:root {
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f2efe9;
+  --ink: #0f1115;
+  --ink-2: #585d68;
+  --line: rgba(15, 17, 21, 0.1);
+}
+
+.dark {
+  --bg: #0f1115;
+  --surface: #181a20;
+  --surface-2: #1f232b;
+  --ink: #f6f4ef;
+  --ink-2: #a6acb8;
+  --line: rgba(255, 255, 255, 0.09);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+}
+
+@theme {
+  --color-brand-400: #ff7a1f;
+  --color-brand-500: #ff6600;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-cheese-300: #fbbf24;
+  --color-cheese-400: #f59e0b;
+  --color-cheese-500: #d97706;
+  --color-carbon-900: #181a20;
+  --color-carbon-950: #0f1115;
+
+  --font-sans: "Readex Pro", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --animate-marquee: marquee 28s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-spin-slow: spin 14s linear infinite;
+  --animate-pulse-dot: pulseDot 1.6s ease-in-out infinite;
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes pulseDot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.7); opacity: 0.35; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  transition: background-color 0.35s ease, color 0.35s ease;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+::selection {
+  background: #ff6600;
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ff6600, #c2410c);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Signature utilities                                                 */
+/* ------------------------------------------------------------------ */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  z-index: 5;
+}
+
+.text-outline {
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255, 102, 0, 0.85);
+}
+.dark .text-outline-faint {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.18);
+}
+.text-outline-faint {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(15, 17, 21, 0.18);
+}
+
+.glass {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.glow-brand {
+  box-shadow:
+    0 10px 40px -8px rgba(255, 102, 0, 0.45),
+    0 2px 10px -2px rgba(255, 102, 0, 0.35);
+}
+
+.card-lift {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.45s ease, border-color 0.35s ease;
+}
+.card-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 60px -20px rgba(255, 102, 0, 0.35);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+[dir="rtl"] .marquee-track {
+  animation-direction: reverse;
+}
+
+.flame-badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #ff6600 55%, #ea580c 100%);
+}
+
+.hero-vignette {
+  background:
+    radial-gradient(80% 60% at 50% 40%, transparent 30%, rgba(15, 17, 21, 0.6) 100%),
+    linear-gradient(to top, rgba(15, 17, 21, 0.92) 0%, rgba(15, 17, 21, 0.25) 45%, rgba(15, 17, 21, 0.35) 100%);
+}
+
+.golden-card {
+  background:
+    linear-gradient(145deg, rgba(245, 158, 11, 0.16), rgba(255, 102, 0, 0.08) 45%, transparent 70%),
+    linear-gradient(145deg, #1c1408 0%, #241505 50%, #120c04 100%);
+}
+
+.dash-line {
+  background-image: linear-gradient(to right, var(--line) 40%, transparent 40%);
+  background-size: 12px 1px;
+  background-repeat: repeat-x;
+}
