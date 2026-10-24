@@ -15,6 +15,7 @@ import {
   Sun,
   UtensilsCrossed,
   Users,
+  MonitorSmartphone, // استيراد أيقونة القسم الجديد
 } from "lucide-react";
 import type { AdminBundle } from "@/lib/admin-types";
 import { adminGetAllAction } from "@/app/admin-actions";
@@ -25,8 +26,9 @@ import CustomersTab from "@/components/admin/CustomersTab";
 import MenuTab from "@/components/admin/MenuTab";
 import MenuScanner from "@/components/admin/MenuScanner";
 import OpsTab from "@/components/admin/OpsTab";
+import FrontendTab from "@/components/admin/FrontendTab"; // استيراد القسم الجديد
 
-type TabKey = "overview" | "orders" | "customers" | "menu" | "scanner" | "ops";
+type TabKey = "overview" | "orders" | "customers" | "menu" | "scanner" | "frontend" | "ops";
 
 const TABS: { key: TabKey; labelAr: string; labelEn: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", labelAr: "نظرة عامة", labelEn: "Overview", icon: LayoutDashboard },
@@ -34,6 +36,7 @@ const TABS: { key: TabKey; labelAr: string; labelEn: string; icon: typeof Layout
   { key: "customers", labelAr: "العملاء CRM", labelEn: "Customers", icon: Users },
   { key: "menu", labelAr: "المنيو", labelEn: "Menu CRUD", icon: UtensilsCrossed },
   { key: "scanner", labelAr: "ماسح المنيو AI", labelEn: "AI Scanner", icon: ScanLine },
+  { key: "frontend", labelAr: "إعدادات الواجهة", labelEn: "Site Content", icon: MonitorSmartphone }, // الزرار الجديد
   { key: "ops", labelAr: "المناطق والإعلانات", labelEn: "Zones & Promo", icon: Settings2 },
 ];
 
@@ -166,6 +169,7 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
                 {tab === "customers" && <CustomersTab data={data} />}
                 {tab === "menu" && <MenuTab token={token} data={data} refresh={load} />}
                 {tab === "scanner" && <MenuScanner token={token} data={data} refresh={load} />}
+                {tab === "frontend" && <FrontendTab token={token} data={data} refresh={load} />} {/* محتوى القسم الجديد */}
                 {tab === "ops" && <OpsTab token={token} data={data} refresh={load} />}
               </motion.div>
             </AnimatePresence>
