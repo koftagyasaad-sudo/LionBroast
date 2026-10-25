@@ -28,7 +28,7 @@ export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
 const DEFAULT_SETTINGS: FrontendSettings = {
   brandNameAr: "بروست الأسد",
   brandNameEn: "Lion Broast",
-  logoUrl: "",
+  logoUrl: "/img/icon-512.png",
   heroTitleAr: "أقوى بروست مقرمش وطازج في دسوق",
   heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
   marqueeTextAr:
@@ -40,8 +40,8 @@ const DEFAULT_SETTINGS: FrontendSettings = {
     "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
   addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
   workingHoursAr: "يومياً من 12 ظهراً حتى 2 صباحاً",
-  hotline: "01000000000",
-  whatsapp: "201000000000",
+  hotline: "01068390982",
+  whatsapp: "201068390982",
   deliveryFee: 15,
   taxPercent: 0,
 };
@@ -53,6 +53,14 @@ const DEFAULT_PROMO: Promo = {
   textAr: "خصم 15% على أول طلب بـ كود: LION15",
   textEn: "15% OFF on first order code: LION15",
 };
+
+async function safeEnsureSeed() {
+  try {
+    await ensureSeedDatabase();
+  } catch (err) {
+    console.error("Warning: ensureSeedDatabase failed:", err);
+  }
+}
 
 export function mapCategoryToDTO(cat: CategoryRow): CategoryDTO {
   return {
@@ -96,7 +104,7 @@ export function mapZoneToDTO(zone: DeliveryZoneRow): ZoneDTO {
 }
 
 export async function getSettingByKey(key: string): Promise<{ key: string; val: string } | null> {
-  await ensureSeedDatabase();
+  await safeEnsureSeed();
   try {
     const res = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
     return res[0] ? { key: res[0].key, val: res[0].value } : null;
@@ -107,7 +115,7 @@ export async function getSettingByKey(key: string): Promise<{ key: string; val: 
 }
 
 export async function getFrontendSettings(): Promise<FrontendSettings> {
-  await ensureSeedDatabase();
+  await safeEnsureSeed();
   try {
     const rows = await db.select().from(settings);
     const map = new Map<string, string>();
@@ -142,7 +150,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
 }
 
 export async function getPromo(): Promise<Promo> {
-  await ensureSeedDatabase();
+  await safeEnsureSeed();
   try {
     const bannerSetting = await getSettingByKey("promo_banner");
     if (bannerSetting && bannerSetting.val) {
@@ -162,23 +170,33 @@ export async function getPromo(): Promise<Promo> {
 }
 
 export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
-  await ensureSeedDatabase();
-  const cats = await db.select().from(categories).orderBy(categories.sortOrder);
-  const result: CategoryDTO[] = [];
-  for (let i = 0; i < cats.length; i++) {
-    result.push(mapCategoryToDTO(cats[i]));
+  await safeEnsureSeed();
+  try {
+    const cats = await db.select().from(categories).orderBy(categories.sortOrder);
+    const result: CategoryDTO[] = [];
+    for (let i = 0; i < cats.length; i++) {
+      result.push(mapCategoryToDTO(cats[i]));
+    }
+    return result;
+  } catch (err) {
+    console.error("Error in getCategoriesWithItems:", err);
+    return [];
   }
-  return result;
 }
 
 export async function getDeliveryZones(): Promise<ZoneDTO[]> {
-  await ensureSeedDatabase();
-  const zonesList = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
-  const result: ZoneDTO[] = [];
-  for (let i = 0; i < zonesList.length; i++) {
-    result.push(mapZoneToDTO(zonesList[i]));
+  await safeEnsureSeed();
+  try {
+    const zonesList = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
+    const result: ZoneDTO[] = [];
+    for (let i = 0; i < zonesList.length; i++) {
+      result.push(mapZoneToDTO(zonesList[i]));
+    }
+    return result;
+  } catch (err) {
+    console.error("Error in getDeliveryZones:", err);
+    return [];
   }
-  return result;
 }
 
 export async function getMenuData(): Promise<{
@@ -186,49 +204,68 @@ export async function getMenuData(): Promise<{
   items: MenuItemDTO[];
   zones: ZoneDTO[];
 }> {
-  await ensureSeedDatabase();
-  const [cats, rawItems, rawZones] = await Promise.all([
-    db.select().from(categories).orderBy(categories.sortOrder),
-    db.select().from(menuItems).orderBy(menuItems.sortOrder),
-    db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
-  ]);
+  await safeEnsureSeed();
+  try {
+    const [cats, rawItems, rawZones] = await Promise.all([
+      db.select().from(categories).orderBy(categories.sortOrder),
+      db.select().from(menuItems).orderBy(menuItems.sortOrder),
+      db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
+    ]);
 
-  const categoriesDTO: CategoryDTO[] = [];
-  for (let i = 0; i < cats.length; i++) {
-    categoriesDTO.push(mapCategoryToDTO(cats[i]));
+    const categoriesDTO: CategoryDTO[] = [];
+    for (let i = 0; i < cats.length; i++) {
+      categoriesDTO.push(mapCategoryToDTO(cats[i]));
+    }
+
+    const itemsDTO: MenuItemDTO[] = [];
+    for (let i = 0; i < rawItems.length; i++) {
+      itemsDTO.push(mapMenuItemToDTO(rawItems[i]));
+    }
+
+    const zonesDTO: ZoneDTO[] = [];
+    for (let i = 0; i < rawZones.length; i++) {
+      zonesDTO.push(mapZoneToDTO(rawZones[i]));
+    }
+
+    return {
+      categories: categoriesDTO,
+      items: itemsDTO,
+      zones: zonesDTO,
+    };
+  } catch (err) {
+    console.error("Error in getMenuData:", err);
+    return {
+      categories: [],
+      items: [],
+      zones: [],
+    };
   }
-
-  const itemsDTO: MenuItemDTO[] = [];
-  for (let i = 0; i < rawItems.length; i++) {
-    itemsDTO.push(mapMenuItemToDTO(rawItems[i]));
-  }
-
-  const zonesDTO: ZoneDTO[] = [];
-  for (let i = 0; i < rawZones.length; i++) {
-    zonesDTO.push(mapZoneToDTO(rawZones[i]));
-  }
-
-  return {
-    categories: categoriesDTO,
-    items: itemsDTO,
-    zones: zonesDTO,
-  };
 }
 
 export async function getCustomerByPhone(phone: string): Promise<CustomerRow | null> {
-  await ensureSeedDatabase();
-  const res = await db
-    .select()
-    .from(customers)
-    .where(or(eq(customers.phone, phone), eq(customers.primaryPhone, phone)))
-    .limit(1);
-  return res[0] ?? null;
+  await safeEnsureSeed();
+  try {
+    const res = await db
+      .select()
+      .from(customers)
+      .where(or(eq(customers.phone, phone), eq(customers.primaryPhone, phone)))
+      .limit(1);
+    return res[0] ?? null;
+  } catch (err) {
+    console.error("Error in getCustomerByPhone:", err);
+    return null;
+  }
 }
 
 export async function getCustomerByCode(code: string): Promise<CustomerRow | null> {
-  await ensureSeedDatabase();
-  const res = await db.select().from(customers).where(eq(customers.code, code)).limit(1);
-  return res[0] ?? null;
+  await safeEnsureSeed();
+  try {
+    const res = await db.select().from(customers).where(eq(customers.code, code)).limit(1);
+    return res[0] ?? null;
+  } catch (err) {
+    console.error("Error in getCustomerByCode:", err);
+    return null;
+  }
 }
 
 export async function createCustomer(data: {
@@ -238,7 +275,7 @@ export async function createCustomer(data: {
   fullName?: string;
   primaryPhone?: string;
 }): Promise<CustomerRow> {
-  await ensureSeedDatabase();
+  await safeEnsureSeed();
   const nameVal = (data.name || data.fullName || "عميل بروست").trim();
   const phoneVal = (data.phone || data.primaryPhone || "").trim();
   const passCode = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -257,93 +294,114 @@ export async function createCustomer(data: {
 }
 
 export async function getPassData(code: string): Promise<CustomerPassData | null> {
-  await ensureSeedDatabase();
-  const customer = await getCustomerByCode(code);
-  if (!customer) return null;
+  await safeEnsureSeed();
+  try {
+    const customer = await getCustomerByCode(code);
+    if (!customer) return null;
 
-  const phone = customer.phone || customer.primaryPhone || "";
-  const ordersList: OrderRow[] = phone
-    ? await db
+    const phone = customer.phone || customer.primaryPhone || "";
+    const ordersList: OrderRow[] = phone
+      ? await db
+          .select()
+          .from(orders)
+          .where(eq(orders.customerPhone, phone))
+          .orderBy(desc(orders.createdAt))
+      : [];
+
+    let ltv = 0;
+    for (let i = 0; i < ordersList.length; i++) {
+      ltv += Number(ordersList[i].totalAmount || 0);
+    }
+
+    const ordersCount = ordersList.length;
+
+    let zone: ZoneDTO | null = null;
+    const latestZoneId = ordersList[0]?.zoneId;
+    if (latestZoneId) {
+      const z = await db
         .select()
-        .from(orders)
-        .where(eq(orders.customerPhone, phone))
-        .orderBy(desc(orders.createdAt))
-    : [];
+        .from(deliveryZones)
+        .where(eq(deliveryZones.id, latestZoneId))
+        .limit(1);
+      if (z[0]) zone = mapZoneToDTO(z[0]);
+    }
 
-  let ltv = 0;
-  for (let i = 0; i < ordersList.length; i++) {
-    ltv += Number(ordersList[i].totalAmount || 0);
+    const memberSince = customer.createdAt ?? new Date();
+
+    const formattedOrdersList = [];
+    for (let i = 0; i < ordersList.length; i++) {
+      const o = ordersList[i];
+      formattedOrdersList.push({
+        id: String(o.id),
+        orderNumber: o.orderNumber,
+        totalAmount: Number(o.totalAmount || 0),
+        status: o.status,
+        createdAt: o.createdAt ?? new Date(),
+      });
+    }
+
+    return {
+      customer: {
+        id: String(customer.id),
+        name: customer.name || customer.fullName || "",
+        phone: customer.phone || customer.primaryPhone || "",
+        passCode: customer.code,
+        customerCode: customer.code,
+        totalOrders: customer.totalOrders || ordersCount,
+        totalSpent: Number(customer.totalSpent || ltv),
+        loyaltyPoints: customer.loyaltyPoints || Math.floor(ltv / 10),
+        discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
+        createdAt: memberSince,
+      } as CustomerPassData["customer"],
+      ordersList: formattedOrdersList,
+      ordersCount,
+      ltv,
+      zone,
+    };
+  } catch (err) {
+    console.error("Error in getPassData:", err);
+    return null;
   }
-
-  const ordersCount = ordersList.length;
-
-  let zone: ZoneDTO | null = null;
-  const latestZoneId = ordersList[0]?.zoneId;
-  if (latestZoneId) {
-    const z = await db
-      .select()
-      .from(deliveryZones)
-      .where(eq(deliveryZones.id, latestZoneId))
-      .limit(1);
-    if (z[0]) zone = mapZoneToDTO(z[0]);
-  }
-
-  const memberSince = customer.createdAt ?? new Date();
-
-  const formattedOrdersList = [];
-  for (let i = 0; i < ordersList.length; i++) {
-    const o = ordersList[i];
-    formattedOrdersList.push({
-      id: String(o.id),
-      orderNumber: o.orderNumber,
-      totalAmount: Number(o.totalAmount || 0),
-      status: o.status,
-      createdAt: o.createdAt ?? new Date(),
-    });
-  }
-
-  return {
-    customer: {
-      id: String(customer.id),
-      name: customer.name || customer.fullName || "",
-      phone: customer.phone || customer.primaryPhone || "",
-      passCode: customer.code,
-      totalOrders: customer.totalOrders || ordersCount,
-      totalSpent: Number(customer.totalSpent || ltv),
-      loyaltyPoints: customer.loyaltyPoints || Math.floor(ltv / 10),
-      discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
-      createdAt: memberSince,
-    },
-    ordersList: formattedOrdersList,
-    ordersCount,
-    ltv,
-    zone,
-  };
 }
 
 export async function getDeliveryZoneById(id: string): Promise<ZoneDTO | null> {
-  await ensureSeedDatabase();
-  const res = await db
-    .select()
-    .from(deliveryZones)
-    .where(eq(deliveryZones.id, id))
-    .limit(1);
-  return res[0] ? mapZoneToDTO(res[0]) : null;
+  await safeEnsureSeed();
+  try {
+    const res = await db
+      .select()
+      .from(deliveryZones)
+      .where(eq(deliveryZones.id, id))
+      .limit(1);
+    return res[0] ? mapZoneToDTO(res[0]) : null;
+  } catch (err) {
+    console.error("Error in getDeliveryZoneById:", err);
+    return null;
+  }
 }
 
 export async function getAllOrders(): Promise<OrderRow[]> {
-  await ensureSeedDatabase();
-  return db.select().from(orders).orderBy(desc(orders.createdAt));
+  await safeEnsureSeed();
+  try {
+    return await db.select().from(orders).orderBy(desc(orders.createdAt));
+  } catch (err) {
+    console.error("Error in getAllOrders:", err);
+    return [];
+  }
 }
 
 export async function getOrdersByNumbers(orderNumbers: string[]): Promise<OrderRow[]> {
-  await ensureSeedDatabase();
-  if (!orderNumbers || orderNumbers.length === 0) return [];
-  return db
-    .select()
-    .from(orders)
-    .where(inArray(orders.orderNumber, orderNumbers))
-    .orderBy(desc(orders.createdAt));
+  await safeEnsureSeed();
+  try {
+    if (!orderNumbers || orderNumbers.length === 0) return [];
+    return await db
+      .select()
+      .from(orders)
+      .where(inArray(orders.orderNumber, orderNumbers))
+      .orderBy(desc(orders.createdAt));
+  } catch (err) {
+    console.error("Error in getOrdersByNumbers:", err);
+    return [];
+  }
 }
 
 export interface CreateOrderInputItem {
@@ -365,7 +423,7 @@ export async function createOrder(payload: {
   notes?: string;
   items: CreateOrderInputItem[];
 }): Promise<OrderRow> {
-  await ensureSeedDatabase();
+  await safeEnsureSeed();
 
   const [newOrder] = await db
     .insert(orders)
