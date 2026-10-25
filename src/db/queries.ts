@@ -1,11 +1,69 @@
 import { db } from "./index";
-import { categories, menuItems, deliveryZones, settings, customers, orders, orderLines } from "./schema";
+import {
+  categories,
+  menuItems,
+  deliveryZones,
+  settings,
+  customers,
+  orders,
+  orderLines,
+} from "./schema";
 import { eq, desc, inArray } from "drizzle-orm";
-import type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo, FrontendSettings, CustomerPassData } from "@/lib/types";
+import type {
+  CategoryDTO,
+  MenuItemDTO,
+  ZoneDTO,
+  Promo,
+  FrontendSettings,
+  CustomerPassData,
+} from "@/lib/types";
 import { ensureSeedDatabase } from "./seed";
 
-// Mapper Functions
-export function mapCategoryToDTO(cat: typeof categories.$inferSelect): CategoryDTO {
+// ---------- Row types inferred directly from the schema ----------
+export type CustomerRow = typeof customers.$inferSelect;
+export type OrderRow = typeof orders.$inferSelect;
+export type CategoryRow = typeof categories.$inferSelect;
+export type MenuItemRow = typeof menuItems.$inferSelect;
+export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
+
+// ---------- Helpers ----------
+export function generatePassCode(): string {
+  return `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+export function toNumericId(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const DEFAULT_SETTINGS: FrontendSettings = {
+  brandNameAr: "بروست الأسد",
+  brandNameEn: "Lion Broast",
+  logoUrl: "",
+  heroTitleAr: "أقوى بروست مقرمش وطازج في دسوق",
+  heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
+  marqueeTextAr:
+    "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+  footerTextAr:
+    "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
+  addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
+  workingHoursAr: "يومياً من 12 ظهراً حتى 2 صباحاً",
+  hotline: "01000000000",
+  whatsapp: "201000000000",
+  deliveryFee: 15,
+  taxPercent: 0,
+};
+
+const DEFAULT_PROMO: Promo = {
+  enabled: true,
+  title: "خصم 15% على أول طلب بـ كود: LION15",
+  code: "LION15",
+  textAr: "خصم 15% على أول طلب بـ كود: LION15",
+  textEn: "15% OFF on first order code: LION15",
+};
+
+// ---------- DTO Mappers ----------
+export function mapCategoryToDTO(cat: CategoryRow): CategoryDTO {
   return {
     id: String(cat.id),
     nameAr: cat.nameAr,
@@ -16,7 +74,7 @@ export function mapCategoryToDTO(cat: typeof categories.$inferSelect): CategoryD
   };
 }
 
-export function mapMenuItemToDTO(item: typeof menuItems.$inferSelect): MenuItemDTO {
+export function mapMenuItemToDTO(item: MenuItemRow): MenuItemDTO {
   return {
     id: String(item.id),
     categoryId: String(item.categoryId),
@@ -34,7 +92,7 @@ export function mapMenuItemToDTO(item: typeof menuItems.$inferSelect): MenuItemD
   };
 }
 
-export function mapZoneToDTO(zone: typeof deliveryZones.$inferSelect): ZoneDTO {
+export function mapZoneToDTO(zone: DeliveryZoneRow): ZoneDTO {
   return {
     id: String(zone.id),
     nameAr: zone.nameAr,
@@ -46,6 +104,7 @@ export function mapZoneToDTO(zone: typeof deliveryZones.$inferSelect): ZoneDTO {
   };
 }
 
+// ---------- Settings & Promo ----------
 export async function getSettingByKey(key: string): Promise<{ key: string; val: string } | null> {
   await ensureSeedDatabase();
   try {
@@ -66,38 +125,26 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
       map.set(r.key, r.val);
     }
 
+    const pick = (key: string, fallback: string) => map.get(key) || fallback;
+
     return {
-      brandNameAr: map.get("brand_name_ar") || "بروست الأسد",
-      brandNameEn: map.get("brand_name_en") || "Lion Broast",
-      logoUrl: map.get("logo_url") || "",
-      heroTitleAr: map.get("hero_title_ar") || "أقوى بروست مقرمش وطازج في دسوق",
-      heroSubtitleAr: map.get("hero_subtitle_ar") || "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
-      marqueeTextAr: map.get("marquee_text_ar") || "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-      footerTextAr: map.get("footer_text_ar") || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
-      addressAr: map.get("address_ar") || "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
-      workingHoursAr: map.get("working_hours_ar") || "يومياً من 12 ظهراً حتى 2 صباحاً",
-      hotline: map.get("hotline") || "01000000000",
-      whatsapp: map.get("whatsapp") || "201000000000",
-      deliveryFee: Number(map.get("delivery_fee") || 15),
-      taxPercent: Number(map.get("tax_percent") || 0),
+      brandNameAr: pick("brand_name_ar", DEFAULT_SETTINGS.brandNameAr),
+      brandNameEn: pick("brand_name_en", DEFAULT_SETTINGS.brandNameEn),
+      logoUrl: pick("logo_url", DEFAULT_SETTINGS.logoUrl),
+      heroTitleAr: pick("hero_title_ar", DEFAULT_SETTINGS.heroTitleAr),
+      heroSubtitleAr: pick("hero_subtitle_ar", DEFAULT_SETTINGS.heroSubtitleAr),
+      marqueeTextAr: pick("marquee_text_ar", DEFAULT_SETTINGS.marqueeTextAr),
+      footerTextAr: pick("footer_text_ar", DEFAULT_SETTINGS.footerTextAr),
+      addressAr: pick("address_ar", DEFAULT_SETTINGS.addressAr),
+      workingHoursAr: pick("working_hours_ar", DEFAULT_SETTINGS.workingHoursAr),
+      hotline: pick("hotline", DEFAULT_SETTINGS.hotline),
+      whatsapp: pick("whatsapp", DEFAULT_SETTINGS.whatsapp),
+      deliveryFee: Number(map.get("delivery_fee") ?? DEFAULT_SETTINGS.deliveryFee),
+      taxPercent: Number(map.get("tax_percent") ?? DEFAULT_SETTINGS.taxPercent),
     };
   } catch (err) {
     console.error("Error in getFrontendSettings:", err);
-    return {
-      brandNameAr: "بروست الأسد",
-      brandNameEn: "Lion Broast",
-      logoUrl: "",
-      heroTitleAr: "أقوى بروست مقرمش وطازج في دسوق",
-      heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
-      marqueeTextAr: "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-      footerTextAr: "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
-      addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
-      workingHoursAr: "يومياً من 12 ظهراً حتى 2 صباحاً",
-      hotline: "01000000000",
-      whatsapp: "201000000000",
-      deliveryFee: 15,
-      taxPercent: 0,
-    };
+    return DEFAULT_SETTINGS;
   }
 }
 
@@ -109,25 +156,19 @@ export async function getPromo(): Promise<Promo> {
       const parsed = JSON.parse(bannerSetting.val);
       return {
         enabled: Boolean(parsed.enabled ?? true),
-        title: String(parsed.title || "خصم 15% على أول طلب بـ كود: LION15"),
-        code: String(parsed.code || "LION15"),
-        textAr: String(parsed.textAr || parsed.title || "خصم 15% على أول طلب بـ كود: LION15"),
-        textEn: String(parsed.textEn || parsed.title || "15% OFF on first order code: LION15"),
+        title: String(parsed.title || DEFAULT_PROMO.title),
+        code: String(parsed.code || DEFAULT_PROMO.code),
+        textAr: String(parsed.textAr || parsed.title || DEFAULT_PROMO.textAr),
+        textEn: String(parsed.textEn || parsed.title || DEFAULT_PROMO.textEn),
       };
     }
   } catch (err) {
     console.error("Error reading promo setting:", err);
   }
-
-  return {
-    enabled: true,
-    title: "خصم 15% على أول طلب بـ كود: LION15",
-    code: "LION15",
-    textAr: "خصم 15% على أول طلب بـ كود: LION15",
-    textEn: "15% OFF on first order code: LION15",
-  };
+  return DEFAULT_PROMO;
 }
 
+// ---------- Menu ----------
 export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
   await ensureSeedDatabase();
   const cats = await db.select().from(categories).orderBy(categories.sortOrder);
@@ -140,7 +181,11 @@ export async function getDeliveryZones(): Promise<ZoneDTO[]> {
   return zonesList.map(mapZoneToDTO);
 }
 
-export async function getMenuData(): Promise<{ categories: CategoryDTO[]; items: MenuItemDTO[]; zones: ZoneDTO[] }> {
+export async function getMenuData(): Promise<{
+  categories: CategoryDTO[];
+  items: MenuItemDTO[];
+  zones: ZoneDTO[];
+}> {
   await ensureSeedDatabase();
   const [cats, rawItems, rawZones] = await Promise.all([
     db.select().from(categories).orderBy(categories.sortOrder),
@@ -155,21 +200,39 @@ export async function getMenuData(): Promise<{ categories: CategoryDTO[]; items:
   };
 }
 
-export async function getCustomerByPhone(phone: string) {
+// ---------- Customers ----------
+export async function getCustomerByPhone(phone: string): Promise<CustomerRow | null> {
   await ensureSeedDatabase();
   const res = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1);
-  return res[0] || null;
+  return res[0] ?? null;
 }
 
-export async function getCustomerByCode(passCode: string) {
+export async function getCustomerByCode(code: string): Promise<CustomerRow | null> {
   await ensureSeedDatabase();
-  const res = await db.select().from(customers).where(eq(customers.passCode, passCode)).limit(1);
-  return res[0] || null;
+  const res = await db.select().from(customers).where(eq(customers.code, code)).limit(1);
+  return res[0] ?? null;
 }
 
-export async function getPassData(passCode: string): Promise<CustomerPassData | null> {
+export async function createCustomer(data: {
+  name: string;
+  phone: string;
+  code?: string;
+}): Promise<CustomerRow> {
   await ensureSeedDatabase();
-  const customer = await getCustomerByCode(passCode);
+  const inserted = await db
+    .insert(customers)
+    .values({
+      name: data.name.trim(),
+      phone: data.phone.trim(),
+      code: data.code || generatePassCode(),
+    })
+    .returning();
+  return inserted[0];
+}
+
+export async function getPassData(code: string): Promise<CustomerPassData | null> {
+  await ensureSeedDatabase();
+  const customer = await getCustomerByCode(code);
   if (!customer) return null;
 
   const ordersList = await db
@@ -179,77 +242,66 @@ export async function getPassData(passCode: string): Promise<CustomerPassData | 
     .orderBy(desc(orders.createdAt));
 
   const ltv = ordersList.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const ordersCount = ordersList.length;
 
   let zone: ZoneDTO | null = null;
-  if (ordersList.length > 0 && ordersList[0].deliveryZoneId) {
+  const latestZoneId = ordersList[0]?.deliveryZoneId;
+  if (latestZoneId) {
     const z = await db
       .select()
       .from(deliveryZones)
-      .where(eq(deliveryZones.id, ordersList[0].deliveryZoneId))
+      .where(eq(deliveryZones.id, latestZoneId))
       .limit(1);
     if (z[0]) zone = mapZoneToDTO(z[0]);
   }
 
+  const memberSince = ordersList[ordersList.length - 1]?.createdAt ?? new Date();
+
   return {
     customer: {
       id: String(customer.id),
-      name: customer.name,
-      phone: customer.phone,
-      passCode: customer.passCode,
-      totalOrders: customer.totalOrders || ordersList.length,
-      totalSpent: Number(customer.totalSpent || ltv),
-      loyaltyPoints: customer.loyaltyPoints || 0,
-      discountPercent: customer.discountPercent || 0,
-      createdAt: customer.createdAt || new Date(),
+      name: customer.name ?? "",
+      phone: customer.phone ?? "",
+      passCode: customer.code,
+      totalOrders: ordersCount,
+      totalSpent: ltv,
+      loyaltyPoints: Math.floor(ltv / 10),
+      discountPercent: ordersCount >= 5 ? 5 : 0,
+      createdAt: memberSince,
     },
     ordersList: ordersList.map((o) => ({
       id: String(o.id),
       orderNumber: o.orderNumber,
-      totalAmount: Number(o.totalAmount),
+      totalAmount: Number(o.totalAmount || 0),
       status: o.status,
-      createdAt: o.createdAt || new Date(),
+      createdAt: o.createdAt ?? new Date(),
     })),
-    ordersCount: ordersList.length,
+    ordersCount,
     ltv,
     zone,
   };
 }
 
-export async function createCustomer(data: {
-  name?: string;
-  phone?: string;
-  fullName?: string;
-  primaryPhone?: string;
-  passCode?: string;
-}) {
+// ---------- Delivery zones ----------
+export async function getDeliveryZoneById(id: number | string): Promise<ZoneDTO | null> {
   await ensureSeedDatabase();
-  const name = (data.name || data.fullName || "عميل بروست").trim();
-  const phone = (data.phone || data.primaryPhone || "").trim();
-  const passCode = data.passCode || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-
-  const inserted = await db
-    .insert(customers)
-    .values({
-      name,
-      phone,
-      passCode,
-    })
-    .returning();
-  return inserted[0];
-}
-
-export async function getDeliveryZoneById(id: string): Promise<ZoneDTO | null> {
-  await ensureSeedDatabase();
-  const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, id)).limit(1);
+  const numericId = toNumericId(id);
+  if (numericId === null) return null;
+  const res = await db
+    .select()
+    .from(deliveryZones)
+    .where(eq(deliveryZones.id, numericId))
+    .limit(1);
   return res[0] ? mapZoneToDTO(res[0]) : null;
 }
 
-export async function getAllOrders() {
+// ---------- Orders ----------
+export async function getAllOrders(): Promise<OrderRow[]> {
   await ensureSeedDatabase();
   return db.select().from(orders).orderBy(desc(orders.createdAt));
 }
 
-export async function getOrdersByNumbers(orderNumbers: string[]) {
+export async function getOrdersByNumbers(orderNumbers: string[]): Promise<OrderRow[]> {
   await ensureSeedDatabase();
   if (!orderNumbers || orderNumbers.length === 0) return [];
   return db
@@ -261,23 +313,24 @@ export async function getOrdersByNumbers(orderNumbers: string[]) {
 
 export async function createOrder(payload: {
   orderNumber: string;
-  customerId: string | number;
-  deliveryZoneId?: string | number | null;
+  customerId: number;
+  deliveryZoneId: number | null;
   customerName: string;
   customerPhone: string;
   address: string;
   notes?: string;
-  items: { menuItemId: string | number; quantity: number; price: number; notes?: string }[];
+  items: { menuItemId: number; quantity: number; price: number; notes?: string }[];
   totalAmount: number;
   deliveryFee: number;
-}) {
+}): Promise<OrderRow> {
   await ensureSeedDatabase();
+
   const [newOrder] = await db
     .insert(orders)
     .values({
       orderNumber: payload.orderNumber,
-      customerId: String(payload.customerId),
-      deliveryZoneId: payload.deliveryZoneId ? String(payload.deliveryZoneId) : null,
+      customerId: payload.customerId,
+      deliveryZoneId: payload.deliveryZoneId,
       customerName: payload.customerName,
       customerPhone: payload.customerPhone,
       address: payload.address,
@@ -292,7 +345,7 @@ export async function createOrder(payload: {
     await db.insert(orderLines).values(
       payload.items.map((item) => ({
         orderId: newOrder.id,
-        menuItemId: String(item.menuItemId),
+        menuItemId: item.menuItemId,
         quantity: item.quantity,
         unitPrice: item.price.toString(),
         notes: item.notes || "",
