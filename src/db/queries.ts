@@ -9,10 +9,15 @@ import {
   customers,
   deliveryZones,
   settings,
+  type Category,
   type MenuItem,
+  type DeliveryZone,
 } from "./schema";
 import { eq, inArray, desc, asc } from "drizzle-orm";
 import { ensureSeedDatabase } from "./seed";
+import type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo } from "@/lib/types";
+
+export type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo };
 
 export type FrontendSettings = {
   brand_name: string;
@@ -55,40 +60,57 @@ export type CustomerPassData = {
   zone: any;
 };
 
-export type CategoryDTO = {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  sortOrder: number;
-  image: string;
-  isActive: boolean;
-  items: MenuItem[];
-};
-
-export type ZoneDTO = {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  fee: number;
-  price: number;
-  estimatedMinutes: number;
-  sortOrder: number;
-  isActive: boolean;
-};
-
 export type MenuData = {
   categories: CategoryDTO[];
-  items: MenuItem[];
+  items: MenuItemDTO[];
   zones: ZoneDTO[];
 };
 
-export type PromoData = {
-  enabled: boolean;
-  title: string;
-  code: string;
-  textAr: string;
-  textEn: string;
-};
+function mapMenuItemToDTO(item: MenuItem): MenuItemDTO {
+  const isAvail = item.isAvailable === 1 || (item.isAvailable as any) === true;
+  return {
+    id: item.id,
+    categoryId: item.categoryId,
+    nameAr: item.nameAr,
+    nameEn: item.nameEn,
+    descriptionAr: item.descriptionAr || "",
+    descriptionEn: item.descriptionEn || "",
+    price: item.price,
+    imageUrl: item.imageUrl || "",
+    image: item.imageUrl || "",
+    badge: item.badge || "",
+    sortOrder: item.sortOrder,
+    isAvailable: isAvail ? 1 : 0,
+    sizes: [],
+    spicyOption: false,
+    isBestSeller: Boolean(item.badge && item.badge.includes("الأكثر مبيعاً")),
+  };
+}
+
+function mapCategoryToDTO(cat: Category, catItems: MenuItemDTO[]): CategoryDTO {
+  return {
+    id: cat.id,
+    nameAr: cat.nameAr,
+    nameEn: cat.nameEn,
+    sortOrder: cat.sortOrder,
+    image: "",
+    isActive: true,
+    items: catItems,
+  };
+}
+
+function mapZoneToDTO(z: DeliveryZone): ZoneDTO {
+  return {
+    id: z.id,
+    nameAr: z.nameAr,
+    nameEn: z.nameEn,
+    fee: z.fee,
+    price: z.fee,
+    estimatedMinutes: z.estimatedMinutes,
+    sortOrder: z.sortOrder,
+    isActive: true,
+  };
+}
 
 /**
  * 1. إعدادات الواجهة والـ CMS
@@ -177,16 +199,14 @@ export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
     }
 
     const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+    const mappedItems = itemsList.map(mapMenuItemToDTO);
 
-    return cats.map((cat) => ({
-      id: cat.id,
-      nameAr: cat.nameAr,
-      nameEn: cat.nameEn,
-      sortOrder: cat.sortOrder,
-      image: "",
-      isActive: true,
-      items: itemsList.filter((it) => it.categoryId === cat.id),
-    }));
+    return cats.map((cat) =>
+      mapCategoryToDTO(
+        cat,
+        mappedItems.filter((it) => it.categoryId === cat.id)
+      )
+    );
   } catch (err) {
     console.error("Error in getCategoriesWithItems:", err);
     return [];
@@ -195,14 +215,28 @@ export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
 
 export async function getMenuData(): Promise<MenuData> {
   try {
-    const categoriesWithItems = await getCategoriesWithItems();
+    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    if (!cats || cats.length === 0) {
+      await ensureSeedDatabase();
+      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    }
+
     const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const zonesList = await getDeliveryZones();
+    const zonesList = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
+
+    const mappedItems: MenuItemDTO[] = itemsList.map(mapMenuItemToDTO);
+    const categoriesWithItems: CategoryDTO[] = cats.map((cat) =>
+      mapCategoryToDTO(
+        cat,
+        mappedItems.filter((it) => it.categoryId === cat.id)
+      )
+    );
+    const mappedZones: ZoneDTO[] = zonesList.map(mapZoneToDTO);
 
     return {
       categories: categoriesWithItems,
-      items: itemsList,
-      zones: zonesList,
+      items: mappedItems,
+      zones: mappedZones,
     };
   } catch (err) {
     console.error("Error in getMenuData:", err);
@@ -214,7 +248,7 @@ export async function getMenuData(): Promise<MenuData> {
   }
 }
 
-export async function getPromo(): Promise<PromoData> {
+export async function getPromo(): Promise<Promo> {
   return {
     enabled: true,
     title: "خصم 10% على الطلب الأول",
@@ -349,13 +383,7 @@ export async function getDeliveryZoneById(id: string) {
       .where(eq(deliveryZones.id, id))
       .limit(1);
     if (!rows[0]) return null;
-    const z = rows[0];
-    return {
-      ...z,
-      fee: z.fee,
-      price: z.fee,
-      isActive: true,
-    };
+    return mapZoneToDTO(rows[0]);
   } catch (err) {
     console.error("Error in getDeliveryZoneById:", err);
     return null;
@@ -377,16 +405,7 @@ export async function getDeliveryZones(): Promise<ZoneDTO[]> {
         .orderBy(asc(deliveryZones.sortOrder));
     }
 
-    return zones.map((z) => ({
-      id: z.id,
-      nameAr: z.nameAr,
-      nameEn: z.nameEn,
-      fee: z.fee,
-      price: z.fee,
-      estimatedMinutes: z.estimatedMinutes,
-      sortOrder: z.sortOrder,
-      isActive: true,
-    }));
+    return zones.map(mapZoneToDTO);
   } catch (err) {
     console.error("Error in getDeliveryZones:", err);
     return [];
