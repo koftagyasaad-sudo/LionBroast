@@ -32,6 +32,28 @@ export type FrontendSettings = {
   whatsapp_number: string;
 };
 
+export type CustomerPassData = {
+  customer: {
+    code: string;
+    fullName: string;
+    primaryPhone: string;
+    primaryAddress: string;
+    totalOrders: number;
+    totalSpent: number;
+    loyaltyPoints: number;
+    discountPercent: number;
+  };
+  ordersList: Array<{
+    orderNumber: string;
+    status: string;
+    totalAmount: number;
+    createdAt: string;
+  }>;
+  ordersCount: number;
+  ltv: number;
+  zone: any;
+};
+
 /**
  * 1. إعدادات الواجهة والـ CMS
  */
@@ -148,7 +170,7 @@ export async function getPromo() {
 }
 
 /**
- * 3. استعلامات العملاء (Customers Queries)
+ * 3. استعلامات العملاء والكروت
  */
 export async function getCustomerByPhone(phone: string) {
   try {
@@ -187,15 +209,47 @@ export async function getCustomerByCode(code: string) {
   }
 }
 
-export async function getPassData(phoneOrCode: string) {
+export async function getPassData(phoneOrCode: string): Promise<CustomerPassData | null> {
   try {
-    const byPhone = await getCustomerByPhone(phoneOrCode);
-    if (byPhone) return byPhone;
+    const cust =
+      (await getCustomerByPhone(phoneOrCode)) ||
+      (await getCustomerByCode(phoneOrCode));
 
-    const byCode = await getCustomerByCode(phoneOrCode);
-    if (byCode) return byCode;
+    if (!cust) return null;
 
-    return null;
+    const phone = cust.primaryPhone || cust.phone || "";
+    let customerOrders: any[] = [];
+    if (phone) {
+      customerOrders = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.customerPhone, phone))
+        .orderBy(desc(orders.createdAt));
+    }
+
+    return {
+      customer: {
+        code: cust.code,
+        fullName: cust.fullName || cust.name || "عميل بروست الأسد",
+        primaryPhone: cust.primaryPhone || cust.phone || "",
+        primaryAddress: cust.primaryAddress || cust.address || "",
+        totalOrders: cust.totalOrders || customerOrders.length || 0,
+        totalSpent: cust.totalSpent || 0,
+        loyaltyPoints: cust.loyaltyPoints || 0,
+        discountPercent: cust.discountPercent || 0,
+      },
+      ordersList: customerOrders.map((o) => ({
+        orderNumber: o.orderNumber,
+        status: o.status,
+        totalAmount: o.totalAmount,
+        createdAt: o.createdAt
+          ? new Date(o.createdAt).toISOString()
+          : new Date().toISOString(),
+      })),
+      ordersCount: cust.totalOrders || customerOrders.length || 0,
+      ltv: cust.totalSpent || 0,
+      zone: null,
+    };
   } catch (err) {
     console.error("Error in getPassData:", err);
     return null;
@@ -229,7 +283,7 @@ export async function createCustomer(data: {
 }
 
 /**
- * 4. استعلامات مناطق التوصيل (Delivery Zones Queries)
+ * 4. استعلامات مناطق التوصيل
  */
 export async function getDeliveryZoneById(id: string) {
   try {
@@ -269,7 +323,7 @@ export async function getDeliveryZones() {
 }
 
 /**
- * 5. استعلامات الطلبات (Orders Queries)
+ * 5. استعلامات الطلبات
  */
 export async function getAllOrders() {
   try {
