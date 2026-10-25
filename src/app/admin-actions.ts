@@ -1,345 +1,368 @@
 "use server";
 
 import { db } from "@/db";
-import { categories, deliveryZones, menuItems, orders, settings } from "@/db/schema";
-import { ensureSeed } from "@/db/seed";
-import { getAdminStats, getAllSettings, getMenuData, listCustomersAdmin, listOrdersAdmin } from "@/db/queries";
-import { asc, eq } from "drizzle-orm";
-import type { ItemSize } from "@/db/schema";
-
-function assertAdmin(token: string) {
-  const expected = process.env.ADMIN_PASSCODE;
-  if (!expected || token !== expected) throw new Error("UNAUTHORIZED");
-}
-
-/** One-shot bundle for the dashboard boot. */
-export async function adminGetAllAction(token: string) {
-  assertAdmin(token);
-  const [stats, ordersList, customersList, menu, settingsList, zones] = await Promise.all([
-    getAdminStats(),
-    listOrdersAdmin(),
-    listCustomersAdmin(),
-    getMenuData(),
-    getAllSettings(),
-    db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder)),
-  ]);
-  return {
-    stats,
-    orders: ordersList.map((o) => ({ ...o, createdAt: o.createdAt.toISOString(), updatedAt: o.updatedAt.toISOString() })),
-    customers: customersList.map((c) => ({
-      ...c,
-      createdAt: c.createdAt.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
-    })),
-    categories: menu.categories,
-    items: menu.items.map((i) => ({ ...i, createdAt: i.createdAt.toISOString(), updatedAt: i.updatedAt.toISOString() })),
-    zones,
-    settings: settingsList,
-  };
-}
-
-/* ---- order status ---- */
-const ALLOWED_STATUSES = new Set(["PENDING", "CONFIRMED", "PREPARING", "ON_THE_WAY", "DELIVERED", "CANCELLED"]);
-
-export async function adminSetOrderStatusAction(token: string, id: string, status: string) {
-  assertAdmin(token);
-  if (!ALLOWED_STATUSES.has(status)) throw new Error("BAD_STATUS");
-  await db.update(orders).set({ status, updatedAt: new Date() }).where(eq(orders.id, id));
-  return { ok: true };
-}
-
-/* ---- zones ---- */
-export async function adminSaveZoneAction(
-  token: string,
-  zone: { id?: string; nameAr: string; nameEn: string; price: number; isActive: boolean; sortOrder?: number },
-) {
-  assertAdmin(token);
-  await ensureSeed();
-  if (zone.id) {
-    await db.update(deliveryZones).set(zone).where(eq(deliveryZones.id, zone.id));
-  } else {
-    await db.insert(deliveryZones).values(zone);
-  }
-  return { ok: true };
-}
-
-export async function adminDeleteZoneAction(token: string, id: string) {
-  assertAdmin(token);
-  await db.update(deliveryZones).set({ isActive: false }).where(eq(deliveryZones.id, id));
-  return { ok: true };
-}
-
-/* ---- categories ---- */
-export async function adminSaveCategoryAction(
-  token: string,
-  cat: { id?: string; nameAr: string; nameEn: string; sortOrder?: number; isActive?: boolean; image?: string | null },
-) {
-  assertAdmin(token);
-  await ensureSeed();
-  if (cat.id) {
-    await db.update(categories).set(cat).where(eq(categories.id, cat.id));
-  } else {
-    await db.insert(categories).values({ sortOrder: 99, isActive: true, ...cat });
-  }
-  return { ok: true };
-}
-
-export async function adminDeleteCategoryAction(token: string, id: string) {
-  assertAdmin(token);
-  await db.update(categories).set({ isActive: false }).where(eq(categories.id, id));
-  return { ok: true };
-}
-
-/* ---- menu items ---- */
-export type AdminItemInput = {
-  id?: string;
-  categoryId: string;
-  nameAr: string;
-  nameEn: string;
-  descriptionAr?: string | null;
-  descriptionEn?: string | null;
-  price: number;
-  sizes?: ItemSize[];
-  spicyOption?: boolean;
-  isBestSeller?: boolean;
-  isAvailable?: boolean;
-  image?: string | null;
-};
-
-export async function adminSaveItemAction(token: string, item: AdminItemInput) {
-  assertAdmin(token);
-  await ensureSeed();
-  const payload = { ...item, sizes: item.sizes ?? [], updatedAt: new Date() };
-  if (item.id) {
-    await db.update(menuItems).set(payload).where(eq(menuItems.id, item.id));
-  } else {
-    await db.insert(menuItems).values(payload);
-  }
-  return { ok: true };
-}
-
-export async function adminDeleteItemAction(token: string, id: string) {
-  assertAdmin(token);
-  await db.delete(menuItems).where(eq(menuItems.id, id));
-  return { ok: true };
-}
-
-/* ---- settings / promo ---- */
-export async function adminSetSettingAction(token: string, key: string, value: string) {
-  assertAdmin(token);
-  await ensureSeed();
-  await db
-    .insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
-  return { ok: true };
-}
-
-/* ------------------------------------------------------------------ */
-/* AI OCR Menu Scanner — REAL Vision-LLM (GPT-4o)                      */
-/* ------------------------------------------------------------------ */
+import { categories, items, orders, settings } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { FrontendSettings } from "@/db/queries";
 
 export interface ScannedRow {
-  categoryEn: string;
-  categoryAr: string;
-  nameEn: string;
-  nameAr: string;
-  descriptionEn: string;
-  descriptionAr: string;
+  categoryNameAr: string;
+  categoryNameEn: string;
+  itemNameAr: string;
+  itemNameEn: string;
+  descriptionAr?: string;
+  descriptionEn?: string;
   price: number;
-  sizes: ItemSize[];
-  spicyOption: boolean;
-  confidence: number;
 }
 
-export async function adminScanMenuAction(
-  token: string,
-  payload: { fileName: string; imageBase64: string; mimeType: string },
-) {
-  assertAdmin(token);
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured in environment variables");
-  }
-
-  // Load existing categories so the model must map into them
-  await ensureSeed();
-  const existingCats = await db
-    .select()
-    .from(categories)
-    .where(eq(categories.isActive, true))
-    .orderBy(asc(categories.sortOrder));
-
-  const catList = existingCats
-    .map((c) => `- "${c.nameEn}" / "${c.nameAr}"`)
-    .join("\n");
-
-  const systemPrompt = `You are a precise restaurant menu OCR and data-extraction engine for an Egyptian broast/fried-chicken restaurant.
-You MUST return ONLY valid JSON. No markdown, no commentary, no code fences.
-
-TASK:
-Read the menu image and extract EVERY distinct sellable item.
-
-OUTPUT SCHEMA (strict):
-{
-  "rows": [
-    {
-      "categoryEn": string,
-      "categoryAr": string,
-      "nameEn": string,
-      "nameAr": string,
-      "descriptionEn": string,
-      "descriptionAr": string,
-      "price": number,
-      "sizes": [{ "id": string, "ar": string, "en": string, "price": number }],
-      "spicyOption": boolean,
-      "confidence": number
-    }
-  ]
-}
-
-HARD RULES:
-1. categoryEn MUST be one of the existing categories below. If unsure, pick the closest match. NEVER invent a new category name.
-2. Prices are Egyptian Pounds (EGP). Use the number only (e.g. 120 not "120 EGP").
-3. If an item has size variants (Small/Large, Box/Mega, 4pcs/6pcs), put the cheapest as "price" and list ALL variants in "sizes". If no sizes, use [].
-4. size.id must be a short slug like "sm", "lg", "box", "4pc".
-5. nameAr and descriptionAr must be proper Arabic. If the menu is English-only, translate accurately to Egyptian Arabic restaurant style.
-6. nameEn must be proper English. If the menu is Arabic-only, translate accurately.
-7. spicyOption = true only if the item is clearly spicy / hot / fire / buffalo / jalapeño related.
-8. confidence is 0.0–1.0 reflecting how sure you are about that row.
-9. Extract ALL items visible. Do not skip, do not hallucinate items that are not on the menu.
-10. Ignore headers, footers, phone numbers, addresses, social media, and decorative text.
-
-EXISTING CATEGORIES (map into these ONLY):
-${catList || '- "Legendary Broast" / "البروست الأسطوري"\n- "Crunchy Sandwiches" / "ساندوتشات كرانشي"\n- "Meals & Combos" / "الوجبات والكومبو"\n- "Sides & Sauces" / "المقبلات والصوصات"\n- "Beverages" / "المشروبات"'}
-`;
-
-  const userText = `Extract the full structured menu from this image. File name hint: ${payload.fileName}`;
-
-  const body = {
-    model: "gpt-4o",
-    temperature: 0,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: userText },
-          {
-            type: "image_url",
-            image_url: {
-              url: `data:${payload.mimeType};base64,${payload.imageBase64}`,
-              detail: "high",
-            },
-          },
-        ],
-      },
-    ],
-  };
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 300)}`);
-  }
-
-  const json = await res.json();
-  const content = json.choices?.[0]?.message?.content || "{}";
-
-  let parsed: { rows?: ScannedRow[] };
+// 1. AI Menu Scanner Action using Google Gemini REST API
+export async function adminScanMenuAction(payload: {
+  fileName: string;
+  imageBase64: string;
+  mimeType: string;
+}): Promise<{ success: boolean; data?: ScannedRow[]; error?: string }> {
   try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new Error("AI returned invalid JSON");
-  }
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-  const catByEn = new Map(existingCats.map((c) => [c.nameEn.toLowerCase(), c]));
-  const catByAr = new Map(existingCats.map((c) => [c.nameAr, c]));
-
-  const rows: ScannedRow[] = (parsed.rows || [])
-    .filter((r) => r && (r.nameAr || r.nameEn) && Number(r.price) >= 0)
-    .map((r) => {
-      // Force category to an existing one
-      let matched =
-        catByEn.get((r.categoryEn || "").toLowerCase()) ||
-        catByAr.get(r.categoryAr || "") ||
-        existingCats[0];
-
-      const sizes: ItemSize[] = Array.isArray(r.sizes)
-        ? r.sizes
-            .filter((s) => s && (s.en || s.ar) && Number(s.price) >= 0)
-            .map((s, idx) => ({
-              id: String(s.id || `s${idx}`).slice(0, 24),
-              ar: String(s.ar || s.en || ""),
-              en: String(s.en || s.ar || ""),
-              price: Number(s.price) || 0,
-            }))
-        : [];
-
+    if (!apiKey) {
       return {
-        categoryEn: matched?.nameEn || r.categoryEn || "Other",
-        categoryAr: matched?.nameAr || r.categoryAr || "أخرى",
-        nameEn: String(r.nameEn || r.nameAr || "").trim(),
-        nameAr: String(r.nameAr || r.nameEn || "").trim(),
-        descriptionEn: String(r.descriptionEn || "").trim(),
-        descriptionAr: String(r.descriptionAr || "").trim(),
-        price: Number(r.price) || 0,
-        sizes,
-        spicyOption: Boolean(r.spicyOption),
-        confidence: Math.max(0, Math.min(1, Number(r.confidence) || 0.85)),
+        success: false,
+        error: "مفتاح GEMINI_API_KEY غير مضاف في إعدادات البيئة على Vercel (Environment Variables). يرجى إضافته ثم عمل Redeploy للموقع.",
       };
-    });
+    }
 
-  return { rows, engine: "GPT-4o Vision", fileName: payload.fileName };
+    if (!apiKey.startsWith("AIzaSy")) {
+      return {
+        success: false,
+        error: `المفتاح الحالي GEMINI_API_KEY يبدو غير صحيح (يبدأ بـ "${apiKey.slice(0, 6)}..."). يجب استخدام API Key من Google AI Studio والذي يبدأ بـ "AIzaSy".`,
+      };
+    }
+
+    // Prepare clean Base64 string
+    const base64Data = payload.imageBase64.includes(",")
+      ? payload.imageBase64.split(",")[1]
+      : payload.imageBase64;
+
+    const mimeType = payload.mimeType || "image/jpeg";
+
+    const promptText = `أنت مساعد متخصص في قراءة وتفكيك قوائم الطعام (المينيو) من الصور.
+قم بتحليل صورة المينيو المرفقة واستخرج جميع الأصناف والأقسام منها بدقة متناهية.
+يجب إرجاع النتيجة حصراً في صيغة JSON Array بدون أي كلام إضافي أو تنسيق Markdown (لا تضع \`\`\`json).
+
+كل عنصر في القائمة يجب أن يكون كالتالي:
+[
+  {
+    "categoryNameAr": "اسم القسم بالعربي",
+    "categoryNameEn": "اسم القسم بالإنجليزي",
+    "itemNameAr": "اسم الصنف بالعربي",
+    "itemNameEn": "اسم الصنف بالإنجليزي",
+    "descriptionAr": "الوصف بالعربي إن وجد",
+    "descriptionEn": "الوصف بالإنجليزي إن وجد",
+    "price": 150
+  }
+]
+
+شروط:
+1. السعر عدد فقط بدون عملة.
+2. إذا غاب السعر ضع 0.
+3. ترجم الأسماء بدقة للغتين العربية والإنجليزية.`;
+
+    const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
+    let responseText = "";
+    let lastApiError = "";
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: promptText },
+                    {
+                      inline_data: {
+                        mime_type: mimeType,
+                        data: base64Data,
+                      },
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.1,
+                response_mime_type: "application/json",
+              },
+            }),
+          }
+        );
+
+        const resData = await response.json();
+
+        if (!response.ok) {
+          lastApiError = resData?.error?.message || response.statusText;
+          continue;
+        }
+
+        const candidateText = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (candidateText) {
+          responseText = candidateText;
+          break;
+        }
+      } catch (err: any) {
+        lastApiError = err?.message || "فشل الاتصال بـ Google API";
+      }
+    }
+
+    if (!responseText) {
+      return {
+        success: false,
+        error: `فشل استجابة نموذج جوجل الذكي: ${lastApiError || "خطأ غير معروف"}`,
+      };
+    }
+
+    let cleaned = responseText.trim();
+    if (cleaned.startsWith("```json")) {
+      cleaned = cleaned.replace(/^```json/, "").replace(/```$/, "").trim();
+    } else if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/^```/, "").replace(/```$/, "").trim();
+    }
+
+    const parsed = JSON.parse(cleaned);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return {
+        success: false,
+        error: "لم يتم العثور على أطباق قابلة للقراءة في صورة المينيو. يرجى استخدام صورة أوضح.",
+      };
+    }
+
+    return { success: true, data: parsed };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `خطأ في المعالجة: ${err?.message || "حدث خلل أثناء تحليل الصورة"}`,
+    };
+  }
 }
 
-/** Batch-publish approved scan rows to the live menu. */
-export async function adminPublishScanAction(token: string, rows: ScannedRow[]) {
-  assertAdmin(token);
-  await ensureSeed();
-  const cats = await db.select().from(categories);
-  const byEn = new Map(cats.map((c) => [c.nameEn, c.id]));
-  let inserted = 0;
-  for (const r of rows) {
-    let categoryId = byEn.get(r.categoryEn);
-    // Auto-create category if somehow missing
-    if (!categoryId) {
-      const [created] = await db
-        .insert(categories)
-        .values({
-          nameAr: r.categoryAr || r.categoryEn,
-          nameEn: r.categoryEn,
-          sortOrder: 99,
-          isActive: true,
-        })
-        .returning();
-      categoryId = created.id;
-      byEn.set(r.categoryEn, categoryId);
+// 2. Save Scanned Rows to DB
+export async function adminSaveScannedRowsAction(rows: ScannedRow[]) {
+  try {
+    const existingCats = await db.select().from(categories);
+    const catMap = new Map<string, number>();
+
+    for (const cat of existingCats) {
+      catMap.set(cat.nameAr.toLowerCase().trim(), cat.id);
+      catMap.set(cat.nameEn.toLowerCase().trim(), cat.id);
     }
-    await db.insert(menuItems).values({
-      categoryId,
-      nameAr: r.nameAr,
-      nameEn: r.nameEn,
-      descriptionAr: r.descriptionAr,
-      descriptionEn: r.descriptionEn,
-      price: r.price,
-      sizes: r.sizes,
-      spicyOption: r.spicyOption,
-      isBestSeller: false,
-      isAvailable: true,
-      sortOrder: 50,
-    });
-    inserted++;
+
+    let itemsInserted = 0;
+
+    for (const row of rows) {
+      const catAr = (row.categoryNameAr || "أصناف أخرى").trim();
+      const catEn = (row.categoryNameEn || "Other Items").trim();
+      const key = catAr.toLowerCase();
+
+      let categoryId = catMap.get(key);
+
+      if (!categoryId) {
+        const [insertedCat] = await db
+          .insert(categories)
+          .values({
+            nameAr: catAr,
+            nameEn: catEn,
+            sortOrder: 99,
+          })
+          .returning({ id: categories.id });
+
+        categoryId = insertedCat.id;
+        catMap.set(key, categoryId);
+      }
+
+      await db.insert(items).values({
+        categoryId,
+        nameAr: row.itemNameAr || "صنف جديد",
+        nameEn: row.itemNameEn || "New Item",
+        descriptionAr: row.descriptionAr || "",
+        descriptionEn: row.descriptionEn || "",
+        price: row.price ? Math.round(row.price * 100) : 0,
+        isAvailable: true,
+        imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+        sortOrder: 99,
+      });
+
+      itemsInserted++;
+    }
+
+    return { success: true, count: itemsInserted };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات" };
   }
-  return { ok: true, inserted };
+}
+
+// 3. Save Frontend Settings Action
+export async function saveFrontendSettingsAction(data: FrontendSettings) {
+  try {
+    const entries = Object.entries(data);
+
+    for (const [key, value] of entries) {
+      const strVal = String(value ?? "");
+
+      const existing = await db
+        .select()
+        .from(settings)
+        .where(eq(settings.key, key));
+
+      if (existing.length > 0) {
+        await db
+          .update(settings)
+          .set({ value: strVal, updatedAt: new Date() })
+          .where(eq(settings.key, key));
+      } else {
+        await db.insert(settings).values({
+          key,
+          value: strVal,
+          updatedAt: new Date(),
+        });
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "فشل حفظ الإعدادات" };
+  }
+}
+
+// 4. CRUD Actions for Categories
+export async function adminCreateCategoryAction(formData: FormData) {
+  try {
+    const nameAr = formData.get("nameAr") as string;
+    const nameEn = formData.get("nameEn") as string;
+    const sortOrder = parseInt((formData.get("sortOrder") as string) || "0", 10);
+
+    if (!nameAr || !nameEn) throw new Error("الأسماء مطلوبة بالعربية والإنجليزية");
+
+    await db.insert(categories).values({ nameAr, nameEn, sortOrder });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminUpdateCategoryAction(id: number, formData: FormData) {
+  try {
+    const nameAr = formData.get("nameAr") as string;
+    const nameEn = formData.get("nameEn") as string;
+    const sortOrder = parseInt((formData.get("sortOrder") as string) || "0", 10);
+
+    await db
+      .update(categories)
+      .set({ nameAr, nameEn, sortOrder })
+      .where(eq(categories.id, id));
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminDeleteCategoryAction(id: number) {
+  try {
+    await db.delete(categories).where(eq(categories.id, id));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+// 5. CRUD Actions for Items
+export async function adminCreateItemAction(formData: FormData) {
+  try {
+    const categoryId = parseInt(formData.get("categoryId") as string, 10);
+    const nameAr = formData.get("nameAr") as string;
+    const nameEn = formData.get("nameEn") as string;
+    const descriptionAr = (formData.get("descriptionAr") as string) || "";
+    const descriptionEn = (formData.get("descriptionEn") as string) || "";
+    const pricePiasters = Math.round(parseFloat((formData.get("price") as string) || "0") * 100);
+    const imageUrl = (formData.get("imageUrl") as string) || "";
+
+    await db.insert(items).values({
+      categoryId,
+      nameAr,
+      nameEn,
+      descriptionAr,
+      descriptionEn,
+      price: pricePiasters,
+      imageUrl,
+      isAvailable: true,
+      sortOrder: 0,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminUpdateItemAction(id: number, formData: FormData) {
+  try {
+    const categoryId = parseInt(formData.get("categoryId") as string, 10);
+    const nameAr = formData.get("nameAr") as string;
+    const nameEn = formData.get("nameEn") as string;
+    const descriptionAr = (formData.get("descriptionAr") as string) || "";
+    const descriptionEn = (formData.get("descriptionEn") as string) || "";
+    const pricePiasters = Math.round(parseFloat((formData.get("price") as string) || "0") * 100);
+    const imageUrl = (formData.get("imageUrl") as string) || "";
+
+    await db
+      .update(items)
+      .set({
+        categoryId,
+        nameAr,
+        nameEn,
+        descriptionAr,
+        descriptionEn,
+        price: pricePiasters,
+        imageUrl,
+      })
+      .where(eq(items.id, id));
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminDeleteItemAction(id: number) {
+  try {
+    await db.delete(items).where(eq(items.id, id));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminToggleItemAvailableAction(id: number, currentStatus: boolean) {
+  try {
+    await db
+      .update(items)
+      .set({ isAvailable: !currentStatus })
+      .where(eq(items.id, id));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+// 6. Order Status Action
+export async function adminUpdateOrderStatusAction(orderId: number, status: string) {
+  try {
+    await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
 }
