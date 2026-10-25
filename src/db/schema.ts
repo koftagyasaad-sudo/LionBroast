@@ -1,130 +1,104 @@
-import { pgTable, serial, text, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
-import { type InferSelectModel } from "drizzle-orm";
+// src/db/schema.ts
 
-// Categories Table
+import { pgTable, text, integer, timestamp, serial, real, index } from "drizzle-orm/pg-core";
+import { type InferSelectModel, type InferInsertModel } from "drizzle-orm";
+
 export const categories = pgTable("categories", {
-  id: serial("id").primaryKey(),
+  id: text("id").primaryKey(),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
-  name: text("name").default(""),
-  icon: text("icon").default(""),
-  sortOrder: integer("sort_order").default(0).notNull(),
-}, (table) => [
-  index("idx_categories_sort").on(table.sortOrder),
-]);
+  sortOrder: integer("sort_order").notNull().default(0),
+});
 
-// Menu Items Table
-export const menuItems = pgTable("items", {
-  id: serial("id").primaryKey(),
-  categoryId: integer("category_id").references(() => categories.id, { onDelete: "cascade" }),
-  nameAr: text("name_ar").notNull(),
-  nameEn: text("name_en").notNull(),
-  descriptionAr: text("description_ar").default(""),
-  descriptionEn: text("description_en").default(""),
-  price: integer("price").notNull(), // in piasters (15000 = 150 EGP)
-  imageUrl: text("image_url").default(""),
-  isAvailable: boolean("is_available").default(true).notNull(),
-  badge: text("badge").default(""),
-  tags: text("tags").default(""),
-  sortOrder: integer("sort_order").default(0).notNull(),
-}, (table) => [
-  index("idx_items_category").on(table.categoryId),
-  index("idx_items_available").on(table.isAvailable),
-]);
+export const menuItems = pgTable(
+  "menu_items",
+  {
+    id: text("id").primaryKey(),
+    categoryId: text("category_id").notNull().references(() => categories.id),
+    nameAr: text("name_ar").notNull(),
+    nameEn: text("name_en").notNull(),
+    descriptionAr: text("description_ar"),
+    descriptionEn: text("description_en"),
+    price: real("price").notNull(),
+    imageUrl: text("image_url"),
+    badge: text("badge"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isAvailable: integer("is_available").notNull().default(1),
+  },
+  (table) => ({
+    catIdx: index("category_idx").on(table.categoryId),
+  })
+);
 
-// Alias for items
 export const items = menuItems;
 
-// Orders Table
-export const orders = pgTable("orders", {
-  id: serial("id").primaryKey(),
-  orderNumber: text("order_number").notNull().unique(),
-  customerCode: text("customer_code").default(""),
-  customerName: text("customer_name").notNull(),
-  customerPhone: text("customer_phone").default(""),
-  customerAddress: text("customer_address").default(""),
-  phone: text("phone").default(""),
-  address: text("address").default(""),
-  subtotal: integer("subtotal").notNull(),
-  deliveryFee: integer("delivery_fee").default(0).notNull(),
-  total: integer("total").notNull(),
-  status: text("status").default("pending").notNull(),
-  notes: text("notes").default(""),
-  zoneId: integer("zone_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_orders_customer_code").on(table.customerCode),
-  index("idx_orders_status").on(table.status),
-  index("idx_orders_created").on(table.createdAt),
-]);
+export const deliveryZones = pgTable("delivery_zones", {
+  id: text("id").primaryKey(),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en").notNull(),
+  fee: real("fee").notNull(),
+  estimatedMinutes: integer("estimated_minutes").notNull().default(30),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
 
-// Order Items / Lines Table
-export const orderLines = pgTable("order_lines", {
-  id: serial("id").primaryKey(),
-  orderId: integer("order_id").references(() => orders.id, { onDelete: "cascade" }),
-  itemId: integer("item_id"),
-  itemNameAr: text("item_name_ar").default(""),
-  itemNameEn: text("item_name_en").default(""),
-  itemName: text("item_name").default(""),
-  quantity: integer("quantity").notNull(),
-  price: integer("price").notNull(),
-  notes: text("notes").default(""),
-}, (table) => [
-  index("idx_order_lines_order").on(table.orderId),
-]);
-
-// Alias for orderItems
-export const orderItems = orderLines;
-
-// Customers Table
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
-  fullName: text("full_name").default(""),
-  name: text("name").default(""),
-  primaryPhone: text("primary_phone").default(""),
-  phone: text("phone").default(""),
-  primaryAddress: text("primary_address").default(""),
-  address: text("address").default(""),
-  notes: text("notes").default(""),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_customers_code").on(table.code),
-  index("idx_customers_phone").on(table.primaryPhone),
-]);
-
-// Delivery Zones Table
-export const deliveryZones = pgTable("delivery_zones", {
-  id: serial("id").primaryKey(),
-  nameAr: text("name_ar").notNull(),
-  nameEn: text("name_en").notNull(),
-  name: text("name").default(""),
-  fee: integer("fee").notNull(),
-  deliveryFee: integer("delivery_fee").default(0),
-  estimatedTime: text("estimated_time").default(""),
-  isAvailable: boolean("is_available").default(true).notNull(),
+  fullName: text("full_name"),
+  name: text("name"),
+  primaryPhone: text("primary_phone"),
+  phone: text("phone"),
+  primaryAddress: text("primary_address"),
+  address: text("address"),
+  notes: text("notes"),
+  totalOrders: integer("total_orders").notNull().default(0),
+  totalSpent: real("total_spent").notNull().default(0),
+  loyaltyPoints: integer("loyalty_points").notNull().default(0),
+  discountPercent: integer("discount_percent").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Settings Table
-export const settings = pgTable("settings", {
+export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
-  key: text("key").notNull().unique(),
-  value: text("value").notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_settings_key").on(table.key),
-]);
+  orderNumber: text("order_number").notNull().unique(),
+  customerPhone: text("customer_phone").notNull(),
+  customerName: text("customer_name").notNull(),
+  address: text("address").notNull(),
+  zoneId: text("zone_id").references(() => deliveryZones.id),
+  subtotal: real("subtotal").notNull(),
+  deliveryFee: real("delivery_fee").notNull(),
+  totalAmount: real("total_amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
-// Alias for storeSettings
+export const orderLines = pgTable("order_lines", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  itemId: text("item_id"),
+  nameAr: text("name_ar").notNull(),
+  price: real("price").notNull(),
+  quantity: integer("quantity").notNull(),
+});
+
+export const orderItems = orderLines;
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
 export const storeSettings = settings;
 
-// Export TypeScript Types
+// Exported Types
 export type Category = InferSelectModel<typeof categories>;
 export type MenuItem = InferSelectModel<typeof menuItems>;
 export type Item = MenuItem;
+export type DeliveryZone = InferSelectModel<typeof deliveryZones>;
+export type Customer = InferSelectModel<typeof customers>;
 export type Order = InferSelectModel<typeof orders>;
 export type OrderLine = InferSelectModel<typeof orderLines>;
 export type OrderItem = OrderLine;
-export type Customer = InferSelectModel<typeof customers>;
-export type DeliveryZone = InferSelectModel<typeof deliveryZones>;
 export type Setting = InferSelectModel<typeof settings>;
