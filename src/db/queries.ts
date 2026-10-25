@@ -13,10 +13,29 @@ import {
 import { eq, inArray, desc, asc } from "drizzle-orm";
 import { ensureSeedDatabase } from "./seed";
 
+export type FrontendSettings = {
+  brand_name: string;
+  logo_url: string;
+  hero_title_ar: string;
+  hero_title_en: string;
+  hero_desc_ar: string;
+  hero_desc_en: string;
+  marquee_ar: string;
+  marquee_en: string;
+  footer_text_ar: string;
+  footer_text_en: string;
+  address_ar: string;
+  address_en: string;
+  working_hours_ar: string;
+  working_hours_en: string;
+  hotline: string;
+  whatsapp_number: string;
+};
+
 /**
  * 1. إعدادات الواجهة والـ CMS
  */
-export async function getFrontendSettings() {
+export async function getFrontendSettings(): Promise<FrontendSettings> {
   try {
     let rows = await db.select().from(settings);
     if (!rows || rows.length === 0) {
@@ -138,7 +157,7 @@ export async function getCustomerByPhone(phone: string) {
       .from(customers)
       .where(eq(customers.primaryPhone, phone))
       .limit(1);
-    
+
     if (rows[0]) return rows[0];
 
     const fallbackRows = await db
@@ -350,7 +369,6 @@ export async function createOrder(data: {
     );
   }
 
-  // تحديث إحصائيات ونقاط العميل
   const existingCust = await getCustomerByPhone(data.customerPhone);
   if (existingCust) {
     const updatedOrders = (existingCust.totalOrders || 0) + 1;
