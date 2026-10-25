@@ -1,140 +1,129 @@
 import { db } from "@/db";
-import { categories, customers, deliveryZones, menuItems, orders, settings } from "@/db/schema";
-import { ensureSeed } from "@/db/seed";
-import { asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { categories, items, orders, orderItems, settings } from "@/db/schema";
+import { eq, desc, asc, sql } from "drizzle-orm";
 
-export async function getMenuData() {
-  await ensureSeed();
-  const [cats, items, zones] = await Promise.all([
-    db.select().from(categories).where(eq(categories.isActive, true)).orderBy(asc(categories.sortOrder)),
-    db.select().from(menuItems).orderBy(asc(menuItems.sortOrder)),
-    db.select().from(deliveryZones).where(eq(deliveryZones.isActive, true)).orderBy(asc(deliveryZones.sortOrder)),
-  ]);
-  return { categories: cats, items, zones };
+export interface FrontendSettings {
+  brand_ar: string;
+  brand_en: string;
+  logo_url: string;
+  hero_title_ar: string;
+  hero_title_en: string;
+  hero_subtitle_ar: string;
+  hero_subtitle_en: string;
+  hero_image_url: string;
+  marquee_text_ar: string;
+  marquee_text_en: string;
+  hotline: string;
+  whatsapp: string;
+  address_ar: string;
+  address_en: string;
+  working_hours_ar: string;
+  working_hours_en: string;
+  footer_about_ar: string;
+  footer_about_en: string;
+  primary_color: string;
 }
 
-export async function getPromo() {
-  await ensureSeed();
-  const rows = await db.select().from(settings);
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return {
-    enabled: map.promo_enabled === "true",
-    textAr: map.promo_text_ar || "",
-    textEn: map.promo_text_en || "",
-  };
-}
+export const DEFAULT_FRONTEND_SETTINGS: FrontendSettings = {
+  brand_ar: "مطعمنا",
+  brand_en: "Our Restaurant",
+  logo_url: "",
+  hero_title_ar: "أشهى المأكولات الطازجة تصلك أينما كنت",
+  hero_title_en: "Delicious Fresh Food Delivered To Your Door",
+  hero_subtitle_ar: "استمتع بأفضل الأطباق المحضرة بأجود المكونات يومياً",
+  hero_subtitle_en: "Enjoy the finest dishes prepared daily with quality ingredients",
+  hero_image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80",
+  marquee_text_ar: "⚡ خصم 20% على طلبك الأول | 🛵 توصيل سريع وسريع | 🍔 أطباق جديدة يومياً",
+  marquee_text_en: "⚡ 20% OFF Your First Order | 🛵 Fast Delivery | 🍔 New Specials Daily",
+  hotline: "19000",
+  whatsapp: "201000000000",
+  address_ar: "القاهرة، مصر",
+  address_en: "Cairo, Egypt",
+  working_hours_ar: "يومياً من 10 صباحاً حتى 2 صباحاً",
+  working_hours_en: "Daily 10:00 AM - 02:00 AM",
+  footer_about_ar: "نقدم لكم أفضل تجربة طعام شرقي وغربي بأعلى معايير الجودة والنظافة.",
+  footer_about_en: "Providing you with the best dining experience with top quality standards.",
+  primary_color: "#e11d48",
+};
 
-export async function getFrontendSettings() {
-  await ensureSeed();
-  const rows = await db.select().from(settings);
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return {
-    heroTitleAr: map.hero_title_ar,
-    heroTitleEn: map.hero_title_en,
-    heroSubAr: map.hero_sub_ar,
-    heroSubEn: map.hero_sub_en,
-    marqueeAr: map.marquee_ar,
-    marqueeEn: map.marquee_en,
-    aboutAr: map.about_ar,
-    aboutEn: map.about_en,
-    hotline: map.hotline,
-    whatsapp: map.whatsapp,
-    // 👇 الحقول الجديدة
-    brandAr: map.brand_ar,
-    brandEn: map.brand_en,
-    addressAr: map.address_ar,
-    addressEn: map.address_en,
-    hours: map.hours,
-  };
-}
-
-export async function getPassData(code: string) {
-  await ensureSeed();
-  const [cust] = await db.select().from(customers).where(eq(customers.customerCode, code)).limit(1);
-  if (!cust) return null;
-  const ords = await db
-    .select()
-    .from(orders)
-    .where(eq(orders.customerId, cust.id))
-    .orderBy(desc(orders.createdAt))
-    .limit(20);
-  const delivered = ords.filter((o) => o.status !== "CANCELLED");
-  const ltv = Math.round(delivered.reduce((a, o) => a + o.total, 0) * 100) / 100;
-  const [zone] = cust.zoneId
-    ? await db.select().from(deliveryZones).where(eq(deliveryZones.id, cust.zoneId)).limit(1)
-    : [null];
-  return { customer: cust, ordersList: ords, ordersCount: delivered.length, ltv, zone };
-}
-
-export async function getOrdersByNumbers(numbers: string[]) {
-  if (!numbers.length) return [];
-  await ensureSeed();
-  return db.select().from(orders).where(inArray(orders.orderNumber, numbers)).orderBy(desc(orders.createdAt));
-}
-
-/* ------------------------------ Admin ----------------------------------- */
-
-export async function getAdminStats() {
-  await ensureSeed();
-  const ords = await db.select().from(orders).where(ne(orders.status, "CANCELLED"));
-  const custRows = await db.execute(sql`SELECT count(*)::int AS n FROM customers`);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const revenue = Math.round(ords.reduce((a, o) => a + o.total, 0) * 100) / 100;
-  const todayOrders = ords.filter((o) => new Date(o.createdAt) >= todayStart);
-  const todayRevenue = Math.round(todayOrders.reduce((a, o) => a + o.total, 0) * 100) / 100;
-
-  const tally = new Map<string, { name: string; qty: number; revenue: number }>();
-  for (const o of ords) {
-    for (const it of o.items) {
-      const cur = tally.get(it.id) ?? { name: `${it.nameEn}`, qty: 0, revenue: 0 };
-      cur.qty += it.qty;
-      cur.revenue += it.qty * it.unitPrice;
-      tally.set(it.id, cur);
+export async function getFrontendSettings(): Promise<FrontendSettings> {
+  try {
+    const allSettings = await db.select().from(settings);
+    const settingsMap: Record<string, string> = {};
+    for (const row of allSettings) {
+      settingsMap[row.key] = row.value;
     }
+
+    return {
+      brand_ar: settingsMap["brand_ar"] || DEFAULT_FRONTEND_SETTINGS.brand_ar,
+      brand_en: settingsMap["brand_en"] || DEFAULT_FRONTEND_SETTINGS.brand_en,
+      logo_url: settingsMap["logo_url"] || DEFAULT_FRONTEND_SETTINGS.logo_url,
+      hero_title_ar: settingsMap["hero_title_ar"] || DEFAULT_FRONTEND_SETTINGS.hero_title_ar,
+      hero_title_en: settingsMap["hero_title_en"] || DEFAULT_FRONTEND_SETTINGS.hero_title_en,
+      hero_subtitle_ar: settingsMap["hero_subtitle_ar"] || DEFAULT_FRONTEND_SETTINGS.hero_subtitle_ar,
+      hero_subtitle_en: settingsMap["hero_subtitle_en"] || DEFAULT_FRONTEND_SETTINGS.hero_subtitle_en,
+      hero_image_url: settingsMap["hero_image_url"] || DEFAULT_FRONTEND_SETTINGS.hero_image_url,
+      marquee_text_ar: settingsMap["marquee_text_ar"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
+      marquee_text_en: settingsMap["marquee_text_en"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
+      hotline: settingsMap["hotline"] || DEFAULT_FRONTEND_SETTINGS.hotline,
+      whatsapp: settingsMap["whatsapp"] || DEFAULT_FRONTEND_SETTINGS.whatsapp,
+      address_ar: settingsMap["address_ar"] || DEFAULT_FRONTEND_SETTINGS.address_ar,
+      address_en: settingsMap["address_en"] || DEFAULT_FRONTEND_SETTINGS.address_en,
+      working_hours_ar: settingsMap["working_hours_ar"] || DEFAULT_FRONTEND_SETTINGS.working_hours_ar,
+      working_hours_en: settingsMap["working_hours_en"] || DEFAULT_FRONTEND_SETTINGS.working_hours_en,
+      footer_about_ar: settingsMap["footer_about_ar"] || DEFAULT_FRONTEND_SETTINGS.footer_about_ar,
+      footer_about_en: settingsMap["footer_about_en"] || DEFAULT_FRONTEND_SETTINGS.footer_about_en,
+      primary_color: settingsMap["primary_color"] || DEFAULT_FRONTEND_SETTINGS.primary_color,
+    };
+  } catch (err) {
+    console.error("Failed to fetch settings from DB, using defaults:", err);
+    return DEFAULT_FRONTEND_SETTINGS;
   }
-  const topItems = [...tally.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
-
-  return {
-    revenue,
-    ordersCount: ords.length,
-    customersCount: (custRows.rows?.[0] as { n?: number } | undefined)?.n ?? 0,
-    todayRevenue,
-    todayOrders: todayOrders.length,
-    pendingCount: ords.filter((o) => o.status === "PENDING").length,
-    topItems,
-  };
 }
 
-export async function listOrdersAdmin() {
-  await ensureSeed();
-  return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(500);
-}
+export async function getCategoriesWithItems() {
+  const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+  const result = [];
 
-export async function listCustomersAdmin() {
-  await ensureSeed();
-  const custs = await db.select().from(customers).orderBy(desc(customers.createdAt));
-  const ords = await db.select().from(orders).where(ne(orders.status, "CANCELLED"));
-  const zones = await db.select().from(deliveryZones);
-  const zoneMap = new Map(zones.map((z) => [z.id, z]));
-  const agg = new Map<string, { count: number; ltv: number }>();
-  for (const o of ords) {
-    if (!o.customerId) continue;
-    const cur = agg.get(o.customerId) ?? { count: 0, ltv: 0 };
-    cur.count += 1;
-    cur.ltv += o.total;
-    agg.set(o.customerId, cur);
+  for (const cat of cats) {
+    const categoryItems = await db
+      .select()
+      .from(items)
+      .where(eq(items.categoryId, cat.id))
+      .orderBy(asc(items.sortOrder));
+
+    result.push({
+      ...cat,
+      items: categoryItems,
+    });
   }
-  return custs.map((c) => ({
-    ...c,
-    zone: c.zoneId ? (zoneMap.get(c.zoneId) ?? null) : null,
-    ordersCount: agg.get(c.id)?.count ?? 0,
-    ltv: Math.round((agg.get(c.id)?.ltv ?? 0) * 100) / 100,
-  }));
+
+  return result;
 }
 
-export async function getAllSettings() {
-  await ensureSeed();
-  return db.select().from(settings);
+export async function getAllOrders() {
+  const rawOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+  const result = [];
+
+  for (const o of rawOrders) {
+    const itemsList = await db
+      .select({
+        id: orderItems.id,
+        quantity: orderItems.quantity,
+        price: orderItems.price,
+        notes: orderItems.notes,
+        itemNameAr: items.nameAr,
+        itemNameEn: items.nameEn,
+      })
+      .from(orderItems)
+      .leftJoin(items, eq(orderItems.itemId, items.id))
+      .where(eq(orderItems.orderId, o.id));
+
+    result.push({
+      ...o,
+      items: itemsList,
+    });
+  }
+
+  return result;
 }
