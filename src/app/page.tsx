@@ -19,14 +19,7 @@ export default async function HomePage() {
   const best = items.filter((i) => i.isBestSeller && i.isAvailable);
 
   return (
-    <StoreChrome 
-      zones={zones} 
-      promo={promo} 
-      aboutAr={frontend.aboutAr} 
-      aboutEn={frontend.aboutEn}
-      dbHotline={frontend.hotline}
-      dbWhatsapp={frontend.whatsapp}
-    >
+    <StoreChrome zones={zones} promo={promo} frontend={frontend}>
       <HeroSlider frontend={frontend} />
       <QuickBar />
       <MarqueeStrip marqueeAr={frontend.marqueeAr} marqueeEn={frontend.marqueeEn} />
