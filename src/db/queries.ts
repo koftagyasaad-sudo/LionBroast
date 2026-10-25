@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { categories, items, orders, orderItems, settings } from "@/db/schema";
-import { eq, desc, asc, sql } from "drizzle-orm";
+import { categories, menuItems, orders, orderLines, settings, customers, deliveryZones } from "@/db/schema";
+import { eq, desc, asc, inArray } from "drizzle-orm";
 
 export interface FrontendSettings {
   brand_ar: string;
@@ -25,25 +25,25 @@ export interface FrontendSettings {
 }
 
 export const DEFAULT_FRONTEND_SETTINGS: FrontendSettings = {
-  brand_ar: "مطعمنا",
-  brand_en: "Our Restaurant",
+  brand_ar: "بروست الأسد",
+  brand_en: "Broast El-Assad",
   logo_url: "",
-  hero_title_ar: "أشهى المأكولات الطازجة تصلك أينما كنت",
-  hero_title_en: "Delicious Fresh Food Delivered To Your Door",
-  hero_subtitle_ar: "استمتع بأفضل الأطباق المحضرة بأجود المكونات يومياً",
-  hero_subtitle_en: "Enjoy the finest dishes prepared daily with quality ingredients",
-  hero_image_url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80",
-  marquee_text_ar: "⚡ خصم 20% على طلبك الأول | 🛵 توصيل سريع وسريع | 🍔 أطباق جديدة يومياً",
-  marquee_text_en: "⚡ 20% OFF Your First Order | 🛵 Fast Delivery | 🍔 New Specials Daily",
-  hotline: "19000",
-  whatsapp: "201000000000",
-  address_ar: "القاهرة، مصر",
-  address_en: "Cairo, Egypt",
-  working_hours_ar: "يومياً من 10 صباحاً حتى 2 صباحاً",
-  working_hours_en: "Daily 10:00 AM - 02:00 AM",
-  footer_about_ar: "نقدم لكم أفضل تجربة طعام شرقي وغربي بأعلى معايير الجودة والنظافة.",
-  footer_about_en: "Providing you with the best dining experience with top quality standards.",
-  primary_color: "#e11d48",
+  hero_title_ar: "الحار اللي يولع",
+  hero_title_en: "The Fire Edition",
+  hero_subtitle_ar: "ستريبس النار بغمسة الهالبينو المدخنة. خصم 20% طوال الأسبوع – جربها لو قدها.",
+  hero_subtitle_en: "Fire strips with smoked jalapeño dip. 20% off all week – try it if you dare.",
+  hero_image_url: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=1200&q=80",
+  marquee_text_ar: "دجاج طازج يومياً 💥 تتبيلة سرية 💥 كرسبي 100%",
+  marquee_text_en: "Fresh Chicken Daily 💥 Secret Recipe since 1998 💥 100% Crispy",
+  hotline: "19955",
+  whatsapp: "201000001555",
+  address_ar: "شارع الجمهورية، دسوق، كفر الشيخ",
+  address_en: "El-Gomhoria St., Desouk, Kafr El-Sheikh",
+  working_hours_ar: "12:00 PM — 3:00 AM",
+  working_hours_en: "12:00 PM — 3:00 AM",
+  footer_about_ar: "بروست الأسد 🦁 أكبر قطعة بروست في دسوق 🔥",
+  footer_about_en: "From the heart of Desouk to Egyptian homes — broast with a secret recipe since 1998.",
+  primary_color: "#f97316",
 };
 
 export async function getFrontendSettings(): Promise<FrontendSettings> {
@@ -76,54 +76,106 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
       primary_color: settingsMap["primary_color"] || DEFAULT_FRONTEND_SETTINGS.primary_color,
     };
   } catch (err) {
-    console.error("Failed to fetch settings from DB, using defaults:", err);
     return DEFAULT_FRONTEND_SETTINGS;
   }
 }
 
 export async function getCategoriesWithItems() {
-  const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-  const result = [];
+  try {
+    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    const result = [];
 
-  for (const cat of cats) {
-    const categoryItems = await db
-      .select()
-      .from(items)
-      .where(eq(items.categoryId, cat.id))
-      .orderBy(asc(items.sortOrder));
+    for (const cat of cats) {
+      const itemsList = await db
+        .select()
+        .from(menuItems)
+        .where(eq(menuItems.categoryId, cat.id))
+        .orderBy(asc(menuItems.sortOrder));
 
-    result.push({
-      ...cat,
-      items: categoryItems,
-    });
+      result.push({
+        ...cat,
+        items: itemsList,
+      });
+    }
+
+    return result;
+  } catch (err) {
+    return [];
   }
+}
 
-  return result;
+export async function getMenuData() {
+  return await getCategoriesWithItems();
+}
+
+export async function getPromo() {
+  try {
+    const allSettings = await db.select().from(settings);
+    const map: Record<string, string> = {};
+    for (const s of allSettings) map[s.key] = s.value;
+
+    return {
+      marqueeTextAr: map["marquee_text_ar"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
+      marqueeTextEn: map["marquee_text_en"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
+      isAvailable: true,
+    };
+  } catch {
+    return {
+      marqueeTextAr: DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
+      marqueeTextEn: DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
+      isAvailable: true,
+    };
+  }
 }
 
 export async function getAllOrders() {
-  const rawOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
-  const result = [];
+  try {
+    const rawOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const result = [];
 
-  for (const o of rawOrders) {
-    const itemsList = await db
-      .select({
-        id: orderItems.id,
-        quantity: orderItems.quantity,
-        price: orderItems.price,
-        notes: orderItems.notes,
-        itemNameAr: items.nameAr,
-        itemNameEn: items.nameEn,
-      })
-      .from(orderItems)
-      .leftJoin(items, eq(orderItems.itemId, items.id))
-      .where(eq(orderItems.orderId, o.id));
+    for (const o of rawOrders) {
+      const itemsList = await db
+        .select()
+        .from(orderLines)
+        .where(eq(orderLines.orderId, o.id));
 
-    result.push({
-      ...o,
-      items: itemsList,
-    });
+      result.push({
+        ...o,
+        items: itemsList,
+      });
+    }
+
+    return result;
+  } catch (err) {
+    return [];
   }
+}
 
-  return result;
+export async function getOrdersByNumbers(orderNumbers: string[]) {
+  if (!orderNumbers || orderNumbers.length === 0) return [];
+  try {
+    return await db.select().from(orders).where(inArray(orders.orderNumber, orderNumbers));
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function getPassData(code: string) {
+  try {
+    const [cust] = await db.select().from(customers).where(eq(customers.code, code));
+    if (!cust) return null;
+
+    const customerOrders = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.customerCode, code))
+      .orderBy(desc(orders.createdAt));
+
+    return {
+      customer: cust,
+      orders: customerOrders,
+    };
+  } catch (err) {
+    return null;
+  }
 }
