@@ -7,7 +7,7 @@ import { ensureSeedDatabase } from "./seed";
 // Mapper Functions
 export function mapCategoryToDTO(cat: typeof categories.$inferSelect): CategoryDTO {
   return {
-    id: cat.id,
+    id: String(cat.id),
     nameAr: cat.nameAr,
     nameEn: cat.nameEn || undefined,
     sortOrder: cat.sortOrder || 0,
@@ -18,8 +18,8 @@ export function mapCategoryToDTO(cat: typeof categories.$inferSelect): CategoryD
 
 export function mapMenuItemToDTO(item: typeof menuItems.$inferSelect): MenuItemDTO {
   return {
-    id: item.id,
-    categoryId: item.categoryId,
+    id: String(item.id),
+    categoryId: String(item.categoryId),
     nameAr: item.nameAr,
     nameEn: item.nameEn || undefined,
     descriptionAr: item.descriptionAr || undefined,
@@ -36,7 +36,7 @@ export function mapMenuItemToDTO(item: typeof menuItems.$inferSelect): MenuItemD
 
 export function mapZoneToDTO(zone: typeof deliveryZones.$inferSelect): ZoneDTO {
   return {
-    id: zone.id,
+    id: String(zone.id),
     nameAr: zone.nameAr,
     nameEn: zone.nameEn || undefined,
     price: Number(zone.fee || 0),
@@ -192,7 +192,7 @@ export async function getPassData(passCode: string): Promise<CustomerPassData | 
 
   return {
     customer: {
-      id: customer.id,
+      id: String(customer.id),
       name: customer.name,
       phone: customer.phone,
       passCode: customer.passCode,
@@ -203,7 +203,7 @@ export async function getPassData(passCode: string): Promise<CustomerPassData | 
       createdAt: customer.createdAt || new Date(),
     },
     ordersList: ordersList.map((o) => ({
-      id: o.id,
+      id: String(o.id),
       orderNumber: o.orderNumber,
       totalAmount: Number(o.totalAmount),
       status: o.status,
@@ -261,13 +261,13 @@ export async function getOrdersByNumbers(orderNumbers: string[]) {
 
 export async function createOrder(payload: {
   orderNumber: string;
-  customerId: string;
-  deliveryZoneId: string;
+  customerId: string | number;
+  deliveryZoneId?: string | number | null;
   customerName: string;
   customerPhone: string;
   address: string;
   notes?: string;
-  items: { menuItemId: string; quantity: number; price: number; notes?: string }[];
+  items: { menuItemId: string | number; quantity: number; price: number; notes?: string }[];
   totalAmount: number;
   deliveryFee: number;
 }) {
@@ -276,8 +276,8 @@ export async function createOrder(payload: {
     .insert(orders)
     .values({
       orderNumber: payload.orderNumber,
-      customerId: payload.customerId,
-      deliveryZoneId: payload.deliveryZoneId,
+      customerId: String(payload.customerId),
+      deliveryZoneId: payload.deliveryZoneId ? String(payload.deliveryZoneId) : null,
       customerName: payload.customerName,
       customerPhone: payload.customerPhone,
       address: payload.address,
@@ -292,7 +292,7 @@ export async function createOrder(payload: {
     await db.insert(orderLines).values(
       payload.items.map((item) => ({
         orderId: newOrder.id,
-        menuItemId: item.menuItemId,
+        menuItemId: String(item.menuItemId),
         quantity: item.quantity,
         unitPrice: item.price.toString(),
         notes: item.notes || "",
