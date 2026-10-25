@@ -1,4 +1,3 @@
-"use me";
 // src/app/actions.ts
 
 "use server";
@@ -7,13 +6,14 @@ import {
   createCustomer,
   createOrder,
   getCustomerByPhone,
+  getCustomerByCode,
   getDeliveryZoneById,
   getOrdersByNumbers,
 } from "@/db/queries";
 import { isEgyptMobile, normalizeEgyptPhone } from "@/lib/utils";
 
 /**
- * 1. إنشاء طلب جديد (Submit / Create Order Action)
+ * 1. إنشاء طلب جديد (Submit Order Action)
  */
 export async function submitOrderAction(payload: {
   name: string;
@@ -47,7 +47,6 @@ export async function submitOrderAction(payload: {
       };
     }
 
-    // 1. Check/Create Customer
     let customer = await getCustomerByPhone(phone);
     if (!customer) {
       customer = await createCustomer({
@@ -57,7 +56,6 @@ export async function submitOrderAction(payload: {
       });
     }
 
-    // 2. Delivery Zone Fee
     let deliveryFee = 15;
     let zoneName = "توصيل دسوق";
     if (payload.zoneId) {
@@ -68,14 +66,12 @@ export async function submitOrderAction(payload: {
       }
     }
 
-    // 3. Calc Total
     const subtotal = payload.items.reduce(
       (acc, item) => acc + item.price * item.quantity,
       0
     );
     const totalAmount = subtotal + deliveryFee;
 
-    // 4. Create Order
     const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
     const newOrder = await createOrder({
       orderNumber,
@@ -112,9 +108,6 @@ export async function submitOrderAction(payload: {
   }
 }
 
-/**
- * التوافقية السابقة: createOrderAction مستخدمة داخل CartDrawer.tsx
- */
 export async function createOrderAction(payload: any) {
   const name = payload.name || payload.customerName || "";
   const phone = payload.phone || payload.customerPhone || "";
@@ -171,7 +164,7 @@ export async function saveCustomerAction(payload: {
 }
 
 /**
- * 3. جلب كارت العميل ونقاط الولاء (Customer Pass & Loyalty)
+ * 3. جلب كارت العميل ونقاط الولاء (Customer Pass)
  */
 export async function fetchCustomerPassAction(phoneOrCode: string) {
   try {
@@ -181,7 +174,11 @@ export async function fetchCustomerPassAction(phoneOrCode: string) {
     }
 
     const phone = normalizeEgyptPhone(cleaned);
-    const customer = await getCustomerByPhone(phone);
+    let customer = await getCustomerByPhone(phone);
+
+    if (!customer) {
+      customer = await getCustomerByCode(cleaned);
+    }
 
     if (!customer) {
       return {
@@ -194,12 +191,12 @@ export async function fetchCustomerPassAction(phoneOrCode: string) {
       success: true,
       customer: {
         code: customer.code,
-        fullName: customer.fullName,
-        primaryPhone: customer.primaryPhone,
-        totalOrders: customer.totalOrders,
-        totalSpent: customer.totalSpent,
-        loyaltyPoints: customer.loyaltyPoints,
-        discountPercent: customer.discountPercent,
+        fullName: customer.fullName || customer.name || "عميل بروست الأسد",
+        primaryPhone: customer.primaryPhone || customer.phone || phone,
+        totalOrders: (customer as any).totalOrders ?? 0,
+        totalSpent: (customer as any).totalSpent ?? 0,
+        loyaltyPoints: (customer as any).loyaltyPoints ?? 0,
+        discountPercent: (customer as any).discountPercent ?? 0,
       },
     };
   } catch (err: any) {
@@ -208,9 +205,6 @@ export async function fetchCustomerPassAction(phoneOrCode: string) {
   }
 }
 
-/**
- * التوافقية السابقة: passStatsAction مستخدمة داخل CustomerQRCode.tsx
- */
 export async function passStatsAction(phoneOrCode: string) {
   const res = await fetchCustomerPassAction(phoneOrCode);
   if (!res.success || !res.customer) {
@@ -223,27 +217,27 @@ export async function passStatsAction(phoneOrCode: string) {
   const c = res.customer;
   return {
     success: true,
-    ordersCount: c.totalOrders || 0,
-    totalSpent: c.totalSpent || 0,
-    points: c.loyaltyPoints || 0,
+    ordersCount: c.totalOrders,
+    totalSpent: c.totalSpent,
+    points: c.loyaltyPoints,
     passCode: c.code,
-    name: c.fullName || "عميل بروست الأسد",
+    name: c.fullName,
     phone: c.primaryPhone,
-    discountPercent: c.discountPercent || 0,
+    discountPercent: c.discountPercent,
     data: {
-      ordersCount: c.totalOrders || 0,
-      totalSpent: c.totalSpent || 0,
-      points: c.loyaltyPoints || 0,
+      ordersCount: c.totalOrders,
+      totalSpent: c.totalSpent,
+      points: c.loyaltyPoints,
       passCode: c.code,
-      name: c.fullName || "عميل بروست الأسد",
+      name: c.fullName,
       phone: c.primaryPhone,
-      discountPercent: c.discountPercent || 0,
+      discountPercent: c.discountPercent,
     },
   };
 }
 
 /**
- * 4. تتبع الطلبات (Track Orders Action)
+ * 4. تتبع الطلبات (Track Orders)
  */
 export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
   try {
@@ -270,9 +264,6 @@ export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
   }
 }
 
-/**
- * التوافقية السابقة: trackOrdersAction مستخدمة داخل TrackerModal.tsx
- */
 export async function trackOrdersAction(orderNumbers: string[] | string) {
   const nums = Array.isArray(orderNumbers) ? orderNumbers : [orderNumbers];
   const res = await fetchOrdersByNumbersAction(nums);
@@ -284,7 +275,7 @@ export async function trackOrdersAction(orderNumbers: string[] | string) {
 }
 
 /**
- * 5. التحقق من كلمة مرور الأدمن (Admin Gate Action)
+ * 5. التحقق من كلمة مرور الأدمن (Admin Passcode)
  */
 export async function verifyAdminAction(passcode: string) {
   try {
