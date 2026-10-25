@@ -215,14 +215,24 @@ export async function getPassData(passCode: string): Promise<CustomerPassData | 
   };
 }
 
-export async function createCustomer(data: { name: string; phone: string; passCode: string }) {
+export async function createCustomer(data: {
+  name?: string;
+  phone?: string;
+  fullName?: string;
+  primaryPhone?: string;
+  passCode?: string;
+}) {
   await ensureSeedDatabase();
+  const name = (data.name || data.fullName || "عميل بروست").trim();
+  const phone = (data.phone || data.primaryPhone || "").trim();
+  const passCode = data.passCode || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+
   const inserted = await db
     .insert(customers)
     .values({
-      name: data.name,
-      phone: data.phone,
-      passCode: data.passCode,
+      name,
+      phone,
+      passCode,
     })
     .returning();
   return inserted[0];
