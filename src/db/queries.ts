@@ -37,9 +37,14 @@ export async function getFrontendSettings() {
     marqueeEn: map.marquee_en,
     aboutAr: map.about_ar,
     aboutEn: map.about_en,
-    // 👇 السطرين الجداد
     hotline: map.hotline,
     whatsapp: map.whatsapp,
+    // 👇 الحقول الجديدة
+    brandAr: map.brand_ar,
+    brandEn: map.brand_en,
+    addressAr: map.address_ar,
+    addressEn: map.address_en,
+    hours: map.hours,
   };
 }
 
