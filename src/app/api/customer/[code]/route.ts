@@ -1,48 +1,24 @@
-// src/app/api/customer/[code]/route.ts
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPassData } from "@/db/queries";
 
 export async function GET(
-  request: Request,
+  _request: NextRequest,
   props: { params: Promise<{ code: string }> }
 ) {
   try {
-    const params = await props.params;
-    const code = params.code;
-
+    const { code } = await props.params;
     if (!code) {
-      return NextResponse.json({ found: false, error: "كود العميل مطلوب" }, { status: 400 });
+      return NextResponse.json({ error: "Customer pass code required" }, { status: 400 });
     }
 
-    const data = await getPassData(code);
-    if (!data) {
-      return NextResponse.json({ found: false }, { status: 404 });
+    const passData = await getPassData(code);
+    if (!passData) {
+      return NextResponse.json({ error: "Customer pass not found" }, { status: 404 });
     }
 
-    const { customer, ordersList, ordersCount, ltv, zone } = data;
-
-    return NextResponse.json({
-      found: true,
-      customer: {
-        code: customer.code,
-        fullName: customer.fullName,
-        primaryPhone: customer.primaryPhone,
-        totalOrders: customer.totalOrders,
-        totalSpent: customer.totalSpent,
-        loyaltyPoints: customer.loyaltyPoints,
-        discountPercent: customer.discountPercent,
-      },
-      ordersList,
-      ordersCount,
-      ltv,
-      zone,
-    });
-  } catch (err: any) {
-    console.error("Error in GET /api/customer/[code]:", err);
-    return NextResponse.json(
-      { found: false, error: err?.message || "حدث خطأ أثناء الاستعلام" },
-      { status: 500 }
-    );
+    return NextResponse.json(passData);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Internal Server Error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
