@@ -98,9 +98,9 @@ export async function adminSaveSettingsAction(payload: Record<string, string>) {
     for (const [key, val] of Object.entries(payload)) {
       const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
       if (existing.length > 0) {
-        await db.update(settings).set({ val: String(val) }).where(eq(settings.key, key));
+        await db.update(settings).set({ value: String(val) }).where(eq(settings.key, key));
       } else {
-        await db.insert(settings).values({ key, val: String(val) });
+        await db.insert(settings).values({ key, value: String(val) });
       }
     }
     return { success: true };
@@ -133,12 +133,18 @@ export async function adminSaveCategoryAction(data: { id?: string; nameAr: strin
   if (data.id) {
     await db
       .update(categories)
-      .set({ nameAr: data.nameAr, nameEn: data.nameEn, sortOrder: data.sortOrder || 0 })
+      .set({
+        nameAr: data.nameAr,
+        nameEn: data.nameEn || data.nameAr,
+        sortOrder: data.sortOrder || 0,
+      })
       .where(eq(categories.id, data.id));
   } else {
+    const newId = `cat-${Date.now()}`;
     await db.insert(categories).values({
+      id: newId,
       nameAr: data.nameAr,
-      nameEn: data.nameEn,
+      nameEn: data.nameEn || data.nameAr,
       sortOrder: data.sortOrder || 0,
     });
   }
@@ -153,36 +159,41 @@ export async function adminDeleteCategoryAction(id: string) {
 
 export async function adminSaveItemAction(data: any) {
   await ensureSeedDatabase();
+  const badgeParts = [];
+  if (data.spicyOption) badgeParts.push("spicy");
+  if (data.isBestSeller) badgeParts.push("bestseller");
+  const badgeVal = badgeParts.join(",") || null;
+
   if (data.id) {
     await db
       .update(menuItems)
       .set({
         categoryId: data.categoryId,
         nameAr: data.nameAr,
-        nameEn: data.nameEn,
-        descriptionAr: data.descriptionAr,
-        descriptionEn: data.descriptionEn,
-        price: data.price.toString(),
-        image: data.image,
-        isAvailable: data.isAvailable ?? true,
+        nameEn: data.nameEn || data.nameAr,
+        descriptionAr: data.descriptionAr || "",
+        descriptionEn: data.descriptionEn || "",
+        price: Number(data.price || 0),
+        imageUrl: data.image || data.imageUrl || "",
+        badge: badgeVal,
+        isAvailable: data.isAvailable ? 1 : 0,
         sortOrder: data.sortOrder || 0,
-        spicyOption: data.spicyOption ?? false,
-        isBestSeller: data.isBestSeller ?? false,
       })
       .where(eq(menuItems.id, data.id));
   } else {
+    const newId = `item-${Date.now()}`;
     await db.insert(menuItems).values({
+      id: newId,
       categoryId: data.categoryId,
       nameAr: data.nameAr,
-      nameEn: data.nameEn,
-      descriptionAr: data.descriptionAr,
-      descriptionEn: data.descriptionEn,
-      price: data.price.toString(),
-      image: data.image,
-      isAvailable: data.isAvailable ?? true,
+      nameEn: data.nameEn || data.nameAr,
+      descriptionAr: data.descriptionAr || "",
+      descriptionEn: data.descriptionEn || "",
+      price: Number(data.price || 0),
+      imageUrl: data.image || data.imageUrl || "",
+      badge: badgeVal,
+      isAvailable: data.isAvailable ? 1 : 0,
       sortOrder: data.sortOrder || 0,
-      spicyOption: data.spicyOption ?? false,
-      isBestSeller: data.isBestSeller ?? false,
     });
   }
   return { success: true };
@@ -194,15 +205,17 @@ export async function adminDeleteItemAction(id: string) {
   return { success: true };
 }
 
-export async function adminUpdateOrderStatusAction(orderId: string, status: string) {
+export async function adminUpdateOrderStatusAction(orderId: string | number, status: string) {
   await ensureSeedDatabase();
-  await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+  const numericId = Number(orderId);
+  await db.update(orders).set({ status }).where(eq(orders.id, numericId));
   return { success: true };
 }
 
-export async function adminDeleteOrderAction(id: string) {
+export async function adminDeleteOrderAction(id: string | number) {
   await ensureSeedDatabase();
-  await db.delete(orders).where(eq(orders.id, id));
+  const numericId = Number(id);
+  await db.delete(orders).where(eq(orders.id, numericId));
   return { success: true };
 }
 
@@ -213,17 +226,19 @@ export async function adminSaveZoneAction(data: { id?: string; nameAr: string; n
       .update(deliveryZones)
       .set({
         nameAr: data.nameAr,
-        nameEn: data.nameEn,
-        fee: data.fee.toString(),
-        estimatedMinutes: data.estimatedMinutes,
+        nameEn: data.nameEn || data.nameAr,
+        fee: Number(data.fee || 0),
+        estimatedMinutes: Number(data.estimatedMinutes || 30),
       })
       .where(eq(deliveryZones.id, data.id));
   } else {
+    const newId = `zone-${Date.now()}`;
     await db.insert(deliveryZones).values({
+      id: newId,
       nameAr: data.nameAr,
-      nameEn: data.nameEn,
-      fee: data.fee.toString(),
-      estimatedMinutes: data.estimatedMinutes,
+      nameEn: data.nameEn || data.nameAr,
+      fee: Number(data.fee || 0),
+      estimatedMinutes: Number(data.estimatedMinutes || 30),
     });
   }
   return { success: true };
@@ -235,33 +250,47 @@ export async function adminDeleteZoneAction(id: string) {
   return { success: true };
 }
 
-// Aliases for compatibility
 export const saveFrontendSettingsAction = adminSaveSettingsAction;
 export const adminSaveSettings = adminSaveSettingsAction;
 export const adminGetSettingsAction = adminGetAllAction;
 export const adminSetSettingAction = adminSaveSettingsAction;
 export const adminSetOrderStatusAction = adminUpdateOrderStatusAction;
-export const adminSaveScannedRowsAction = async (rows: any[]) => {
+
+export async function adminSaveScannedRowsAction(rows: any[]) {
   await ensureSeedDatabase();
   for (const row of rows) {
     let cat = await db.select().from(categories).where(eq(categories.nameAr, row.categoryName)).limit(1);
     let catId = cat[0]?.id;
     if (!catId) {
-      const [newCat] = await db.insert(categories).values({ nameAr: row.categoryName }).returning();
-      catId = newCat.id;
+      catId = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      await db.insert(categories).values({
+        id: catId,
+        nameAr: row.categoryName,
+        nameEn: row.categoryName,
+      });
     }
+
+    const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const badgeParts = [];
+    if (row.spicyOption) badgeParts.push("spicy");
+    if (row.isBestSeller) badgeParts.push("bestseller");
+
     await db.insert(menuItems).values({
+      id: itemId,
       categoryId: catId,
       nameAr: row.nameAr,
+      nameEn: row.nameAr,
       descriptionAr: row.descriptionAr || "",
-      price: (row.price || 0).toString(),
-      spicyOption: Boolean(row.spicyOption),
-      isBestSeller: Boolean(row.isBestSeller),
+      descriptionEn: "",
+      price: Number(row.price || 0),
+      badge: badgeParts.join(",") || null,
+      isAvailable: 1,
     });
   }
   return { success: true };
-};
-export const adminTriggerSeedAction = async () => {
+}
+
+export async function adminTriggerSeedAction() {
   await ensureSeedDatabase();
   return { success: true };
-};
+}
