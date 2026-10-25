@@ -48,6 +48,8 @@ export interface FrontendSettings {
   heroTitleAr: string;
   heroSubtitleAr: string;
   marqueeTextAr: string;
+  marqueeAr?: string;
+  marqueeEn?: string;
   footerTextAr: string;
   addressAr: string;
   workingHoursAr: string;
