@@ -6,6 +6,8 @@ export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
+  name: text("name").default(""),
+  icon: text("icon").default(""),
   sortOrder: integer("sort_order").default(0).notNull(),
 });
 
@@ -20,6 +22,8 @@ export const menuItems = pgTable("items", {
   price: integer("price").notNull(), // stored in piasters (e.g. 15000 = 150 EGP)
   imageUrl: text("image_url").default(""),
   isAvailable: boolean("is_available").default(true).notNull(),
+  badge: text("badge").default(""),
+  tags: text("tags").default(""),
   sortOrder: integer("sort_order").default(0).notNull(),
 });
 
@@ -32,13 +36,16 @@ export const orders = pgTable("orders", {
   orderNumber: text("order_number").notNull().unique(),
   customerCode: text("customer_code").default(""),
   customerName: text("customer_name").notNull(),
-  phone: text("phone").notNull(),
-  address: text("address").notNull(),
+  customerPhone: text("customer_phone").default(""),
+  customerAddress: text("customer_address").default(""),
+  phone: text("phone").default(""),
+  address: text("address").default(""),
   subtotal: integer("subtotal").notNull(),
   deliveryFee: integer("delivery_fee").default(0).notNull(),
   total: integer("total").notNull(),
   status: text("status").default("pending").notNull(),
   notes: text("notes").default(""),
+  zoneId: integer("zone_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -49,6 +56,7 @@ export const orderLines = pgTable("order_lines", {
   itemId: integer("item_id"),
   itemNameAr: text("item_name_ar").default(""),
   itemNameEn: text("item_name_en").default(""),
+  itemName: text("item_name").default(""),
   quantity: integer("quantity").notNull(),
   price: integer("price").notNull(),
   notes: text("notes").default(""),
@@ -61,9 +69,13 @@ export const orderItems = orderLines;
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  phone: text("phone").notNull(),
+  fullName: text("full_name").default(""),
+  name: text("name").default(""),
+  primaryPhone: text("primary_phone").default(""),
+  phone: text("phone").default(""),
+  primaryAddress: text("primary_address").default(""),
   address: text("address").default(""),
+  notes: text("notes").default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -72,7 +84,10 @@ export const deliveryZones = pgTable("delivery_zones", {
   id: serial("id").primaryKey(),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
+  name: text("name").default(""),
   fee: integer("fee").notNull(),
+  deliveryFee: integer("delivery_fee").default(0),
+  estimatedTime: text("estimated_time").default(""),
   isAvailable: boolean("is_available").default(true).notNull(),
 });
 
