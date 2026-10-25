@@ -8,7 +8,7 @@ import {
   orders,
   orderLines,
 } from "./schema";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, or } from "drizzle-orm";
 import type {
   CategoryDTO,
   MenuItemDTO,
@@ -19,22 +19,11 @@ import type {
 } from "@/lib/types";
 import { ensureSeedDatabase } from "./seed";
 
-// ---------- Row types inferred directly from the schema ----------
 export type CustomerRow = typeof customers.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;
 export type MenuItemRow = typeof menuItems.$inferSelect;
 export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
-
-// ---------- Helpers ----------
-export function generatePassCode(): string {
-  return `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-}
-
-export function toNumericId(value: unknown): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 const DEFAULT_SETTINGS: FrontendSettings = {
   brandNameAr: "بروست الأسد",
@@ -62,10 +51,9 @@ const DEFAULT_PROMO: Promo = {
   textEn: "15% OFF on first order code: LION15",
 };
 
-// ---------- DTO Mappers ----------
 export function mapCategoryToDTO(cat: CategoryRow): CategoryDTO {
   return {
-    id: String(cat.id),
+    id: cat.id,
     nameAr: cat.nameAr,
     nameEn: cat.nameEn || undefined,
     sortOrder: cat.sortOrder || 0,
@@ -76,25 +64,25 @@ export function mapCategoryToDTO(cat: CategoryRow): CategoryDTO {
 
 export function mapMenuItemToDTO(item: MenuItemRow): MenuItemDTO {
   return {
-    id: String(item.id),
-    categoryId: String(item.categoryId),
+    id: item.id,
+    categoryId: item.categoryId,
     nameAr: item.nameAr,
     nameEn: item.nameEn || undefined,
     descriptionAr: item.descriptionAr || undefined,
     descriptionEn: item.descriptionEn || undefined,
     price: Number(item.price || 0),
-    image: item.image || undefined,
-    isAvailable: Boolean(item.isAvailable),
+    image: item.imageUrl || undefined,
+    isAvailable: item.isAvailable === 1,
     sortOrder: item.sortOrder || 0,
-    spicyOption: Boolean(item.spicyOption),
-    isBestSeller: Boolean(item.isBestSeller),
-    sizes: item.sizes ? (item.sizes as { name: string; price: number }[]) : undefined,
+    spicyOption: item.badge?.includes("spicy") || false,
+    isBestSeller: item.badge?.includes("bestseller") || false,
+    sizes: undefined,
   };
 }
 
 export function mapZoneToDTO(zone: DeliveryZoneRow): ZoneDTO {
   return {
-    id: String(zone.id),
+    id: zone.id,
     nameAr: zone.nameAr,
     nameEn: zone.nameEn || undefined,
     price: Number(zone.fee || 0),
@@ -104,12 +92,11 @@ export function mapZoneToDTO(zone: DeliveryZoneRow): ZoneDTO {
   };
 }
 
-// ---------- Settings & Promo ----------
 export async function getSettingByKey(key: string): Promise<{ key: string; val: string } | null> {
   await ensureSeedDatabase();
   try {
     const res = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-    return res[0] || null;
+    return res[0] ? { key: res[0].key, val: res[0].value } : null;
   } catch (err) {
     console.error("Error fetching setting:", key, err);
     return null;
@@ -122,7 +109,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
     const rows = await db.select().from(settings);
     const map = new Map<string, string>();
     for (const r of rows) {
-      map.set(r.key, r.val);
+      map.set(r.key, r.value);
     }
 
     const pick = (key: string, fallback: string) => map.get(key) || fallback;
@@ -168,7 +155,6 @@ export async function getPromo(): Promise<Promo> {
   return DEFAULT_PROMO;
 }
 
-// ---------- Menu ----------
 export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
   await ensureSeedDatabase();
   const cats = await db.select().from(categories).orderBy(categories.sortOrder);
@@ -200,10 +186,13 @@ export async function getMenuData(): Promise<{
   };
 }
 
-// ---------- Customers ----------
 export async function getCustomerByPhone(phone: string): Promise<CustomerRow | null> {
   await ensureSeedDatabase();
-  const res = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1);
+  const res = await db
+    .select()
+    .from(customers)
+    .where(or(eq(customers.phone, phone), eq(customers.primaryPhone, phone)))
+    .limit(1);
   return res[0] ?? null;
 }
 
@@ -217,14 +206,22 @@ export async function createCustomer(data: {
   name: string;
   phone: string;
   code?: string;
+  fullName?: string;
+  primaryPhone?: string;
 }): Promise<CustomerRow> {
   await ensureSeedDatabase();
+  const nameVal = (data.name || data.fullName || "عميل بروست").trim();
+  const phoneVal = (data.phone || data.primaryPhone || "").trim();
+  const passCode = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+
   const inserted = await db
     .insert(customers)
     .values({
-      name: data.name.trim(),
-      phone: data.phone.trim(),
-      code: data.code || generatePassCode(),
+      code: passCode,
+      name: nameVal,
+      fullName: nameVal,
+      phone: phoneVal,
+      primaryPhone: phoneVal,
     })
     .returning();
   return inserted[0];
@@ -235,17 +232,20 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
   const customer = await getCustomerByCode(code);
   if (!customer) return null;
 
-  const ordersList = await db
-    .select()
-    .from(orders)
-    .where(eq(orders.customerId, customer.id))
-    .orderBy(desc(orders.createdAt));
+  const phone = customer.phone || customer.primaryPhone || "";
+  const ordersList = phone
+    ? await db
+        .select()
+        .from(orders)
+        .where(eq(orders.customerPhone, phone))
+        .orderBy(desc(orders.createdAt))
+    : [];
 
   const ltv = ordersList.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
   const ordersCount = ordersList.length;
 
   let zone: ZoneDTO | null = null;
-  const latestZoneId = ordersList[0]?.deliveryZoneId;
+  const latestZoneId = ordersList[0]?.zoneId;
   if (latestZoneId) {
     const z = await db
       .select()
@@ -255,18 +255,18 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
     if (z[0]) zone = mapZoneToDTO(z[0]);
   }
 
-  const memberSince = ordersList[ordersList.length - 1]?.createdAt ?? new Date();
+  const memberSince = customer.createdAt ?? new Date();
 
   return {
     customer: {
       id: String(customer.id),
-      name: customer.name ?? "",
-      phone: customer.phone ?? "",
+      name: customer.name || customer.fullName || "",
+      phone: customer.phone || customer.primaryPhone || "",
       passCode: customer.code,
-      totalOrders: ordersCount,
-      totalSpent: ltv,
-      loyaltyPoints: Math.floor(ltv / 10),
-      discountPercent: ordersCount >= 5 ? 5 : 0,
+      totalOrders: customer.totalOrders || ordersCount,
+      totalSpent: Number(customer.totalSpent || ltv),
+      loyaltyPoints: customer.loyaltyPoints || Math.floor(ltv / 10),
+      discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
       createdAt: memberSince,
     },
     ordersList: ordersList.map((o) => ({
@@ -282,20 +282,16 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
   };
 }
 
-// ---------- Delivery zones ----------
-export async function getDeliveryZoneById(id: number | string): Promise<ZoneDTO | null> {
+export async function getDeliveryZoneById(id: string): Promise<ZoneDTO | null> {
   await ensureSeedDatabase();
-  const numericId = toNumericId(id);
-  if (numericId === null) return null;
   const res = await db
     .select()
     .from(deliveryZones)
-    .where(eq(deliveryZones.id, numericId))
+    .where(eq(deliveryZones.id, id))
     .limit(1);
   return res[0] ? mapZoneToDTO(res[0]) : null;
 }
 
-// ---------- Orders ----------
 export async function getAllOrders(): Promise<OrderRow[]> {
   await ensureSeedDatabase();
   return db.select().from(orders).orderBy(desc(orders.createdAt));
@@ -313,15 +309,20 @@ export async function getOrdersByNumbers(orderNumbers: string[]): Promise<OrderR
 
 export async function createOrder(payload: {
   orderNumber: string;
-  customerId: number;
-  deliveryZoneId: number | null;
-  customerName: string;
   customerPhone: string;
+  customerName: string;
   address: string;
-  notes?: string;
-  items: { menuItemId: number; quantity: number; price: number; notes?: string }[];
-  totalAmount: number;
+  zoneId?: string | null;
+  subtotal: number;
   deliveryFee: number;
+  totalAmount: number;
+  notes?: string;
+  items: {
+    itemId?: string;
+    nameAr: string;
+    price: number;
+    quantity: number;
+  }[];
 }): Promise<OrderRow> {
   await ensureSeedDatabase();
 
@@ -329,15 +330,15 @@ export async function createOrder(payload: {
     .insert(orders)
     .values({
       orderNumber: payload.orderNumber,
-      customerId: payload.customerId,
-      deliveryZoneId: payload.deliveryZoneId,
-      customerName: payload.customerName,
       customerPhone: payload.customerPhone,
+      customerName: payload.customerName,
       address: payload.address,
-      notes: payload.notes || "",
-      totalAmount: payload.totalAmount.toString(),
-      deliveryFee: payload.deliveryFee.toString(),
+      zoneId: payload.zoneId || null,
+      subtotal: payload.subtotal,
+      deliveryFee: payload.deliveryFee,
+      totalAmount: payload.totalAmount,
       status: "pending",
+      notes: payload.notes || "",
     })
     .returning();
 
@@ -345,10 +346,10 @@ export async function createOrder(payload: {
     await db.insert(orderLines).values(
       payload.items.map((item) => ({
         orderId: newOrder.id,
-        menuItemId: item.menuItemId,
+        itemId: item.itemId || null,
+        nameAr: item.nameAr,
+        price: item.price,
         quantity: item.quantity,
-        unitPrice: item.price.toString(),
-        notes: item.notes || "",
       }))
     );
   }
