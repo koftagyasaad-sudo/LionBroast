@@ -9,15 +9,15 @@ interface FooterProps {
 }
 
 export default function Footer({ frontend }: FooterProps) {
-  const brandName = frontend?.brand_ar || "مطعمنا";
+  const brandName = frontend?.brand_ar || "بروست الأسد";
   const logoUrl = frontend?.logo_url;
-  const footerAbout = frontend?.footer_about_ar || "أفضل المأكولات والمشروبات المجهزة بأعلى معايير الجودة.";
-  const hotline = frontend?.hotline || "19000";
-  const address = frontend?.address_ar || "القاهرة، مصر";
-  const workingHours = frontend?.working_hours_ar || "يومياً من 10 صباحاً حتى 2 صباحاً";
+  const footerAbout = frontend?.footer_about_ar || "أكبر قطعة بروست في دسوق - طعم وتتبيلة سرية.";
+  const hotline = frontend?.hotline || "19955";
+  const address = frontend?.address_ar || "شارع الجمهورية، دسوق، كفر الشيخ";
+  const workingHours = frontend?.working_hours_ar || "12:00 PM — 3:00 AM";
 
   return (
-    <footer className="bg-zinc-900 text-zinc-300 pt-12 pb-8 border-t border-zinc-800">
+    <footer className="bg-zinc-950 text-zinc-300 pt-12 pb-8 border-t border-zinc-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 border-b border-zinc-800">
           
@@ -32,10 +32,10 @@ export default function Footer({ frontend }: FooterProps) {
                 />
               ) : (
                 <>
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md">
                     <UtensilsCrossed className="w-5 h-5" />
                   </div>
-                  <span className="font-extrabold text-xl text-white">
+                  <span className="font-black text-xl text-white">
                     {brandName}
                   </span>
                 </>
@@ -52,27 +52,27 @@ export default function Footer({ frontend }: FooterProps) {
             
             {hotline && (
               <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <Phone className="w-4 h-4 text-rose-500 shrink-0" />
+                <Phone className="w-4 h-4 text-orange-500 shrink-0" />
                 <span>الخط الساخن: <strong className="text-white" dir="ltr">{hotline}</strong></span>
               </div>
             )}
 
             {address && (
               <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
                 <span>{address}</span>
               </div>
             )}
 
             {workingHours && (
               <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <Clock className="w-4 h-4 text-rose-500 shrink-0" />
-                <span>{workingHours}</span>
+                <Clock className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>مواعيد العمل: {workingHours}</span>
               </div>
             )}
           </div>
 
-          {/* Admin Hidden Footer Link */}
+          {/* Admin Hidden Link */}
           <div className="space-y-3 flex flex-col justify-between">
             <div>
               <h4 className="text-white font-bold text-base mb-4">خدمة العملاء</h4>
