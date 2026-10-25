@@ -6,9 +6,9 @@ import {
   createCustomer,
   createOrder,
   getCustomerByPhone,
-  getCustomerByCode,
   getDeliveryZoneById,
   getOrdersByNumbers,
+  getPassData,
 } from "@/db/queries";
 import { isEgyptMobile, normalizeEgyptPhone } from "@/lib/utils";
 
@@ -127,7 +127,7 @@ export async function createOrderAction(payload: any) {
 }
 
 /**
- * 2. حفظ العميل الجديد (Onboarding Modal Action)
+ * 2. حفظ العميل الجديد (Onboarding Action)
  */
 export async function saveCustomerAction(payload: {
   name: string;
@@ -173,14 +173,8 @@ export async function fetchCustomerPassAction(phoneOrCode: string) {
       return { success: false, error: "يرجى إدخال رقم الهاتف أو كود العميل" };
     }
 
-    const phone = normalizeEgyptPhone(cleaned);
-    let customer = await getCustomerByPhone(phone);
-
-    if (!customer) {
-      customer = await getCustomerByCode(cleaned);
-    }
-
-    if (!customer) {
+    const passData = await getPassData(cleaned);
+    if (!passData) {
       return {
         success: false,
         error: "لم يتم العثور على حساب بهذا الرقم. يرجى طلب طلبك الأول للتفعيل تلقائياً!",
@@ -189,15 +183,8 @@ export async function fetchCustomerPassAction(phoneOrCode: string) {
 
     return {
       success: true,
-      customer: {
-        code: customer.code,
-        fullName: customer.fullName || customer.name || "عميل بروست الأسد",
-        primaryPhone: customer.primaryPhone || customer.phone || phone,
-        totalOrders: (customer as any).totalOrders ?? 0,
-        totalSpent: (customer as any).totalSpent ?? 0,
-        loyaltyPoints: (customer as any).loyaltyPoints ?? 0,
-        discountPercent: (customer as any).discountPercent ?? 0,
-      },
+      customer: passData.customer,
+      ordersList: passData.ordersList,
     };
   } catch (err: any) {
     console.error("Error in fetchCustomerPassAction:", err);
