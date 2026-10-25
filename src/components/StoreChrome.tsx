@@ -1,44 +1,28 @@
 "use client";
 
-import type { ReactNode } from "react";
-import type { ZoneDTO } from "@/lib/types";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import CartDrawer from "@/components/CartDrawer";
-import OnboardingModal from "@/components/OnboardingModal";
-import LionPassDrawer from "@/components/CustomerQRCode";
-import ItemDialog from "@/components/ItemDialog";
-import FloatingDock from "@/components/FloatingDock";
-import TrackerModal from "@/components/TrackerModal";
+import React, { ReactNode } from "react";
+import Header from "./Header";
+import Footer from "./Footer";
+import type { ZoneDTO, Promo, FrontendSettings } from "@/lib/types";
 
-interface Promo {
-  enabled: boolean;
-  textAr: string;
-  textEn: string;
+interface StoreChromeProps {
+  children: ReactNode;
+  zones?: ZoneDTO[];
+  promo?: Promo | null;
+  settings?: FrontendSettings;
 }
 
-export default function StoreChrome({ 
-  children, 
-  zones, 
+export default function StoreChrome({
+  children,
+  zones = [],
   promo,
-  frontend
-}: { 
-  children: ReactNode; 
-  zones: ZoneDTO[]; 
-  promo: Promo;
-  frontend?: any;
-}) {
+  settings,
+}: StoreChromeProps) {
   return (
-    <>
-      <Header frontend={frontend} />
-      <main>{children}</main>
-      <Footer frontend={frontend} />
-      <CartDrawer zones={zones} />
-      <OnboardingModal zones={zones} />
-      <LionPassDrawer />
-      <ItemDialog />
-      <TrackerModal />
-      <FloatingDock promo={promo} />
-    </>
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-amber-500 selection:text-black">
+      <Header zones={zones} promo={promo} settings={settings} />
+      <main className="flex-1">{children}</main>
+      <Footer settings={settings} />
+    </div>
   );
 }
