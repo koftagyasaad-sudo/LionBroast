@@ -1,36 +1,66 @@
-import type { ItemSize } from "@/db/schema";
+// src/lib/types.ts
 
-/** Plain DTO of a menu item row, safe to pass to client components. */
 export interface MenuItemDTO {
   id: string;
   categoryId: string;
   nameAr: string;
   nameEn: string;
-  descriptionAr: string | null;
-  descriptionEn: string | null;
+  descriptionAr?: string | null;
+  descriptionEn?: string | null;
   price: number;
-  sizes: ItemSize[];
-  spicyOption: boolean;
-  isBestSeller: boolean;
-  isAvailable: boolean;
-  image: string | null;
+  imageUrl?: string | null;
+  image?: string;
+  badge?: string | null;
   sortOrder: number;
+  isAvailable: number | boolean;
+  sizes?: { nameAr: string; nameEn: string; price: number }[];
+  spicyOption?: boolean;
+  isBestSeller?: boolean;
 }
 
 export interface CategoryDTO {
   id: string;
   nameAr: string;
   nameEn: string;
-  image: string | null;
   sortOrder: number;
-  isActive: boolean;
+  image?: string;
+  isActive?: boolean;
+  items?: MenuItemDTO[];
 }
 
 export interface ZoneDTO {
   id: string;
   nameAr: string;
   nameEn: string;
+  fee: number;
   price: number;
-  isActive: boolean;
+  estimatedMinutes: number;
   sortOrder: number;
+  isActive?: boolean;
+}
+
+export interface Promo {
+  enabled: boolean;
+  title: string;
+  code: string;
+  textAr?: string;
+  textEn?: string;
+}
+
+export interface CartItem {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  price: number;
+  quantity: number;
+  imageUrl?: string;
+}
+
+export interface OrderPayload {
+  name: string;
+  phone: string;
+  zoneId: string;
+  addressDetails: string;
+  notes?: string;
+  items: CartItem[];
 }
