@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { categories, menuItems, orders, orderLines, settings, customers, deliveryZones } from "@/db/schema";
+import { categories, menuItems, orders, orderLines, settings, customers } from "@/db/schema";
 import { eq, desc, asc, inArray } from "drizzle-orm";
 
 export interface FrontendSettings {
