@@ -138,7 +138,16 @@ export async function getCustomerByPhone(phone: string) {
       .from(customers)
       .where(eq(customers.primaryPhone, phone))
       .limit(1);
-    return rows[0] || null;
+    
+    if (rows[0]) return rows[0];
+
+    const fallbackRows = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.phone, phone))
+      .limit(1);
+
+    return fallbackRows[0] || null;
   } catch (err) {
     console.error("Error in getCustomerByPhone:", err);
     return null;
@@ -185,8 +194,11 @@ export async function createCustomer(data: {
     .values({
       code,
       fullName: data.fullName,
+      name: data.fullName,
       primaryPhone: data.primaryPhone,
+      phone: data.primaryPhone,
       primaryAddress: data.primaryAddress || "",
+      address: data.primaryAddress || "",
       totalOrders: 0,
       totalSpent: 0,
       loyaltyPoints: 0,
@@ -338,7 +350,7 @@ export async function createOrder(data: {
     );
   }
 
-  // تحديث نقاط ونشاط العميل في حال وجود حسابه
+  // تحديث إحصائيات ونقاط العميل
   const existingCust = await getCustomerByPhone(data.customerPhone);
   if (existingCust) {
     const updatedOrders = (existingCust.totalOrders || 0) + 1;
