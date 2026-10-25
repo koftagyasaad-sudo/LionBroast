@@ -7,8 +7,9 @@ import { Flame, Languages, Menu, Moon, QrCode, ShoppingBag, Sun, UtensilsCrossed
 import { cartCount, useApp } from "@/store/app-store";
 import { useDict, useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/constants";
 
-export default function Header() {
+export default function Header({ frontend }: { frontend?: any }) {
   const t = useDict();
   const mounted = useMounted();
   const [scrolled, setScrolled] = useState(false);
@@ -45,6 +46,10 @@ export default function Header() {
     else openOnboarding("pass");
   };
 
+  // استدعاء اسم البراند من اللوحة أو الثوابت
+  const brandName = lang === "ar" ? (frontend?.brandAr || BRAND.nameAr) : (frontend?.brandEn || BRAND.name);
+  const brandSub = lang === "ar" ? (frontend?.brandEn || BRAND.name) : (frontend?.brandAr || BRAND.nameAr);
+
   return (
     <header
       className={cn(
@@ -58,13 +63,13 @@ export default function Header() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/img/icon-512.png"
-            alt="Broast El-Assad"
+            alt={brandName}
             className="size-11 rounded-2xl object-cover ring-2 ring-brand-500/60 transition group-hover:rotate-6 group-hover:ring-brand-500"
           />
           <span className="leading-tight">
-            <span className="block text-lg font-extrabold tracking-tight">{t.brand}</span>
+            <span className="block text-lg font-extrabold tracking-tight">{brandName}</span>
             <span className="block text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-500">
-              {lang === "ar" ? "Broast El-Assad" : "بروست الأسد"}
+              {brandSub}
             </span>
           </span>
         </Link>
@@ -72,11 +77,7 @@ export default function Header() {
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 lg:flex">
           {links.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-full px-4 py-2 text-sm font-semibold text-ink-2 transition hover:bg-surface-2 hover:text-ink"
-            >
+            <Link key={l.href} href={l.href} className="rounded-full px-4 py-2 text-sm font-semibold text-ink-2 transition hover:bg-surface-2 hover:text-ink">
               {l.label}
             </Link>
           ))}
@@ -84,84 +85,39 @@ export default function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-bold transition hover:border-brand-500/60"
-            aria-label="toggle language"
-          >
+          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-bold transition hover:border-brand-500/60">
             <Languages className="size-4 text-brand-500" />
             {t.misc.lang}
           </button>
-
-          <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface transition hover:border-brand-500/60"
-            aria-label="toggle theme"
-          >
+          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-full border border-line bg-surface transition hover:border-brand-500/60">
             {mounted && theme === "light" ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
             {!mounted && <Moon className="size-4.5" />}
           </button>
-
-          <button
-            onClick={openPass}
-            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/50 bg-cheese-400/10 px-3 text-xs font-bold text-cheese-400 transition hover:bg-cheese-400/20 sm:flex"
-            aria-label="lion pass"
-          >
+          <button onClick={openPass} className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/50 bg-cheese-400/10 px-3 text-xs font-bold text-cheese-400 transition hover:bg-cheese-400/20 sm:flex">
             <QrCode className="size-4" />
             {t.nav.pass}
           </button>
-
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105"
-            aria-label="cart"
-          >
+          <button onClick={() => setCartOpen(true)} className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105">
             <ShoppingBag className="size-4.5" />
-            {count > 0 && (
-              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-extrabold text-carbon-950 ring-2 ring-bg">
-                {count}
-              </span>
-            )}
+            {count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-extrabold text-carbon-950 ring-2 ring-bg">{count}</span>}
           </button>
-
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface lg:hidden"
-            aria-label="menu"
-          >
+          <button onClick={() => setMenuOpen((v) => !v)} className="grid size-10 place-items-center rounded-full border border-line bg-surface lg:hidden">
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile sheet */}
       <AnimatePresence>
         {menuOpen && (
-          <motion.nav
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="glass overflow-hidden border-b border-line lg:hidden"
-          >
+          <motion.nav initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="glass overflow-hidden border-b border-line lg:hidden">
             <div className="space-y-1 px-4 py-4">
               {links.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-ink transition hover:bg-surface-2"
-                >
+                <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-ink transition hover:bg-surface-2">
                   {l.href === "/menu" ? <UtensilsCrossed className="size-4 text-brand-500" /> : <Flame className="size-4 text-brand-500" />}
                   {l.label}
                 </Link>
               ))}
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  openPass();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl bg-cheese-400/10 px-4 py-3 text-sm font-bold text-cheese-400"
-              >
+              <button onClick={() => { setMenuOpen(false); openPass(); }} className="flex w-full items-center gap-3 rounded-xl bg-cheese-400/10 px-4 py-3 text-sm font-bold text-cheese-400">
                 <QrCode className="size-4" />
                 {t.nav.pass}
               </button>
