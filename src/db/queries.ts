@@ -74,8 +74,8 @@ export function mapMenuItemToDTO(item: MenuItemRow): MenuItemDTO {
     image: item.imageUrl || undefined,
     isAvailable: item.isAvailable === 1,
     sortOrder: item.sortOrder || 0,
-    spicyOption: item.badge?.includes("spicy") || false,
-    isBestSeller: item.badge?.includes("bestseller") || false,
+    spicyOption: Boolean(item.badge?.includes("spicy")),
+    isBestSeller: Boolean(item.badge?.includes("bestseller")),
     sizes: undefined,
   };
 }
@@ -112,7 +112,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
       map.set(r.key, r.value);
     }
 
-    const pick = (key: string, fallback: string) => map.get(key) || fallback;
+    const pick = (key: string, fallback: string): string => map.get(key) || fallback;
 
     return {
       brandNameAr: pick("brand_name_ar", DEFAULT_SETTINGS.brandNameAr),
@@ -233,7 +233,7 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
   if (!customer) return null;
 
   const phone = customer.phone || customer.primaryPhone || "";
-  const ordersList = phone
+  const ordersList: OrderRow[] = phone
     ? await db
         .select()
         .from(orders)
@@ -241,7 +241,7 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
         .orderBy(desc(orders.createdAt))
     : [];
 
-  const ltv = ordersList.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const ltv = ordersList.reduce((sum: number, o: OrderRow) => sum + Number(o.totalAmount || 0), 0);
   const ordersCount = ordersList.length;
 
   let zone: ZoneDTO | null = null;
@@ -269,7 +269,7 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
       discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
       createdAt: memberSince,
     },
-    ordersList: ordersList.map((o) => ({
+    ordersList: ordersList.map((o: OrderRow) => ({
       id: String(o.id),
       orderNumber: o.orderNumber,
       totalAmount: Number(o.totalAmount || 0),
@@ -307,6 +307,13 @@ export async function getOrdersByNumbers(orderNumbers: string[]): Promise<OrderR
     .orderBy(desc(orders.createdAt));
 }
 
+export interface CreateOrderInputItem {
+  itemId?: string;
+  nameAr: string;
+  price: number;
+  quantity: number;
+}
+
 export async function createOrder(payload: {
   orderNumber: string;
   customerPhone: string;
@@ -317,12 +324,7 @@ export async function createOrder(payload: {
   deliveryFee: number;
   totalAmount: number;
   notes?: string;
-  items: {
-    itemId?: string;
-    nameAr: string;
-    price: number;
-    quantity: number;
-  }[];
+  items: CreateOrderInputItem[];
 }): Promise<OrderRow> {
   await ensureSeedDatabase();
 
@@ -344,7 +346,7 @@ export async function createOrder(payload: {
 
   if (payload.items.length > 0) {
     await db.insert(orderLines).values(
-      payload.items.map((item) => ({
+      payload.items.map((item: CreateOrderInputItem) => ({
         orderId: newOrder.id,
         itemId: item.itemId || null,
         nameAr: item.nameAr,
