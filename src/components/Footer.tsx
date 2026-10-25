@@ -1,79 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { Clock4, Flame, MapPin, MessageCircle, PhoneCall } from "lucide-react";
-import { BRAND, HOTLINE, WHATSAPP_NUMBER } from "@/lib/constants";
-import { waLink } from "@/lib/utils";
-import { useDict, useIsAr } from "@/lib/hooks";
+import { UtensilsCrossed, Phone, MapPin, Clock } from "lucide-react";
+import { FrontendSettings } from "@/db/queries";
 
-export default function Footer({ frontend }: { frontend?: any }) {
-  const t = useDict();
-  const isAr = useIsAr();
-  
-  // دمج بيانات لوحة التحكم مع القيم الافتراضية
-  const aboutText = isAr ? (frontend?.aboutAr || t.footer.about) : (frontend?.aboutEn || t.footer.about);
-  const activeHotline = frontend?.hotline || HOTLINE;
-  const activeWhatsapp = frontend?.whatsapp || WHATSAPP_NUMBER;
-  const brandName = isAr ? (frontend?.brandAr || BRAND.nameAr) : (frontend?.brandEn || BRAND.name);
-  const brandSub = isAr ? (frontend?.brandEn || BRAND.name) : (frontend?.brandAr || BRAND.nameAr);
-  const address = isAr ? (frontend?.addressAr || BRAND.addressAr) : (frontend?.addressEn || BRAND.addressEn);
-  const hours = frontend?.hours || BRAND.hours;
+interface FooterProps {
+  frontend?: FrontendSettings;
+}
+
+export default function Footer({ frontend }: FooterProps) {
+  const brandName = frontend?.brand_ar || "مطعمنا";
+  const logoUrl = frontend?.logo_url;
+  const footerAbout = frontend?.footer_about_ar || "أفضل المأكولات والمشروبات المجهزة بأعلى معايير الجودة.";
+  const hotline = frontend?.hotline || "19000";
+  const address = frontend?.address_ar || "القاهرة، مصر";
+  const workingHours = frontend?.working_hours_ar || "يومياً من 10 صباحاً حتى 2 صباحاً";
 
   return (
-    <footer id="contact" className="relative mt-24 border-t border-line bg-surface">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-500/70 to-transparent" />
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4 md:px-8">
-        <div className="md:col-span-2">
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/img/icon-512.png" alt="logo" className="size-12 rounded-2xl object-cover ring-2 ring-brand-500/50" />
+    <footer className="bg-zinc-900 text-zinc-300 pt-12 pb-8 border-t border-zinc-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 border-b border-zinc-800">
+          
+          {/* Brand & About */}
+          <div className="space-y-4">
+            <Link href="/" className="inline-flex items-center gap-2.5">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={brandName}
+                  className="h-12 w-auto object-contain"
+                />
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md">
+                    <UtensilsCrossed className="w-5 h-5" />
+                  </div>
+                  <span className="font-extrabold text-xl text-white">
+                    {brandName}
+                  </span>
+                </>
+              )}
+            </Link>
+            <p className="text-sm text-zinc-400 leading-relaxed max-w-sm">
+              {footerAbout}
+            </p>
+          </div>
+
+          {/* Quick Info */}
+          <div className="space-y-3">
+            <h4 className="text-white font-bold text-base mb-4">معلومات التواصل</h4>
+            
+            {hotline && (
+              <div className="flex items-center gap-3 text-sm text-zinc-400">
+                <Phone className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>الخط الساخن: <strong className="text-white" dir="ltr">{hotline}</strong></span>
+              </div>
+            )}
+
+            {address && (
+              <div className="flex items-center gap-3 text-sm text-zinc-400">
+                <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{address}</span>
+              </div>
+            )}
+
+            {workingHours && (
+              <div className="flex items-center gap-3 text-sm text-zinc-400">
+                <Clock className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{workingHours}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Admin Hidden Footer Link */}
+          <div className="space-y-3 flex flex-col justify-between">
             <div>
-              <p className="text-lg font-extrabold">{brandName}</p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-500">{brandSub}</p>
+              <h4 className="text-white font-bold text-base mb-4">خدمة العملاء</h4>
+              <p className="text-sm text-zinc-400">
+                يسعدنا خدمتكم دائماً. نضمن لكم طعاماً طازجاً وسريع التوصيل.
+              </p>
+            </div>
+            
+            <div className="pt-4">
+              <Link 
+                href="/admin" 
+                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+              >
+                لوحة الإدارة
+              </Link>
             </div>
           </div>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">{aboutText}</p>
-          <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-cheese-400/40 bg-cheese-400/10 px-3 py-1.5 text-xs font-bold text-cheese-400">
-            <Flame className="size-3.5" /> {t.footer.made}
-          </p>
+
         </div>
 
-        <div>
-          <h4 className="mb-4 text-sm font-extrabold uppercase tracking-wider text-ink-2">{t.footer.links}</h4>
-          <ul className="space-y-2.5 text-sm font-semibold">
-            <li><Link className="transition hover:text-brand-500" href="/menu">{t.nav.menu}</Link></li>
-            <li><Link className="transition hover:text-brand-500" href="/#best">{t.nav.best}</Link></li>
-            <li><Link className="transition hover:text-brand-500" href="/#zones">{t.nav.zones}</Link></li>
-          </ul>
+        <div className="pt-8 text-center text-xs text-zinc-500">
+          جميع الحقوق محفوظة &copy; {new Date().getFullYear()} {brandName}.
         </div>
-
-        <div>
-          <h4 className="mb-4 text-sm font-extrabold uppercase tracking-wider text-ink-2">{t.footer.contact}</h4>
-          <ul className="space-y-3 text-sm font-semibold">
-            <li className="flex items-center gap-2">
-              <PhoneCall className="size-4 shrink-0 text-brand-500" />
-              <span dir="ltr">{t.footer.hotline}: {activeHotline}</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <MessageCircle className="size-4 shrink-0 text-[#25D366]" />
-              <a href={waLink(activeWhatsapp, "مرحباً")} target="_blank" rel="noreferrer" className="transition hover:text-[#25D366]" dir="ltr">
-                +{activeWhatsapp}
-              </a>
-            </li>
-            <li className="flex items-start gap-2">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-brand-500" />
-              <span>{t.footer.branch}: {address}</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <Clock4 className="size-4 shrink-0 text-cheese-400" />
-              <span>{t.footer.hours}: <span dir="ltr">{hours}</span></span>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="border-t border-line py-5 text-center text-[11px] font-semibold text-ink-2">
-        {t.footer.rights} © {new Date().getFullYear()}
       </div>
     </footer>
   );
