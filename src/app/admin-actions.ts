@@ -23,14 +23,14 @@ function checkAuth(token?: string) {
   return token === MASTER_PASS || (envPass ? token === envPass : true);
 }
 
-export async function getAdminDashboardData(token?: string) {
+export async function adminGetAllAction(token?: string) {
   try {
     if (!checkAuth(token)) {
-      return { ok: false, success: false, error: "Unauthorized" };
+      throw new Error("Unauthorized");
     }
 
     await ensureSeedDatabase().catch((e) =>
-      console.error("Seed warning in admin dashboard:", e)
+      console.error("Seed warning in admin bundle:", e)
     );
 
     const [cats, items, zones, ordersList, customersList, settingsRows, linesList, frontend, promo] =
@@ -51,7 +51,6 @@ export async function getAdminDashboardData(token?: string) {
       settingsMap[settingsRows[i].key] = settingsRows[i].value;
     }
 
-    // ربط تفاصيل الأصناف بكل طلب في حال كان AdminShell يحتاجها
     const linesByOrder = new Map<number, typeof linesList>();
     for (let i = 0; i < linesList.length; i++) {
       const line = linesList[i];
@@ -66,7 +65,7 @@ export async function getAdminDashboardData(token?: string) {
       lines: linesByOrder.get(o.id) || [],
     }));
 
-    const payload = {
+    return {
       categories: cats,
       items,
       menuItems: items,
@@ -78,26 +77,25 @@ export async function getAdminDashboardData(token?: string) {
       frontend: frontend || settingsMap,
       promo,
     };
-
-    return {
-      ok: true,
-      success: true,
-      ...payload,
-      data: payload,
-    };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Failed to load admin data";
-    console.error("getAdminDashboardData error:", err);
-    return { ok: false, success: false, error: msg };
+    console.error("adminGetAllAction error:", err);
+    throw new Error(err instanceof Error ? err.message : "Failed to load dashboard data.");
   }
+}
+
+export async function verifyAdminAction(passcode: string) {
+  const trimmed = String(passcode || "").trim();
+  const envPass = process.env.ADMIN_PASSCODE?.trim();
+
+  if (trimmed === MASTER_PASS || (envPass && trimmed === envPass)) {
+    return { ok: true, success: true };
+  }
+  return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
-    await db
-      .update(orders)
-      .set({ status })
-      .where(eq(orders.id, Number(orderId)));
+    await db.update(orders).set({ status }).where(eq(orders.id, Number(orderId)));
     revalidatePath("/admin");
     revalidatePath("/");
     return { ok: true, success: true };
