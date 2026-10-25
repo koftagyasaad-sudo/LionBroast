@@ -7,10 +7,8 @@ import PassWidget from "@/components/PassWidget";
 import LocationBlock from "@/components/LocationBlock";
 
 import {
-  getDeliveryZones,
   getPromo,
   getFrontendSettings,
-  getCategoriesWithItems,
   getMenuData,
 } from "@/db/queries";
 
@@ -27,10 +25,16 @@ export default async function HomePage() {
     <StoreChrome zones={zones} promo={promo} settings={frontend} frontend={frontend}>
       <HeroSlider frontend={frontend} />
       <QuickBar />
-      <MarqueeStrip marqueeAr={frontend.marqueeAr || frontend.marqueeTextAr} marqueeEn={frontend.marqueeEn || frontend.marqueeTextAr} />
+      <MarqueeStrip
+        marqueeAr={frontend?.marqueeAr || frontend?.marqueeTextAr || "بروست الأسد 🦁 أكبر قطعة بروست في دسوق 🔥"}
+        marqueeEn={frontend?.marqueeEn || frontend?.marqueeTextAr || "Lion Broast 🦁 The Biggest Broast Piece in Desouk 🔥"}
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-12 md:px-8 space-y-16">
-        <MenuExplorer categories={categories} items={items.filter((i) => i.isAvailable)} />
+        <MenuExplorer
+          categories={categories}
+          items={(items || []).filter((i: any) => i.isAvailable)}
+        />
         <PassWidget />
         <LocationBlock settings={frontend} />
       </div>
