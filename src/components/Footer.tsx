@@ -1,100 +1,109 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
-import { UtensilsCrossed, Phone, MapPin, Clock } from "lucide-react";
-import { FrontendSettings } from "@/db/queries";
+import Image from "next/image";
+import { MapPin, Clock, Phone, MessageSquare, ShieldCheck } from "lucide-react";
+import type { FrontendSettings } from "@/lib/types";
 
 interface FooterProps {
-  frontend?: FrontendSettings;
+  settings?: FrontendSettings;
 }
 
-export default function Footer({ frontend }: FooterProps) {
-  const brandName = frontend?.brand_ar || "بروست الأسد";
-  const logoUrl = frontend?.logo_url;
-  const footerAbout = frontend?.footer_about_ar || "أكبر قطعة بروست في دسوق - طعم وتتبيلة سرية.";
-  const hotline = frontend?.hotline || "19955";
-  const address = frontend?.address_ar || "شارع الجمهورية، دسوق، كفر الشيخ";
-  const workingHours = frontend?.working_hours_ar || "12:00 PM — 3:00 AM";
+export default function Footer({ settings }: FooterProps) {
+  const brandName = settings?.brandNameAr || "بروست الأسد";
+  const address = settings?.addressAr || "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي";
+  const workingHours = settings?.workingHoursAr || "يومياً من 12 ظهراً حتى 2 صباحاً";
+  const hotline = settings?.hotline || "01000000000";
+  const whatsapp = settings?.whatsapp || "201000000000";
+  const footerText = settings?.footerTextAr || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.";
 
   return (
-    <footer className="bg-zinc-950 text-zinc-300 pt-12 pb-8 border-t border-zinc-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 border-b border-zinc-800">
-          
-          {/* Brand & About */}
-          <div className="space-y-4">
-            <Link href="/" className="inline-flex items-center gap-2.5">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={brandName}
-                  className="h-12 w-auto object-contain"
-                />
+    <footer className="bg-slate-950 border-t border-slate-900 text-slate-400 text-sm">
+      <div className="max-w-7xl mx-auto px-4 py-12 md:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+          {/* Brand & Info */}
+          <div className="md:col-span-2 space-y-4">
+            <div className="flex items-center gap-3">
+              {settings?.logoUrl ? (
+                <div className="relative w-10 h-10 rounded-full overflow-hidden border border-amber-500/40">
+                  <Image src={settings.logoUrl} alt={brandName} fill className="object-cover" unoptimized />
+                </div>
               ) : (
-                <>
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-md">
-                    <UtensilsCrossed className="w-5 h-5" />
-                  </div>
-                  <span className="font-black text-xl text-white">
-                    {brandName}
-                  </span>
-                </>
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg">
+                  🦁
+                </div>
               )}
-            </Link>
-            <p className="text-sm text-zinc-400 leading-relaxed max-w-sm">
-              {footerAbout}
-            </p>
+              <span className="font-extrabold text-xl text-amber-500">{brandName}</span>
+            </div>
+            <p className="text-slate-400 leading-relaxed max-w-md">{footerText}</p>
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>جميع الوجبات تُحضر يومياً طازجة 100% بأعلى معايير الجودة</span>
+            </div>
           </div>
 
-          {/* Quick Info */}
+          {/* Quick Links */}
           <div className="space-y-3">
-            <h4 className="text-white font-bold text-base mb-4">معلومات التواصل</h4>
-            
-            {hotline && (
-              <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <Phone className="w-4 h-4 text-orange-500 shrink-0" />
-                <span>الخط الساخن: <strong className="text-white" dir="ltr">{hotline}</strong></span>
-              </div>
-            )}
+            <h4 className="font-bold text-slate-200 text-base mb-2 border-r-2 border-amber-500 pr-2">روابط السريعة</h4>
+            <ul className="space-y-2">
+              <li>
+                <Link href="/" className="hover:text-amber-400 transition-colors">
+                  الرئيسية
+                </Link>
+              </li>
+              <li>
+                <Link href="/menu" className="hover:text-amber-400 transition-colors">
+                  قائمة الطعام
+                </Link>
+              </li>
+              <li>
+                <Link href="/pass" className="hover:text-amber-400 transition-colors">
+                  كارت الولاء
+                </Link>
+              </li>
+              <li>
+                <Link href="/track" className="hover:text-amber-400 transition-colors">
+                  تتبع طلبك
+                </Link>
+              </li>
+            </ul>
+          </div>
 
-            {address && (
-              <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
+          {/* Contact Details */}
+          <div className="space-y-3">
+            <h4 className="font-bold text-slate-200 text-base mb-2 border-r-2 border-amber-500 pr-2">تواصل معنا</h4>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <span>{address}</span>
               </div>
-            )}
-
-            {workingHours && (
-              <div className="flex items-center gap-3 text-sm text-zinc-400">
-                <Clock className="w-4 h-4 text-orange-500 shrink-0" />
-                <span>مواعيد العمل: {workingHours}</span>
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>{workingHours}</span>
               </div>
-            )}
-          </div>
-
-          {/* Admin Hidden Link */}
-          <div className="space-y-3 flex flex-col justify-between">
-            <div>
-              <h4 className="text-white font-bold text-base mb-4">خدمة العملاء</h4>
-              <p className="text-sm text-zinc-400">
-                يسعدنا خدمتكم دائماً. نضمن لكم طعاماً طازجاً وسريع التوصيل.
-              </p>
-            </div>
-            
-            <div className="pt-4">
-              <Link 
-                href="/admin" 
-                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                لوحة الإدارة
-              </Link>
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-amber-500 shrink-0" />
+                <a href={`tel:${hotline}`} className="hover:text-amber-400 dir-ltr">{hotline}</a>
+              </div>
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
+                <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400">
+                  واتساب الخدمة
+                </a>
+              </div>
             </div>
           </div>
-
         </div>
 
-        <div className="pt-8 text-center text-xs text-zinc-500">
-          جميع الحقوق محفوظة &copy; {new Date().getFullYear()} {brandName}.
+        {/* Bottom Bar */}
+        <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© {new Date().getFullYear()} {brandName}. جميع الحقوق محفوظة.</p>
+          <div className="flex items-center gap-4">
+            <span>توصيل سريع داخل دسوق</span>
+            <span>•</span>
+            <span>طعم أسدي أصلي</span>
+          </div>
         </div>
       </div>
     </footer>
