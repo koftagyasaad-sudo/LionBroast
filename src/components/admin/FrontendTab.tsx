@@ -124,7 +124,7 @@ export default function FrontendTab({ initialSettings }: FrontendTabProps) {
               dir="ltr"
             />
             <p className="text-xs text-zinc-500">
-              ارفع صوّرة اللوجو بفرعية شّفافة PNG ثم ضع رابط الصورة المباشر هنا ليحل مكان اسم المطعم النصي.
+              ارفع صورة اللوجو بخلفية شفافة PNG على موقع مثل postimages.org ثم ضع الرابط المباشر هنا ليظهر في الهيدر والفوتر.
             </p>
 
             {formData.logo_url && (
@@ -147,7 +147,6 @@ export default function FrontendTab({ initialSettings }: FrontendTabProps) {
 
         {/* Section 2: Main Hero Content & Details */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Main Hero */}
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
               <Sparkles className="w-5 h-5 text-amber-500" />
@@ -205,7 +204,6 @@ export default function FrontendTab({ initialSettings }: FrontendTabProps) {
             </div>
           </div>
 
-          {/* Contact Details & Addresses */}
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
               <Phone className="w-5 h-5 text-emerald-500" />
@@ -266,7 +264,7 @@ export default function FrontendTab({ initialSettings }: FrontendTabProps) {
           </div>
         </div>
 
-        {/* Section 3: Marquee & Footer Texts */}
+        {/* Section 3: Marquee & Footer */}
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 space-y-4">
           <h3 className="text-base font-bold text-white border-b border-zinc-800 pb-3">
             الشريط المتحرك ونصوص أسفل الصفحة (Footer)
@@ -325,7 +323,7 @@ export default function FrontendTab({ initialSettings }: FrontendTabProps) {
           </div>
         </div>
 
-        {/* Submit Button */}
+        {/* Submit */}
         <div className="flex justify-end pt-2">
           <button
             type="submit"
