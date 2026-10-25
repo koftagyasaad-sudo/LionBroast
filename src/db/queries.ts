@@ -9,9 +9,7 @@ import {
   customers,
   deliveryZones,
   settings,
-  type Category,
   type MenuItem,
-  type DeliveryZone,
 } from "./schema";
 import { eq, inArray, desc, asc } from "drizzle-orm";
 import { ensureSeedDatabase } from "./seed";
@@ -57,7 +55,13 @@ export type CustomerPassData = {
   zone: any;
 };
 
-export type CategoryWithItems = Category & {
+export type CategoryDTO = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  sortOrder: number;
+  image: string;
+  isActive: boolean;
   items: MenuItem[];
 };
 
@@ -73,7 +77,7 @@ export type ZoneDTO = {
 };
 
 export type MenuData = {
-  categories: CategoryWithItems[];
+  categories: CategoryDTO[];
   items: MenuItem[];
   zones: ZoneDTO[];
 };
@@ -164,7 +168,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
 /**
  * 2. استعلامات القائمة والمنيو
  */
-export async function getCategoriesWithItems(): Promise<CategoryWithItems[]> {
+export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
   try {
     let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
     if (!cats || cats.length === 0) {
@@ -175,7 +179,12 @@ export async function getCategoriesWithItems(): Promise<CategoryWithItems[]> {
     const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
 
     return cats.map((cat) => ({
-      ...cat,
+      id: cat.id,
+      nameAr: cat.nameAr,
+      nameEn: cat.nameEn,
+      sortOrder: cat.sortOrder,
+      image: "",
+      isActive: true,
       items: itemsList.filter((it) => it.categoryId === cat.id),
     }));
   } catch (err) {
@@ -186,35 +195,14 @@ export async function getCategoriesWithItems(): Promise<CategoryWithItems[]> {
 
 export async function getMenuData(): Promise<MenuData> {
   try {
-    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    if (!cats || cats.length === 0) {
-      await ensureSeedDatabase();
-      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    }
-
+    const categoriesWithItems = await getCategoriesWithItems();
     const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const zonesList = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
-
-    const categoriesWithItems = cats.map((cat) => ({
-      ...cat,
-      items: itemsList.filter((it) => it.categoryId === cat.id),
-    }));
-
-    const mappedZones: ZoneDTO[] = zonesList.map((z) => ({
-      id: z.id,
-      nameAr: z.nameAr,
-      nameEn: z.nameEn,
-      fee: z.fee,
-      price: z.fee,
-      estimatedMinutes: z.estimatedMinutes,
-      sortOrder: z.sortOrder,
-      isActive: true,
-    }));
+    const zonesList = await getDeliveryZones();
 
     return {
       categories: categoriesWithItems,
       items: itemsList,
-      zones: mappedZones,
+      zones: zonesList,
     };
   } catch (err) {
     console.error("Error in getMenuData:", err);
