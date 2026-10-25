@@ -9,6 +9,18 @@ import {
   getDeliveryZoneById,
 } from "@/db/queries";
 
+export interface OrderInputItemPayload {
+  menuItemId?: string | number;
+  id?: string | number;
+  nameAr?: string;
+  name?: string;
+  price?: number;
+  quantity?: number;
+  size?: string;
+  isSpicy?: boolean;
+  notes?: string;
+}
+
 export interface OrderInputPayload {
   customerName?: string;
   name?: string;
@@ -21,17 +33,7 @@ export interface OrderInputPayload {
   discountAmount?: number;
   totalAmount?: number;
   notes?: string;
-  items?: Array<{
-    menuItemId?: string | number;
-    id?: string | number;
-    nameAr?: string;
-    name?: string;
-    price?: number;
-    quantity?: number;
-    size?: string;
-    isSpicy?: boolean;
-    notes?: string;
-  }>;
+  items?: OrderInputItemPayload[];
 }
 
 export interface FormattedItem {
@@ -56,12 +58,16 @@ export async function submitOrderAction(payload: OrderInputPayload) {
       return { success: false, error: "السلة فارغة. يرجى إضافة أصناف قبل إرسال الطلب." };
     }
 
-    const formattedItems: FormattedItem[] = payload.items.map((item) => ({
-      itemId: item.menuItemId ? String(item.menuItemId) : item.id ? String(item.id) : undefined,
-      nameAr: String(item.nameAr || item.name || "صنف"),
-      price: Number(item.price || 0),
-      quantity: Number(item.quantity || 1),
-    }));
+    const formattedItems: FormattedItem[] = [];
+    for (let idx = 0; idx < payload.items.length; idx++) {
+      const item = payload.items[idx];
+      formattedItems.push({
+        itemId: item.menuItemId ? String(item.menuItemId) : item.id ? String(item.id) : undefined,
+        nameAr: String(item.nameAr || item.name || "صنف"),
+        price: Number(item.price || 0),
+        quantity: Number(item.quantity || 1),
+      });
+    }
 
     let customer = await getCustomerByPhone(phone);
     if (!customer) {
@@ -75,10 +81,13 @@ export async function submitOrderAction(payload: OrderInputPayload) {
       if (zone) deliveryFee = zone.fee || zone.price || 0;
     }
 
-    const itemsTotal = formattedItems.reduce(
-      (sum: number, i: FormattedItem) => sum + i.price * i.quantity,
-      0
-    );
+    // حساب إجمالي الأصناف باستخدام loop عادي لتفادي أخطاء الـ reduce نهائياً
+    let itemsTotal = 0;
+    for (let idx = 0; idx < formattedItems.length; idx++) {
+      const item = formattedItems[idx];
+      itemsTotal += item.price * item.quantity;
+    }
+
     const discountAmount = Number(payload?.discountAmount || 0);
     const finalTotal = Math.max(0, itemsTotal + deliveryFee - discountAmount);
 
