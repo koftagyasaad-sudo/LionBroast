@@ -65,7 +65,21 @@ export async function adminGetAllAction(token?: string) {
       lines: linesByOrder.get(o.id) || [],
     }));
 
+    // حساب إجمالي الإيرادات لتفادي خطأ undefined (reading 'revenue')
+    let totalRevenue = 0;
+    for (let i = 0; i < ordersList.length; i++) {
+      totalRevenue += Number(ordersList[i].totalAmount || 0);
+    }
+
     return {
+      ok: true,
+      success: true,
+      revenue: totalRevenue,
+      stats: {
+        revenue: totalRevenue,
+        ordersCount: ordersList.length,
+        customersCount: customersList.length,
+      },
       categories: cats,
       items,
       menuItems: items,
@@ -93,180 +107,10 @@ export async function verifyAdminAction(passcode: string) {
   return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
-// ----------------- Categories Aliases -----------------
-export async function adminSaveCategoryAction(data: {
-  id?: string;
-  nameAr: string;
-  nameEn?: string;
-  sortOrder?: number;
-}) {
-  return upsertCategoryAction(data);
-}
-
-export async function adminDeleteCategoryAction(id: string) {
-  return deleteCategoryAction(id);
-}
-
-export async function upsertCategoryAction(data: {
-  id?: string;
-  nameAr: string;
-  nameEn?: string;
-  sortOrder?: number;
-}) {
-  try {
-    const id = data.id || `cat-${Date.now()}`;
-    const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(categories)
-        .set({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn || "",
-          sortOrder: Number(data.sortOrder ?? 0),
-        })
-        .where(eq(categories.id, id));
-    } else {
-      await db.insert(categories).values({
-        id,
-        nameAr: data.nameAr,
-        nameEn: data.nameEn || "",
-        sortOrder: Number(data.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteCategoryAction(id: string) {
-  try {
-    await db.delete(categories).where(eq(categories.id, id));
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-// ----------------- Menu Items Aliases -----------------
-export async function adminSaveItemAction(data: any) {
-  return upsertMenuItemAction(data);
-}
-
-export async function adminDeleteItemAction(id: string) {
-  return deleteMenuItemAction(id);
-}
-
-export async function upsertMenuItemAction(data: {
-  id?: string;
-  categoryId: string;
-  nameAr: string;
-  nameEn?: string;
-  descriptionAr?: string;
-  descriptionEn?: string;
-  price: number;
-  imageUrl?: string;
-  image?: string;
-  badge?: string;
-  isAvailable?: boolean | number;
-  sortOrder?: number;
-}) {
-  try {
-    const id = data.id || `item-${Date.now()}`;
-    const isAvail = data.isAvailable === false || data.isAvailable === 0 ? 0 : 1;
-    const img = data.imageUrl ?? data.image ?? "";
-
-    const existing = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(menuItems)
-        .set({
-          categoryId: data.categoryId,
-          nameAr: data.nameAr,
-          nameEn: data.nameEn || "",
-          descriptionAr: data.descriptionAr || "",
-          descriptionEn: data.descriptionEn || "",
-          price: Number(data.price || 0),
-          imageUrl: img,
-          badge: data.badge || "",
-          isAvailable: isAvail,
-          sortOrder: Number(data.sortOrder ?? 0),
-        })
-        .where(eq(menuItems.id, id));
-    } else {
-      await db.insert(menuItems).values({
-        id,
-        categoryId: data.categoryId,
-        nameAr: data.nameAr,
-        nameEn: data.nameEn || "",
-        descriptionAr: data.descriptionAr || "",
-        descriptionEn: data.descriptionEn || "",
-        price: Number(data.price || 0),
-        imageUrl: img,
-        badge: data.badge || "",
-        isAvailable: isAvail,
-        sortOrder: Number(data.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteMenuItemAction(id: string) {
-  try {
-    await db.delete(menuItems).where(eq(menuItems.id, id));
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-// ----------------- Zones & Settings Aliases -----------------
-export async function adminSaveZoneAction(data: any) {
-  return upsertZoneAction(data);
-}
-
-export async function adminDeleteZoneAction(id: string) {
-  return deleteZoneAction(id);
-}
-
-export async function adminSetSettingAction(payload: Record<string, any>) {
-  return updateSettingsAction(payload);
-}
-
-export async function saveFrontendSettingsAction(payload: Record<string, any>) {
-  return updateSettingsAction(payload);
-}
-
-export async function adminScanMenuAction(formData?: any) {
-  return { ok: true, success: true, rows: [] };
-}
-
-export async function adminSaveScannedRowsAction(rows: any[]) {
-  return { ok: true, success: true };
-}
-
-export async function adminSetOrderStatusAction(orderId: number | string, status: string) {
-  return updateOrderStatusAction(orderId, status);
-}
-
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
     await db.update(orders).set({ status }).where(eq(orders.id, Number(orderId)));
     revalidatePath("/admin");
-    revalidatePath("/");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -278,121 +122,6 @@ export async function deleteOrderAction(orderId: number | string) {
     const idNum = Number(orderId);
     await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
     await db.delete(orders).where(eq(orders.id, idNum));
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function upsertZoneAction(data: {
-  id?: string;
-  nameAr: string;
-  nameEn?: string;
-  fee?: number;
-  price?: number;
-  estimatedMinutes?: number;
-  sortOrder?: number;
-}) {
-  try {
-    const id = data.id || `zone-${Date.now()}`;
-    const feeVal = Number(data.fee ?? data.price ?? 0);
-    const existing = await db.select().from(deliveryZones).where(eq(deliveryZones.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(deliveryZones)
-        .set({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn || "",
-          fee: feeVal,
-          estimatedMinutes: Number(data.estimatedMinutes ?? 30),
-          sortOrder: Number(data.sortOrder ?? 0),
-        })
-        .where(eq(deliveryZones.id, id));
-    } else {
-      await db.insert(deliveryZones).values({
-        id,
-        nameAr: data.nameAr,
-        nameEn: data.nameEn || "",
-        fee: feeVal,
-        estimatedMinutes: Number(data.estimatedMinutes ?? 30),
-        sortOrder: Number(data.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteZoneAction(id: string) {
-  try {
-    await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function updateSettingsAction(payload: Record<string, string | number | boolean>) {
-  try {
-    const entries = Object.entries(payload);
-    for (let i = 0; i < entries.length; i++) {
-      const [key, val] = entries[i];
-      const strVal = String(val ?? "");
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function upsertCustomerAction(data: {
-  id?: number | string;
-  code?: string;
-  name: string;
-  phone: string;
-  loyaltyPoints?: number;
-  discountPercent?: number;
-}) {
-  try {
-    if (data.id) {
-      await db
-        .update(customers)
-        .set({
-          name: data.name,
-          fullName: data.name,
-          phone: data.phone,
-          primaryPhone: data.phone,
-          loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-          discountPercent: Number(data.discountPercent ?? 0),
-        })
-        .where(eq(customers.id, Number(data.id)));
-    } else {
-      const code = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-      await db.insert(customers).values({
-        code,
-        name: data.name,
-        fullName: data.name,
-        phone: data.phone,
-        primaryPhone: data.phone,
-        loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-        discountPercent: Number(data.discountPercent ?? 0),
-      });
-    }
     revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
