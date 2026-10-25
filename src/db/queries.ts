@@ -9,6 +9,9 @@ import {
   customers,
   deliveryZones,
   settings,
+  type Category,
+  type MenuItem,
+  type DeliveryZone,
 } from "./schema";
 import { eq, inArray, desc, asc } from "drizzle-orm";
 import { ensureSeedDatabase } from "./seed";
@@ -52,6 +55,16 @@ export type CustomerPassData = {
   ordersCount: number;
   ltv: number;
   zone: any;
+};
+
+export type CategoryWithItems = Category & {
+  items: MenuItem[];
+};
+
+export type MenuData = {
+  categories: CategoryWithItems[];
+  items: MenuItem[];
+  zones: DeliveryZone[];
 };
 
 /**
@@ -132,7 +145,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
 /**
  * 2. استعلامات القائمة والمنيو
  */
-export async function getCategoriesWithItems() {
+export async function getCategoriesWithItems(): Promise<CategoryWithItems[]> {
   try {
     let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
     if (!cats || cats.length === 0) {
@@ -140,25 +153,47 @@ export async function getCategoriesWithItems() {
       cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
     }
 
-    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
 
-    const result = cats.map((cat) => {
-      const catItems = items.filter((it) => it.categoryId === cat.id);
-      return {
-        ...cat,
-        items: catItems,
-      };
-    });
-
-    return result;
+    return cats.map((cat) => ({
+      ...cat,
+      items: itemsList.filter((it) => it.categoryId === cat.id),
+    }));
   } catch (err) {
     console.error("Error in getCategoriesWithItems:", err);
     return [];
   }
 }
 
-export async function getMenuData() {
-  return getCategoriesWithItems();
+export async function getMenuData(): Promise<MenuData> {
+  try {
+    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    if (!cats || cats.length === 0) {
+      await ensureSeedDatabase();
+      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    }
+
+    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+    const zonesList = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
+
+    const categoriesWithItems = cats.map((cat) => ({
+      ...cat,
+      items: itemsList.filter((it) => it.categoryId === cat.id),
+    }));
+
+    return {
+      categories: categoriesWithItems,
+      items: itemsList,
+      zones: zonesList,
+    };
+  } catch (err) {
+    console.error("Error in getMenuData:", err);
+    return {
+      categories: [],
+      items: [],
+      zones: [],
+    };
+  }
 }
 
 export async function getPromo() {
