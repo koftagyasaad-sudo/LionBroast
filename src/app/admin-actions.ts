@@ -12,7 +12,6 @@ import {
 } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { ensureSeedDatabase } from "@/db/seed";
-import type { FrontendSettings } from "@/db/queries";
 
 export interface ScannedRow {
   categoryAr: string;
@@ -24,6 +23,9 @@ export interface ScannedRow {
   price: number;
 }
 
+/**
+ * 1. حفظ إعدادات الهوية والـ CMS
+ */
 export async function saveFrontendSettingsAction(data: Record<string, string>) {
   try {
     for (const [key, value] of Object.entries(data)) {
@@ -49,6 +51,41 @@ export async function saveFrontendSettingsAction(data: Record<string, string>) {
   }
 }
 
+export async function adminSaveSettingsAction(setts: Record<string, string>) {
+  return saveFrontendSettingsAction(setts);
+}
+
+/**
+ * 2. حفظ إعداد فردي (مستخدم داخل OpsTab)
+ */
+export async function adminSetSettingAction(key: string, value: string) {
+  try {
+    await db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value },
+      });
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in adminSetSettingAction:", err);
+    return { success: false, error: err?.message || "فشل حفظ الإعداد" };
+  }
+}
+
+export async function adminGetSettingsAction() {
+  try {
+    const rows = await db.select().from(settings);
+    return { success: true, settings: rows };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * 3. ماسح المنيو بالذكاء الاصطناعي (Gemini Scanner)
+ */
 export async function adminScanMenuAction(formData: FormData) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -208,6 +245,9 @@ export async function adminSaveScannedRowsAction(items: ScannedRow[]) {
   }
 }
 
+/**
+ * 4. جلب كافة البيانات للوحة التحكم (Dashboard Initial Data)
+ */
 export async function adminGetAllAction() {
   try {
     let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
@@ -244,6 +284,9 @@ export async function adminTriggerSeedAction() {
   }
 }
 
+/**
+ * 5. إدارة التصنيفات (Category CRUD)
+ */
 export async function adminSaveCategoryAction(cat: any) {
   try {
     if (cat.id) {
@@ -279,6 +322,9 @@ export async function adminDeleteCategoryAction(id: string) {
   }
 }
 
+/**
+ * 6. إدارة عناصر المنيو (Item CRUD)
+ */
 export async function adminSaveItemAction(item: any) {
   try {
     if (item.id) {
@@ -328,16 +374,29 @@ export async function adminDeleteItemAction(id: string) {
   }
 }
 
-export async function adminUpdateOrderStatusAction(id: number, status: string) {
+/**
+ * 7. إدارة الطلبات وحالاتها (Order Actions)
+ */
+export async function adminSetOrderStatusAction(idOrNumber: number | string, status: string) {
   try {
-    await db
-      .update(orders)
-      .set({ status })
-      .where(eq(orders.id, id));
+    if (typeof idOrNumber === "number") {
+      await db.update(orders).set({ status }).where(eq(orders.id, idOrNumber));
+    } else {
+      const num = Number(idOrNumber);
+      if (!isNaN(num) && idOrNumber !== "") {
+        await db.update(orders).set({ status }).where(eq(orders.id, num));
+      } else {
+        await db.update(orders).set({ status }).where(eq(orders.orderNumber, idOrNumber));
+      }
+    }
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err?.message };
+    return { success: false, error: err?.message || "فشل تحديث حالة الطلب" };
   }
+}
+
+export async function adminUpdateOrderStatusAction(idOrNumber: number | string, status: string) {
+  return adminSetOrderStatusAction(idOrNumber, status);
 }
 
 export async function adminDeleteOrderAction(id: number) {
@@ -349,6 +408,9 @@ export async function adminDeleteOrderAction(id: number) {
   }
 }
 
+/**
+ * 8. إدارة مناطق التوصيل (Zone CRUD)
+ */
 export async function adminSaveZoneAction(zone: any) {
   try {
     if (zone.id) {
@@ -386,17 +448,4 @@ export async function adminDeleteZoneAction(id: string) {
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
-}
-
-export async function adminGetSettingsAction() {
-  try {
-    const rows = await db.select().from(settings);
-    return { success: true, settings: rows };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
-}
-
-export async function adminSaveSettingsAction(setts: Record<string, string>) {
-  return saveFrontendSettingsAction(setts);
 }
