@@ -1,211 +1,309 @@
+"use me";
+// src/app/actions.ts
+
 "use server";
 
-import { db } from "@/db";
-import { customers, deliveryZones, menuItems, orders, orderLines } from "@/db/schema";
-import { ensureSeedDatabase } from "@/db/seed";
-import { getOrdersByNumbers, getPassData } from "@/db/queries";
-import { eq, inArray } from "drizzle-orm";
+import {
+  createCustomer,
+  createOrder,
+  getCustomerByPhone,
+  getDeliveryZoneById,
+  getOrdersByNumbers,
+} from "@/db/queries";
+import { isEgyptMobile, normalizeEgyptPhone } from "@/lib/utils";
 
-export interface CartItemInput {
-  id: number;
-  quantity: number;
-  notes?: string;
-}
-
-export interface CheckoutInput {
-  customerName: string;
+/**
+ * 1. إنشاء طلب جديد (Submit / Create Order Action)
+ */
+export async function submitOrderAction(payload: {
+  name: string;
   phone: string;
-  address: string;
-  zoneId?: number;
+  zoneId: string;
+  addressDetails: string;
   notes?: string;
-  items: CartItemInput[];
-}
-
-// Helper: Normalize Egypt Phone
-function normalizeEgyptPhone(phone: string): string {
-  let cleaned = phone.replace(/\D/g, "");
-  if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
-  if (!cleaned.startsWith("20")) cleaned = "20" + cleaned;
-  return cleaned;
-}
-
-// Helper: Generate Random Unique Codes
-function genOrderNumber(): string {
-  const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-  const randPart = Math.floor(1000 + Math.random() * 9000);
-  return `LION-${datePart}-${randPart}`;
-}
-
-function genCustomerCode(): string {
-  return "CUST-" + Math.floor(100000 + Math.random() * 900000);
-}
-
-// 1. Submit New Customer Order
-export async function submitOrderAction(input: CheckoutInput) {
+  items: {
+    id: string;
+    nameAr: string;
+    nameEn: string;
+    price: number;
+    quantity: number;
+  }[];
+}) {
   try {
-    // Ensure Neon DB is populated on first order
-    await ensureSeedDatabase();
+    const rawPhone = payload.phone.trim();
+    const phone = normalizeEgyptPhone(rawPhone);
 
-    if (!input.items || input.items.length === 0) {
-      return { success: false, error: "السلة فارغة. يرجى إضافة أصناف للمتابعة." };
+    if (!isEgyptMobile(phone)) {
+      return {
+        success: false,
+        error: "رقم الهاتف غير صحيح، يرجى إدخال رقم موبايل مصري صحيح (مثال: 01012345678)",
+      };
     }
 
-    if (!input.customerName || !input.phone || !input.address) {
-      return { success: false, error: "جميع البيانات (الاسم، الهاتف، العنوان) مطلوبة لتنفيذ الطلب." };
+    if (!payload.items || payload.items.length === 0) {
+      return {
+        success: false,
+        error: "السلة فارغة، يرجى إضافة وجبات قبل إتمام الطلب",
+      };
     }
 
-    const cleanPhone = normalizeEgyptPhone(input.phone);
-
-    // 2. Find or Register Customer
-    const existingCustomers = await db
-      .select()
-      .from(customers)
-      .where(eq(customers.primaryPhone, cleanPhone))
-      .limit(1);
-
-    let customerCodeStr: string;
-
-    if (existingCustomers.length > 0) {
-      const existing = existingCustomers[0];
-      customerCodeStr = existing.code || `CUST-${existing.id}`;
-
-      await db
-        .update(customers)
-        .set({
-          fullName: input.customerName,
-          name: input.customerName,
-          phone: cleanPhone,
-          primaryPhone: cleanPhone,
-          primaryAddress: input.address,
-          address: input.address,
-        })
-        .where(eq(customers.id, existing.id));
-    } else {
-      customerCodeStr = genCustomerCode();
-      await db.insert(customers).values({
-        code: customerCodeStr,
-        fullName: input.customerName,
-        name: input.customerName,
-        primaryPhone: cleanPhone,
-        phone: cleanPhone,
-        primaryAddress: input.address,
-        address: input.address,
+    // 1. Check/Create Customer
+    let customer = await getCustomerByPhone(phone);
+    if (!customer) {
+      customer = await createCustomer({
+        fullName: payload.name.trim(),
+        primaryPhone: phone,
+        primaryAddress: payload.addressDetails.trim(),
       });
     }
 
-    // 3. Resolve Items & Subtotal
-    const itemIds = input.items.map((i) => i.id);
-    const dbItems = await db
-      .select()
-      .from(menuItems)
-      .where(inArray(menuItems.id, itemIds));
-
-    const itemMap = new Map(dbItems.map((i) => [i.id, i]));
-
-    let subtotalPiasters = 0;
-    const resolvedLines = [];
-
-    for (const cartItem of input.items) {
-      const dbItem = itemMap.get(cartItem.id);
-      if (!dbItem) continue;
-
-      const linePrice = dbItem.price * cartItem.quantity;
-      subtotalPiasters += linePrice;
-
-      resolvedLines.push({
-        itemId: dbItem.id,
-        itemNameAr: dbItem.nameAr,
-        itemNameEn: dbItem.nameEn,
-        itemName: dbItem.nameAr,
-        quantity: cartItem.quantity,
-        price: dbItem.price,
-        notes: cartItem.notes || "",
-      });
-    }
-
-    if (resolvedLines.length === 0) {
-      return { success: false, error: "عفواً، الأصناف المحددة غير متوفرة حالياً." };
-    }
-
-    // 4. Delivery Zone Fee
-    let deliveryFeePiasters = 1500; // default 15 EGP
-    if (input.zoneId) {
-      const zones = await db
-        .select()
-        .from(deliveryZones)
-        .where(eq(deliveryZones.id, input.zoneId))
-        .limit(1);
-
-      if (zones.length > 0) {
-        deliveryFeePiasters = zones[0].fee;
+    // 2. Delivery Zone Fee
+    let deliveryFee = 15;
+    let zoneName = "توصيل دسوق";
+    if (payload.zoneId) {
+      const zone = await getDeliveryZoneById(payload.zoneId);
+      if (zone) {
+        deliveryFee = zone.fee;
+        zoneName = zone.nameAr;
       }
     }
 
-    const totalPiasters = subtotalPiasters + deliveryFeePiasters;
-    const orderNum = genOrderNumber();
+    // 3. Calc Total
+    const subtotal = payload.items.reduce(
+      (acc, item) => acc + item.price * item.quantity,
+      0
+    );
+    const totalAmount = subtotal + deliveryFee;
 
-    // 5. Insert Order
-    const [newOrder] = await db
-      .insert(orders)
-      .values({
-        orderNumber: orderNum,
-        customerCode: customerCodeStr,
-        customerName: input.customerName,
-        customerPhone: cleanPhone,
-        customerAddress: input.address,
-        phone: cleanPhone,
-        address: input.address,
-        subtotal: subtotalPiasters,
-        deliveryFee: deliveryFeePiasters,
-        total: totalPiasters,
-        status: "pending",
-        notes: input.notes || "",
-        zoneId: input.zoneId || null,
-      })
-      .returning({ id: orders.id, orderNumber: orders.orderNumber });
+    // 4. Create Order
+    const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+    const newOrder = await createOrder({
+      orderNumber,
+      customerPhone: phone,
+      customerName: payload.name.trim(),
+      address: payload.addressDetails.trim(),
+      zoneId: payload.zoneId || null,
+      subtotal,
+      deliveryFee,
+      totalAmount,
+      notes: payload.notes || "",
+      items: payload.items.map((item) => ({
+        itemId: item.id,
+        nameAr: item.nameAr,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+    });
 
-    // 6. Insert Order Lines
-    for (const line of resolvedLines) {
-      await db.insert(orderLines).values({
-        orderId: newOrder.id,
-        itemId: line.itemId,
-        itemNameAr: line.itemNameAr,
-        itemNameEn: line.itemNameEn,
-        itemName: line.itemName,
-        quantity: line.quantity,
-        price: line.price,
-        notes: line.notes,
+    return {
+      success: true,
+      orderNumber: newOrder.orderNumber,
+      customerCode: customer.code,
+      totalAmount,
+      deliveryFee,
+      zoneName,
+    };
+  } catch (err: any) {
+    console.error("Error in submitOrderAction:", err);
+    return {
+      success: false,
+      error: err?.message || "حدث خطأ غير متوقع أثناء إنشاء الطلب",
+    };
+  }
+}
+
+/**
+ * التوافقية السابقة: createOrderAction مستخدمة داخل CartDrawer.tsx
+ */
+export async function createOrderAction(payload: any) {
+  const name = payload.name || payload.customerName || "";
+  const phone = payload.phone || payload.customerPhone || "";
+  const zoneId = payload.zoneId || "";
+  const addressDetails = payload.addressDetails || payload.address || "";
+  const notes = payload.notes || "";
+  const items = payload.items || [];
+
+  return submitOrderAction({
+    name,
+    phone,
+    zoneId,
+    addressDetails,
+    notes,
+    items,
+  });
+}
+
+/**
+ * 2. حفظ العميل الجديد (Onboarding Modal Action)
+ */
+export async function saveCustomerAction(payload: {
+  name: string;
+  phone: string;
+  zoneId?: string;
+  addressDetails?: string;
+  address?: string;
+}) {
+  try {
+    const phone = normalizeEgyptPhone(payload.phone);
+    if (!isEgyptMobile(phone)) {
+      return { success: false, message: "رقم الموبايل المصري غير صحيح" };
+    }
+
+    let customer = await getCustomerByPhone(phone);
+    if (!customer) {
+      customer = await createCustomer({
+        fullName: payload.name.trim(),
+        primaryPhone: phone,
+        primaryAddress: payload.addressDetails || payload.address || "",
       });
     }
 
     return {
       success: true,
-      orderNumber: newOrder.orderNumber,
-      customerCode: customerCodeStr,
+      customerCode: customer.code,
+      code: customer.code,
+      customer,
     };
   } catch (err: any) {
-    console.error("خطأ في تسجيل الطلب:", err);
+    console.error("Error in saveCustomerAction:", err);
+    return { success: false, message: "فشل حفظ بيانات العميل" };
+  }
+}
+
+/**
+ * 3. جلب كارت العميل ونقاط الولاء (Customer Pass & Loyalty)
+ */
+export async function fetchCustomerPassAction(phoneOrCode: string) {
+  try {
+    const cleaned = phoneOrCode.trim();
+    if (!cleaned) {
+      return { success: false, error: "يرجى إدخال رقم الهاتف أو كود العميل" };
+    }
+
+    const phone = normalizeEgyptPhone(cleaned);
+    const customer = await getCustomerByPhone(phone);
+
+    if (!customer) {
+      return {
+        success: false,
+        error: "لم يتم العثور على حساب بهذا الرقم. يرجى طلب طلبك الأول للتفعيل تلقائياً!",
+      };
+    }
+
+    return {
+      success: true,
+      customer: {
+        code: customer.code,
+        fullName: customer.fullName,
+        primaryPhone: customer.primaryPhone,
+        totalOrders: customer.totalOrders,
+        totalSpent: customer.totalSpent,
+        loyaltyPoints: customer.loyaltyPoints,
+        discountPercent: customer.discountPercent,
+      },
+    };
+  } catch (err: any) {
+    console.error("Error in fetchCustomerPassAction:", err);
+    return { success: false, error: "تعذر الاستعلام عن كارت العميل" };
+  }
+}
+
+/**
+ * التوافقية السابقة: passStatsAction مستخدمة داخل CustomerQRCode.tsx
+ */
+export async function passStatsAction(phoneOrCode: string) {
+  const res = await fetchCustomerPassAction(phoneOrCode);
+  if (!res.success || !res.customer) {
     return {
       success: false,
-      error: err?.message || "حدث خطأ غير متوقع أثناء تسجيل الطلب.",
+      message: res.error || "تعذر العثور على بيانات العميل",
     };
   }
+
+  const c = res.customer;
+  return {
+    success: true,
+    ordersCount: c.totalOrders || 0,
+    totalSpent: c.totalSpent || 0,
+    points: c.loyaltyPoints || 0,
+    passCode: c.code,
+    name: c.fullName || "عميل بروست الأسد",
+    phone: c.primaryPhone,
+    discountPercent: c.discountPercent || 0,
+    data: {
+      ordersCount: c.totalOrders || 0,
+      totalSpent: c.totalSpent || 0,
+      points: c.loyaltyPoints || 0,
+      passCode: c.code,
+      name: c.fullName || "عميل بروست الأسد",
+      phone: c.primaryPhone,
+      discountPercent: c.discountPercent || 0,
+    },
+  };
 }
 
-// Fetch Customer Pass Information
-export async function fetchCustomerPassAction(customerCode: string) {
+/**
+ * 4. تتبع الطلبات (Track Orders Action)
+ */
+export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
   try {
-    return await getPassData(customerCode);
-  } catch (err) {
-    return null;
+    if (!orderNumbers || orderNumbers.length === 0) {
+      return { success: true, orders: [] };
+    }
+
+    const orders = await getOrdersByNumbers(orderNumbers);
+    return {
+      success: true,
+      orders: orders.map((ord) => ({
+        orderNumber: ord.orderNumber,
+        status: ord.status,
+        totalAmount: ord.totalAmount,
+        createdAt: ord.createdAt
+          ? new Date(ord.createdAt).toISOString()
+          : new Date().toISOString(),
+        itemsCount: (ord as any).itemsCount || 1,
+      })),
+    };
+  } catch (err: any) {
+    console.error("Error in fetchOrdersByNumbersAction:", err);
+    return { success: false, error: "فشل تتبع الطلبات" };
   }
 }
 
-// Fetch Orders by Number List
-export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
+/**
+ * التوافقية السابقة: trackOrdersAction مستخدمة داخل TrackerModal.tsx
+ */
+export async function trackOrdersAction(orderNumbers: string[] | string) {
+  const nums = Array.isArray(orderNumbers) ? orderNumbers : [orderNumbers];
+  const res = await fetchOrdersByNumbersAction(nums);
+  return {
+    success: res.success,
+    orders: res.orders || [],
+    data: res.orders || [],
+  };
+}
+
+/**
+ * 5. التحقق من كلمة مرور الأدمن (Admin Gate Action)
+ */
+export async function verifyAdminAction(passcode: string) {
   try {
-    return await getOrdersByNumbers(orderNumbers);
-  } catch (err) {
-    return [];
+    const expected = process.env.ADMIN_PASSCODE || "Asaad123456@@";
+    if (passcode.trim() === expected.trim()) {
+      return {
+        success: true,
+        token: "ba-admin-authenticated-token",
+      };
+    }
+    return {
+      success: false,
+      message: "كلمة المرور غير صحيحة!",
+    };
+  } catch (err: any) {
+    console.error("Error in verifyAdminAction:", err);
+    return {
+      success: false,
+      message: "حدث خطأ أثناء التحقق من كلمة المرور",
+    };
   }
 }
