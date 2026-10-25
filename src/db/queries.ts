@@ -78,6 +78,14 @@ export type MenuData = {
   zones: ZoneDTO[];
 };
 
+export type PromoData = {
+  enabled: boolean;
+  title: string;
+  code: string;
+  textAr: string;
+  textEn: string;
+};
+
 /**
  * 1. إعدادات الواجهة والـ CMS
  */
@@ -218,11 +226,13 @@ export async function getMenuData(): Promise<MenuData> {
   }
 }
 
-export async function getPromo() {
+export async function getPromo(): Promise<PromoData> {
   return {
     enabled: true,
     title: "خصم 10% على الطلب الأول",
     code: "LION10",
+    textAr: "استخدم كود LION10 للحصول على خصم 10% على أول طلب!",
+    textEn: "Use code LION10 for 10% OFF your first order!",
   };
 }
 
