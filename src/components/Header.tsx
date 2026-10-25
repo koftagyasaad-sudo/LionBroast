@@ -1,158 +1,192 @@
 "use client";
 
-import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { ShoppingBag, Menu as MenuIcon, X, Phone, Flame } from "lucide-react";
-import type { ZoneDTO, Promo, FrontendSettings } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Flame, Languages, Menu, Moon, QrCode, ShoppingBag, Sun, UtensilsCrossed, X } from "lucide-react";
+import { cartCount, useApp } from "@/store/app-store";
+import { useDict, useMounted } from "@/lib/hooks";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
-  zones?: ZoneDTO[];
-  promo?: Promo | null;
-  settings?: FrontendSettings;
+  settings?: any;
+  frontend?: any;
+  promo?: any;
 }
 
-export default function Header({ promo, settings }: HeaderProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+export default function Header({ settings, frontend }: HeaderProps) {
+  const t = useDict();
+  const mounted = useMounted();
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
-  const brandName = settings?.brandNameAr || "بروست الأسد";
-  const hotline = settings?.hotline || "01000000000";
+  const lang = useApp((s) => s.lang);
+  const theme = useApp((s) => s.theme);
+  const cart = useApp((s) => s.cart);
+  const customer = useApp((s) => s.customer);
+  const setLang = useApp((s) => s.setLang);
+  const setTheme = useApp((s) => s.setTheme);
+  const setCartOpen = useApp((s) => s.setCartOpen);
+  const setPassOpen = useApp((s) => s.setPassOpen);
+  const openOnboarding = useApp((s) => s.openOnboarding);
+
+  const storeData = frontend || settings || {};
+  const logoUrl = storeData.logoUrl || storeData.logo || "/img/icon-512.png";
+  const brandName = storeData.brandNameAr || t.brand || "بروست الأسد";
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const count = mounted ? cartCount(cart) : 0;
+
+  const links = [
+    { href: "/menu", label: t.nav?.menu || "المنيو" },
+    { href: "/#best", label: t.nav?.best || "الأكثر طلباً" },
+    { href: "/#zones", label: t.nav?.zones || "مناطق التوصيل" },
+    { href: "/#contact", label: t.nav?.contact || "اتصل بنا" },
+  ];
+
+  const openPass = () => {
+    if (customer) setPassOpen(true);
+    else openOnboarding("pass");
+  };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80">
-      {/* Promo Bar */}
-      {promo && promo.enabled && (
-        <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-slate-950 text-xs md:text-sm py-1.5 px-4 font-bold text-center flex items-center justify-center gap-2 shadow-inner">
-          <Flame className="w-4 h-4 animate-bounce text-slate-950" />
-          <span>{promo.textAr || promo.title}</span>
-        </div>
+    <header
+      className={cn(
+        "fixed inset-x-0 top-0 z-50 transition-all duration-500",
+        scrolled ? "glass border-b border-line py-2 shadow-lg" : "bg-transparent py-4",
       )}
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          {/* Brand Logo & Name */}
-          <Link href="/" className="flex items-center gap-3 group">
-            {settings?.logoUrl ? (
-              <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-amber-500/50 group-hover:border-amber-400 transition-all shadow-lg shadow-amber-500/10">
-                <Image
-                  src={settings.logoUrl}
-                  alt={brandName}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
-              </div>
-            ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
-                🦁
-              </div>
-            )}
-            <div className="flex flex-col">
-              <span className="font-extrabold text-xl md:text-2xl text-amber-500 tracking-tight group-hover:text-amber-400 transition-colors">
-                {brandName}
-              </span>
-              <span className="text-[10px] text-slate-400 -mt-1 font-semibold tracking-wider">
-                DESOUK ORIGINAL
-              </span>
+    >
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 md:px-8">
+        {/* Logo */}
+        <Link href="/" className="group flex items-center gap-3">
+          {!imgError ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={logoUrl}
+              alt="Broast El-Assad"
+              onError={() => setImgError(true)}
+              className="size-11 rounded-2xl object-cover ring-2 ring-brand-500/60 transition group-hover:rotate-6 group-hover:ring-brand-500"
+            />
+          ) : (
+            <div className="grid size-11 place-items-center rounded-2xl bg-brand-500/15 text-2xl ring-2 ring-brand-500/60">
+              🦁
             </div>
-          </Link>
+          )}
+          <span className="leading-tight">
+            <span className="block text-lg font-extrabold tracking-tight">{brandName}</span>
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-500">
+              {lang === "ar" ? "Broast El-Assad" : "بروست الأسد"}
+            </span>
+          </span>
+        </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-8 font-medium text-slate-300">
-            <Link href="/" className="hover:text-amber-400 transition-colors">
-              الرئيسية
-            </Link>
-            <Link href="/menu" className="hover:text-amber-400 transition-colors">
-              قائمة الطعام
-            </Link>
-            <Link href="/pass" className="hover:text-amber-400 transition-colors">
-              بطاقة الولاء
-            </Link>
-            <Link href="/track" className="hover:text-amber-400 transition-colors">
-              تتبع الطلب
-            </Link>
-          </nav>
-
-          {/* Contact & Actions */}
-          <div className="hidden md:flex items-center gap-4">
-            <a
-              href={`tel:${hotline}`}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 font-bold hover:bg-slate-800 transition-colors text-sm"
-            >
-              <Phone className="w-4 h-4 text-amber-500" />
-              <span>{hotline}</span>
-            </a>
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-1 lg:flex">
+          {links.map((l) => (
             <Link
-              href="/menu"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black hover:brightness-110 transition-all shadow-lg shadow-amber-500/20"
+              key={l.href}
+              href={l.href}
+              className="rounded-full px-4 py-2 text-sm font-semibold text-ink-2 transition hover:bg-surface-2 hover:text-ink"
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>اطلب الآن</span>
+              {l.label}
             </Link>
-          </div>
+          ))}
+        </nav>
 
-          {/* Mobile Menu Button */}
+        {/* Actions */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
-            aria-label="Toggle menu"
+            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+            className="flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-bold transition hover:border-brand-500/60"
+            aria-label="toggle language"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <MenuIcon className="w-6 h-6" />}
+            <Languages className="size-4 text-brand-500" />
+            {t.misc?.lang || (lang === "ar" ? "EN" : "AR")}
+          </button>
+
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="grid size-10 place-items-center rounded-full border border-line bg-surface transition hover:border-brand-500/60"
+            aria-label="toggle theme"
+          >
+            {mounted && theme === "light" ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
+            {!mounted && <Moon className="size-4.5" />}
+          </button>
+
+          <button
+            onClick={openPass}
+            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/50 bg-cheese-400/10 px-3 text-xs font-bold text-cheese-400 transition hover:bg-cheese-400/20 sm:flex"
+            aria-label="lion pass"
+          >
+            <QrCode className="size-4" />
+            {t.nav?.pass || "بطاقة الأسد"}
+          </button>
+
+          <button
+            onClick={() => setCartOpen(true)}
+            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105"
+            aria-label="cart"
+          >
+            <ShoppingBag className="size-4.5" />
+            {count > 0 && (
+              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-extrabold text-carbon-950 ring-2 ring-bg">
+                {count}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="grid size-10 place-items-center rounded-full border border-line bg-surface lg:hidden"
+            aria-label="menu"
+          >
+            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-950 border-b border-slate-800 px-4 pt-3 pb-6 space-y-3">
-          <Link
-            href="/"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-slate-300 font-semibold hover:text-amber-400"
+      {/* Mobile sheet */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.nav
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="glass overflow-hidden border-b border-line lg:hidden"
           >
-            الرئيسية
-          </Link>
-          <Link
-            href="/menu"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-slate-300 font-semibold hover:text-amber-400"
-          >
-            قائمة الطعام
-          </Link>
-          <Link
-            href="/pass"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-slate-300 font-semibold hover:text-amber-400"
-          >
-            بطاقة الولاء
-          </Link>
-          <Link
-            href="/track"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-slate-300 font-semibold hover:text-amber-400"
-          >
-            تتبع الطلب
-          </Link>
-
-          <div className="pt-4 border-t border-slate-900 flex flex-col gap-3">
-            <a
-              href={`tel:${hotline}`}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 font-bold text-sm"
-            >
-              <Phone className="w-4 h-4" />
-              <span>اتصل بنا: {hotline}</span>
-            </a>
-            <Link
-              href="/menu"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 text-slate-950 font-black"
-            >
-              <ShoppingBag className="w-5 h-5" />
-              <span>عرض المنيو والطلب</span>
-            </Link>
-          </div>
-        </div>
-      )}
+            <div className="space-y-1 px-4 py-4">
+              {links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-ink transition hover:bg-surface-2"
+                >
+                  {l.href === "/menu" ? <UtensilsCrossed className="size-4 text-brand-500" /> : <Flame className="size-4 text-brand-500" />}
+                  {l.label}
+                </Link>
+              ))}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  openPass();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl bg-cheese-400/10 px-4 py-3 text-sm font-bold text-cheese-400"
+              >
+                <QrCode className="size-4" />
+                {t.nav?.pass || "بطاقة الأسد"}
+              </button>
+            </div>
+          </motion.nav>
+        )}
+      </AnimatePresence>
     </header>
   );
 }
