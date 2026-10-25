@@ -14,7 +14,7 @@ export async function submitOrderAction(payload: any) {
     const name = (payload.customerName || payload.name || "").trim();
     const phone = (payload.customerPhone || payload.phone || "").trim();
     const address = (payload.address || payload.addressDetails || "").trim();
-    const deliveryZoneId = payload.deliveryZoneId || "";
+    const deliveryZoneId = payload.deliveryZoneId ? String(payload.deliveryZoneId) : "";
 
     if (!name || !phone || !address) {
       return { success: false, error: "يرجى ملء كافة البيانات المطلوبة (الاسم، الهاتف، العنوان)." };
@@ -43,7 +43,7 @@ export async function submitOrderAction(payload: any) {
     if (deliveryZoneId && !deliveryFee) {
       const zone = await getDeliveryZoneById(deliveryZoneId);
       if (zone) {
-        deliveryFee = zone.fee || zone.price || 0;
+        deliveryFee = Number(zone.fee || zone.price || 0);
       }
     }
 
@@ -61,7 +61,7 @@ export async function submitOrderAction(payload: any) {
     );
 
     const formattedItems = payload.items.map((item: any) => ({
-      menuItemId: item.menuItemId || item.id,
+      menuItemId: String(item.menuItemId || item.id),
       quantity: Number(item.quantity || 1),
       price: Number(item.price || 0),
       notes: [
@@ -75,7 +75,7 @@ export async function submitOrderAction(payload: any) {
 
     const newOrder = await createOrder({
       orderNumber,
-      customerId: customer.id,
+      customerId: String(customer.id),
       deliveryZoneId,
       customerName: name,
       customerPhone: phone,
@@ -88,7 +88,7 @@ export async function submitOrderAction(payload: any) {
 
     return {
       success: true,
-      orderId: newOrder.id,
+      orderId: String(newOrder.id),
       orderNumber: newOrder.orderNumber,
       passCode: customer.passCode,
       totalAmount: finalTotal,
