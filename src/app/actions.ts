@@ -1,233 +1,211 @@
 "use server";
 
-import { z } from "zod";
 import { db } from "@/db";
-import { customers, deliveryZones, menuItems, orders, type OrderLine } from "@/db/schema";
-import { ensureSeed } from "@/db/seed";
+import { customers, deliveryZones, menuItems, orders, orderLines } from "@/db/schema";
+import { ensureSeedDatabase } from "@/db/seed";
 import { getOrdersByNumbers, getPassData } from "@/db/queries";
 import { eq, inArray } from "drizzle-orm";
-import { genCustomerCode, genOrderNumber, mapsLink, normalizeEgyptPhone } from "@/lib/utils";
 
-/* ------------------------------------------------------------------ */
-/* Onboarding — upsert customer, mint Lion Pass code                   */
-/* ------------------------------------------------------------------ */
+export interface CartItemInput {
+  id: number;
+  quantity: number;
+  notes?: string;
+}
 
-const customerSchema = z.object({
-  name: z.string().trim().min(2).max(80),
-  primaryPhone: z.string().transform(normalizeEgyptPhone).pipe(z.string().regex(/^01[0125]\d{8}$/)),
-  secondaryPhone: z
-    .string()
-    .optional()
-    .transform((v) => (v ? normalizeEgyptPhone(v) : undefined))
-    .pipe(z.string().regex(/^01[0125]\d{8}$/).optional()),
-  street: z.string().trim().min(3).max(200),
-  building: z.string().trim().max(40).optional(),
-  flat: z.string().trim().max(40).optional(),
-  landmark: z.string().trim().max(120).optional(),
-  zoneId: z.string().min(1),
-});
+export interface CheckoutInput {
+  customerName: string;
+  phone: string;
+  address: string;
+  zoneId?: number;
+  notes?: string;
+  items: CartItemInput[];
+}
 
-export type CustomerInput = z.infer<typeof customerSchema>;
+// Helper: Normalize Egypt Phone
+function normalizeEgyptPhone(phone: string): string {
+  let cleaned = phone.replace(/\D/g, "");
+  if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+  if (!cleaned.startsWith("20")) cleaned = "20" + cleaned;
+  return cleaned;
+}
 
-export async function saveCustomerAction(raw: CustomerInput) {
-  await ensureSeed();
-  const parsed = customerSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false as const, error: "validation" };
-  const data = parsed.data;
-  const zoneId = data.zoneId === "__OUT_OF_RANGE__" ? null : data.zoneId;
+// Helper: Generate Random Unique Codes
+function genOrderNumber(): string {
+  const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+  const randPart = Math.floor(1000 + Math.random() * 9000);
+  return `LION-${datePart}-${randPart}`;
+}
 
-  const [existing] = await db
-    .select()
-    .from(customers)
-    .where(eq(customers.primaryPhone, data.primaryPhone))
-    .limit(1);
+function genCustomerCode(): string {
+  return "CUST-" + Math.floor(100000 + Math.random() * 900000);
+}
 
-  let code: string;
-  let id: string;
-  if (existing) {
-    code = existing.customerCode;
-    id = existing.id;
-    await db
-      .update(customers)
-      .set({ ...data, zoneId, updatedAt: new Date() })
-      .where(eq(customers.id, existing.id));
-  } else {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      code = genCustomerCode();
-      try {
-        const [row] = await db
-          .insert(customers)
-          .values({ ...data, zoneId, customerCode: code })
-          .returning({ id: customers.id });
-        id = row.id;
-        break;
-      } catch (e) {
-        if (attempt === 5) throw e;
+// 1. Submit New Customer Order
+export async function submitOrderAction(input: CheckoutInput) {
+  try {
+    // Ensure Neon DB is populated on first order
+    await ensureSeedDatabase();
+
+    if (!input.items || input.items.length === 0) {
+      return { success: false, error: "السلة فارغة. يرجى إضافة أصناف للمتابعة." };
+    }
+
+    if (!input.customerName || !input.phone || !input.address) {
+      return { success: false, error: "جميع البيانات (الاسم، الهاتف، العنوان) مطلوبة لتنفيذ الطلب." };
+    }
+
+    const cleanPhone = normalizeEgyptPhone(input.phone);
+
+    // 2. Find or Register Customer
+    const existingCustomers = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.primaryPhone, cleanPhone))
+      .limit(1);
+
+    let customerCodeStr: string;
+
+    if (existingCustomers.length > 0) {
+      const existing = existingCustomers[0];
+      customerCodeStr = existing.code || `CUST-${existing.id}`;
+
+      await db
+        .update(customers)
+        .set({
+          fullName: input.customerName,
+          name: input.customerName,
+          phone: cleanPhone,
+          primaryPhone: cleanPhone,
+          primaryAddress: input.address,
+          address: input.address,
+        })
+        .where(eq(customers.id, existing.id));
+    } else {
+      customerCodeStr = genCustomerCode();
+      await db.insert(customers).values({
+        code: customerCodeStr,
+        fullName: input.customerName,
+        name: input.customerName,
+        primaryPhone: cleanPhone,
+        phone: cleanPhone,
+        primaryAddress: input.address,
+        address: input.address,
+      });
+    }
+
+    // 3. Resolve Items & Subtotal
+    const itemIds = input.items.map((i) => i.id);
+    const dbItems = await db
+      .select()
+      .from(menuItems)
+      .where(inArray(menuItems.id, itemIds));
+
+    const itemMap = new Map(dbItems.map((i) => [i.id, i]));
+
+    let subtotalPiasters = 0;
+    const resolvedLines = [];
+
+    for (const cartItem of input.items) {
+      const dbItem = itemMap.get(cartItem.id);
+      if (!dbItem) continue;
+
+      const linePrice = dbItem.price * cartItem.quantity;
+      subtotalPiasters += linePrice;
+
+      resolvedLines.push({
+        itemId: dbItem.id,
+        itemNameAr: dbItem.nameAr,
+        itemNameEn: dbItem.nameEn,
+        itemName: dbItem.nameAr,
+        quantity: cartItem.quantity,
+        price: dbItem.price,
+        notes: cartItem.notes || "",
+      });
+    }
+
+    if (resolvedLines.length === 0) {
+      return { success: false, error: "عفواً، الأصناف المحددة غير متوفرة حالياً." };
+    }
+
+    // 4. Delivery Zone Fee
+    let deliveryFeePiasters = 1500; // default 15 EGP
+    if (input.zoneId) {
+      const zones = await db
+        .select()
+        .from(deliveryZones)
+        .where(eq(deliveryZones.id, input.zoneId))
+        .limit(1);
+
+      if (zones.length > 0) {
+        deliveryFeePiasters = zones[0].fee;
       }
     }
-  }
-  return { ok: true as const, code: code!, id: id! };
-}
 
-/* ------------------------------------------------------------------ */
-/* Checkout — server-side price recompute + atomic order logging       */
-/* ------------------------------------------------------------------ */
+    const totalPiasters = subtotalPiasters + deliveryFeePiasters;
+    const orderNum = genOrderNumber();
 
-const checkoutSchema = z.object({
-  customer: customerSchema,
-  outOfRange: z.boolean(),
-  notes: z.string().trim().max(300).optional(),
-  items: z
-    .array(
-      z.object({
-        id: z.string().uuid(),
-        qty: z.number().int().min(1).max(30),
-        sizeId: z.string().optional().nullable(),
-        flavor: z.enum(["original", "spicy"]).optional().nullable(),
-      }),
-    )
-    .min(1)
-    .max(60),
-});
+    // 5. Insert Order
+    const [newOrder] = await db
+      .insert(orders)
+      .values({
+        orderNumber: orderNum,
+        customerCode: customerCodeStr,
+        customerName: input.customerName,
+        customerPhone: cleanPhone,
+        customerAddress: input.address,
+        phone: cleanPhone,
+        address: input.address,
+        subtotal: subtotalPiasters,
+        deliveryFee: deliveryFeePiasters,
+        total: totalPiasters,
+        status: "pending",
+        notes: input.notes || "",
+        zoneId: input.zoneId || null,
+      })
+      .returning({ id: orders.id, orderNumber: orders.orderNumber });
 
-export type CheckoutInput = z.infer<typeof checkoutSchema>;
-
-export async function createOrderAction(raw: CheckoutInput) {
-  await ensureSeed();
-  const parsed = checkoutSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false as const, error: "validation" };
-  const { customer, items, outOfRange, notes } = parsed.data;
-
-  // Resolve menu items + recompute prices server-side (never trust client totals).
-  const ids = [...new Set(items.map((i) => i.id))];
-  const dbItems = await db.select().from(menuItems).where(inArray(menuItems.id, ids));
-  const itemMap = new Map(dbItems.map((m) => [m.id, m]));
-
-  const lines: OrderLine[] = [];
-  let subtotal = 0;
-  for (const line of items) {
-    const m = itemMap.get(line.id);
-    if (!m || !m.isAvailable) return { ok: false as const, error: "unavailable" };
-    let unit = m.price;
-    let sizeLabel: string | null = null;
-    if (line.sizeId && m.sizes.length) {
-      const size = m.sizes.find((s) => s.id === line.sizeId);
-      if (!size) return { ok: false as const, error: "bad_size" };
-      unit = size.price;
-      sizeLabel = `${size.ar} / ${size.en}`;
+    // 6. Insert Order Lines
+    for (const line of resolvedLines) {
+      await db.insert(orderLines).values({
+        orderId: newOrder.id,
+        itemId: line.itemId,
+        itemNameAr: line.itemNameAr,
+        itemNameEn: line.itemNameEn,
+        itemName: line.itemName,
+        quantity: line.quantity,
+        price: line.price,
+        notes: line.notes,
+      });
     }
-    const qty = line.qty;
-    subtotal += unit * qty;
-    lines.push({
-      id: m.id,
-      nameAr: m.nameAr,
-      nameEn: m.nameEn,
-      price: m.price,
-      unitPrice: unit,
-      qty,
-      flavor: m.spicyOption ? (line.flavor ?? "original") : null,
-      sizeLabel,
-    } as OrderLine);
+
+    return {
+      success: true,
+      orderNumber: newOrder.orderNumber,
+      customerCode: customerCodeStr,
+    };
+  } catch (err: any) {
+    console.error("خطأ في تسجيل الطلب:", err);
+    return {
+      success: false,
+      error: err?.message || "حدث خطأ غير متوقع أثناء تسجيل الطلب.",
+    };
   }
-  subtotal = Math.round(subtotal * 100) / 100;
+}
 
-  // Zone fee from DB.
-  let zoneName = "منطقة أخرى / خارج النطاق";
-  let deliveryFee = 0;
-  if (!outOfRange) {
-    const [z] = await db.select().from(deliveryZones).where(eq(deliveryZones.id, customer.zoneId)).limit(1);
-    if (!z || !z.isActive) return { ok: false as const, error: "bad_zone" };
-    zoneName = z.nameAr;
-    deliveryFee = z.price;
+// Fetch Customer Pass Information
+export async function fetchCustomerPassAction(customerCode: string) {
+  try {
+    return await getPassData(customerCode);
+  } catch (err) {
+    return null;
   }
-  const total = Math.round((subtotal + deliveryFee) * 100) / 100;
-
-  const address = [customer.street, customer.building && `عمارة ${customer.building}`,
-    customer.flat && `شقة ${customer.flat}`, customer.landmark && `علامة: ${customer.landmark}`]
-    .filter(Boolean)
-    .join("، ");
-  const url = mapsLink(address, zoneName);
-
-  const saved = await saveCustomerAction(customer);
-  const customerId = saved.ok ? saved.id : null;
-  const customerCode = saved.ok ? saved.code : null;
-
-  let orderNumber = "";
-  await db.transaction(async (tx) => {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      orderNumber = genOrderNumber();
-      try {
-        await tx.insert(orders).values({
-          orderNumber,
-          customerId,
-          customerCode,
-          customerName: customer.name,
-          primaryPhone: customer.primaryPhone,
-          secondaryPhone: customer.secondaryPhone || null,
-          address,
-          mapsLink: url,
-          deliveryZone: zoneName,
-          items: lines,
-          subtotal,
-          deliveryFee,
-          total,
-          notes: notes || null,
-          status: "PENDING",
-        });
-        return;
-      } catch (e) {
-        if (attempt === 5) throw e;
-      }
-    }
-  });
-
-  return {
-    ok: true as const,
-    orderNumber,
-    zoneName,
-    address,
-    mapsUrl: url,
-    lines,
-    subtotal,
-    deliveryFee,
-    total,
-    customerCode,
-  };
 }
 
-/* ------------------------------------------------------------------ */
-/* Tracker + Lion Pass                                                  */
-/* ------------------------------------------------------------------ */
-
-export async function trackOrdersAction(numbers: string[]) {
-  const list = await getOrdersByNumbers(numbers.slice(0, 10));
-  return list.map((o) => ({
-    orderNumber: o.orderNumber,
-    status: o.status,
-    total: o.total,
-    createdAt: o.createdAt.toISOString(),
-    itemsCount: o.items.reduce((a, i) => a + i.qty, 0),
-    deliveryZone: o.deliveryZone,
-  }));
-}
-
-export async function passStatsAction(code: string) {
-  const data = await getPassData(code);
-  if (!data) return null;
-  return {
-    ordersCount: data.ordersCount,
-    ltv: data.ltv,
-    memberSince: data.customer.createdAt.toISOString(),
-    recent: data.ordersList.slice(0, 5).map((o) => ({
-      orderNumber: o.orderNumber,
-      status: o.status,
-      total: o.total,
-      createdAt: o.createdAt.toISOString(),
-    })),
-  };
-}
-
-export async function verifyAdminAction(passcode: string) {
-  const expected = process.env.ADMIN_PASSCODE || "asad2024";
-  return { ok: passcode === expected };
+// Fetch Orders by Number List
+export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
+  try {
+    return await getOrdersByNumbers(orderNumbers);
+  } catch (err) {
+    return [];
+  }
 }
