@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { categories, menuItems, orders, orderLines, settings, customers } from "@/db/schema";
 import { eq, desc, asc, inArray } from "drizzle-orm";
+import { ensureSeedDatabase } from "@/db/seed";
 
 export interface FrontendSettings {
   brand_ar: string;
@@ -49,6 +50,13 @@ export const DEFAULT_FRONTEND_SETTINGS: FrontendSettings = {
 export async function getFrontendSettings(): Promise<FrontendSettings> {
   try {
     const allSettings = await db.select().from(settings);
+
+    // Auto-seed Neon DB if empty
+    if (allSettings.length === 0) {
+      await ensureSeedDatabase();
+      return getFrontendSettings();
+    }
+
     const settingsMap: Record<string, string> = {};
     for (const row of allSettings) {
       settingsMap[row.key] = row.value;
@@ -82,7 +90,14 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
 
 export async function getCategoriesWithItems() {
   try {
-    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+
+    // Auto seed if database is clean
+    if (cats.length === 0) {
+      await ensureSeedDatabase();
+      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    }
+
     const result = [];
 
     for (const cat of cats) {
