@@ -61,10 +61,21 @@ export type CategoryWithItems = Category & {
   items: MenuItem[];
 };
 
+export type ZoneDTO = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  fee: number;
+  price: number;
+  estimatedMinutes: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 export type MenuData = {
   categories: CategoryWithItems[];
   items: MenuItem[];
-  zones: DeliveryZone[];
+  zones: ZoneDTO[];
 };
 
 /**
@@ -181,10 +192,21 @@ export async function getMenuData(): Promise<MenuData> {
       items: itemsList.filter((it) => it.categoryId === cat.id),
     }));
 
+    const mappedZones: ZoneDTO[] = zonesList.map((z) => ({
+      id: z.id,
+      nameAr: z.nameAr,
+      nameEn: z.nameEn,
+      fee: z.fee,
+      price: z.fee,
+      estimatedMinutes: z.estimatedMinutes,
+      sortOrder: z.sortOrder,
+      isActive: true,
+    }));
+
     return {
       categories: categoriesWithItems,
       items: itemsList,
-      zones: zonesList,
+      zones: mappedZones,
     };
   } catch (err) {
     console.error("Error in getMenuData:", err);
@@ -328,14 +350,21 @@ export async function getDeliveryZoneById(id: string) {
       .from(deliveryZones)
       .where(eq(deliveryZones.id, id))
       .limit(1);
-    return rows[0] || null;
+    if (!rows[0]) return null;
+    const z = rows[0];
+    return {
+      ...z,
+      fee: z.fee,
+      price: z.fee,
+      isActive: true,
+    };
   } catch (err) {
     console.error("Error in getDeliveryZoneById:", err);
     return null;
   }
 }
 
-export async function getDeliveryZones() {
+export async function getDeliveryZones(): Promise<ZoneDTO[]> {
   try {
     let zones = await db
       .select()
@@ -350,7 +379,16 @@ export async function getDeliveryZones() {
         .orderBy(asc(deliveryZones.sortOrder));
     }
 
-    return zones;
+    return zones.map((z) => ({
+      id: z.id,
+      nameAr: z.nameAr,
+      nameEn: z.nameEn,
+      fee: z.fee,
+      price: z.fee,
+      estimatedMinutes: z.estimatedMinutes,
+      sortOrder: z.sortOrder,
+      isActive: true,
+    }));
   } catch (err) {
     console.error("Error in getDeliveryZones:", err);
     return [];
