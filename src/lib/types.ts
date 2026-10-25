@@ -1,41 +1,35 @@
-// src/lib/types.ts
+export interface CategoryDTO {
+  id: string;
+  nameAr: string;
+  nameEn?: string;
+  sortOrder: number;
+  image?: string;
+  isActive?: boolean;
+}
 
 export interface MenuItemDTO {
   id: string;
   categoryId: string;
   nameAr: string;
-  nameEn: string;
-  descriptionAr?: string | null;
-  descriptionEn?: string | null;
+  nameEn?: string;
+  descriptionAr?: string;
+  descriptionEn?: string;
   price: number;
-  imageUrl?: string | null;
   image?: string;
-  badge?: string | null;
+  isAvailable: boolean;
   sortOrder: number;
-  isAvailable: number | boolean;
-  sizes?: { nameAr: string; nameEn: string; price: number }[];
   spicyOption?: boolean;
   isBestSeller?: boolean;
-}
-
-export interface CategoryDTO {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  sortOrder: number;
-  image?: string;
-  isActive?: boolean;
-  items?: MenuItemDTO[];
+  sizes?: { name: string; price: number }[];
 }
 
 export interface ZoneDTO {
   id: string;
   nameAr: string;
-  nameEn: string;
-  fee: number;
+  nameEn?: string;
   price: number;
+  fee?: number;
   estimatedMinutes: number;
-  sortOrder: number;
   isActive?: boolean;
 }
 
@@ -47,20 +41,66 @@ export interface Promo {
   textEn?: string;
 }
 
+export interface FrontendSettings {
+  brandNameAr: string;
+  brandNameEn: string;
+  logoUrl: string;
+  heroTitleAr: string;
+  heroSubtitleAr: string;
+  marqueeTextAr: string;
+  footerTextAr: string;
+  addressAr: string;
+  workingHoursAr: string;
+  hotline: string;
+  whatsapp: string;
+  deliveryFee: number;
+  taxPercent: number;
+}
+
 export interface CartItem {
   id: string;
+  menuItemId: string;
   nameAr: string;
-  nameEn: string;
   price: number;
   quantity: number;
-  imageUrl?: string;
+  size?: string;
+  isSpicy?: boolean;
+  notes?: string;
 }
 
 export interface OrderPayload {
-  name: string;
-  phone: string;
-  zoneId: string;
-  addressDetails: string;
+  customerName: string;
+  customerPhone: string;
+  address: string;
+  deliveryZoneId: string;
   notes?: string;
   items: CartItem[];
+  totalAmount: number;
+  deliveryFee: number;
+  promoCode?: string;
+  discountAmount?: number;
+}
+
+export interface CustomerPassData {
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    passCode: string;
+    totalOrders: number;
+    totalSpent: number;
+    loyaltyPoints: number;
+    discountPercent: number;
+    createdAt: Date | string;
+  };
+  ordersList: {
+    id: string;
+    orderNumber: string;
+    totalAmount: number;
+    status: string;
+    createdAt: Date | string;
+  }[];
+  ordersCount: number;
+  ltv: number;
+  zone?: ZoneDTO | null;
 }
