@@ -1,5 +1,5 @@
 import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
-import { type InferSelectModel, type InferInsertModel } from "drizzle-orm";
+import { type InferSelectModel } from "drizzle-orm";
 
 // Categories Table
 export const categories = pgTable("categories", {
@@ -49,7 +49,7 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Order Items / Lines
+// Order Items / Lines Table
 export const orderLines = pgTable("order_lines", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => orders.id),
