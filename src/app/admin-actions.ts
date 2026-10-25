@@ -1,284 +1,258 @@
+// src/app/admin-actions.ts
+
 "use server";
 
-import { db } from "@/db";
-import { categories, menuItems, orders, settings, deliveryZones } from "@/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
-import { FrontendSettings } from "@/db/queries";
+import { db } from "@/db/index";
+import {
+  categories,
+  menuItems,
+  orders,
+  deliveryZones,
+  settings,
+  orderLines,
+} from "@/db/schema";
+import { eq, inArray, desc, asc } from "drizzle-orm";
 import { ensureSeedDatabase } from "@/db/seed";
 
-export interface ScannedRow {
-  categoryNameAr: string;
-  categoryNameEn: string;
-  itemNameAr: string;
-  itemNameEn: string;
-  descriptionAr?: string;
-  descriptionEn?: string;
-  price: number;
-}
-
-// 0. Manual Seed Trigger for Admin Panel
-export async function adminTriggerSeedAction() {
-  return await ensureSeedDatabase();
-}
-
-// 1. Fetch All Admin Data
-export async function adminGetAllAction() {
+export async function saveFrontendSettingsAction(data: Record<string, string>) {
   try {
-    // Ensure dynamic database seeding on initial load
-    await ensureSeedDatabase();
-
-    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const ordersList = await db.select().from(orders).orderBy(desc(orders.createdAt));
-    const zonesList = await db.select().from(deliveryZones);
-    const settingsList = await db.select().from(settings);
+    for (const [key, value] of Object.entries(data)) {
+      await db
+        .insert(settings)
+        .values({ key, value })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value },
+        });
+    }
 
     return {
       success: true,
-      data: {
-        categories: cats,
-        items: itemsList,
-        orders: ordersList,
-        zones: zonesList,
-        settings: settingsList,
-      },
+      message: "تم حفظ إعدادات الهوية والـ CMS بنجاح!",
     };
   } catch (err: any) {
-    return { success: false, error: err?.message || "فشل جلب البيانات" };
-  }
-}
-
-// 2. Gemini AI Menu Scanner Action
-export async function adminScanMenuAction(payload: {
-  fileName: string;
-  imageBase64: string;
-  mimeType: string;
-}): Promise<{ success: boolean; data?: ScannedRow[]; error?: string }> {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-    if (!apiKey) {
-      return {
-        success: false,
-        error: "مفتاح GEMINI_API_KEY غير مضاف في Vercel Environment Variables. يرجى إضافته ثم عمل Redeploy للموقع.",
-      };
-    }
-
-    if (!apiKey.startsWith("AIzaSy")) {
-      return {
-        success: false,
-        error: `المفتاح الحالي GEMINI_API_KEY يبدو غير صحيح. يجب استخدام API Key المولد من Google AI Studio والذي يبدأ بـ "AIzaSy".`,
-      };
-    }
-
-    const base64Data = payload.imageBase64.includes(",")
-      ? payload.imageBase64.split(",")[1]
-      : payload.imageBase64;
-
-    const mimeType = payload.mimeType || "image/jpeg";
-
-    const promptText = `أنت مساعد متخصص في قراءة وتفكيك قوائم الطعام (المينيو) من الصور.
-قم بتحليل صورة المينيو المرفقة واستخرج جميع الأصناف والأقسام منها بدقة متناهية.
-يجب إرجاع النتيجة حصراً في صيغة JSON Array بدون أي كلام إضافي أو تنسيق Markdown.
-
-[
-  {
-    "categoryNameAr": "اسم القسم بالعربي",
-    "categoryNameEn": "اسم القسم بالإنجليزي",
-    "itemNameAr": "اسم الصنف بالعربي",
-    "itemNameEn": "اسم الصنف بالإنجليزي",
-    "descriptionAr": "الوصف بالعربي إن وجد",
-    "descriptionEn": "الوصف بالإنجليزي إن وجد",
-    "price": 150
-  }
-]`;
-
-    const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
-    let responseText = "";
-    let lastApiError = "";
-
-    for (const model of modelsToTry) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: promptText },
-                    {
-                      inline_data: {
-                        mime_type: mimeType,
-                        data: base64Data,
-                      },
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.1,
-                response_mime_type: "application/json",
-              },
-            }),
-          }
-        );
-
-        const resData = await response.json();
-
-        if (!response.ok) {
-          lastApiError = resData?.error?.message || response.statusText;
-          continue;
-        }
-
-        const candidateText = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidateText) {
-          responseText = candidateText;
-          break;
-        }
-      } catch (err: any) {
-        lastApiError = err?.message || "فشل الاتصال بـ Google API";
-      }
-    }
-
-    if (!responseText) {
-      return {
-        success: false,
-        error: `فشل استجابة نموذج الذكاء الاصطناعي: ${lastApiError || "خطأ غير معروف"}`,
-      };
-    }
-
-    let cleaned = responseText.trim();
-    if (cleaned.startsWith("```json")) {
-      cleaned = cleaned.replace(/^```json/, "").replace(/```$/, "").trim();
-    } else if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/^```/, "").replace(/```$/, "").trim();
-    }
-
-    const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return {
-        success: false,
-        error: "لم يتم العثور على أطباق قابلة للقراءة في صورة المينيو. يرجى رفع صورة أكثر وضوحاً.",
-      };
-    }
-
-    return { success: true, data: parsed };
-  } catch (err: any) {
+    console.error("Error in saveFrontendSettingsAction:", err);
     return {
       success: false,
-      error: `خطأ في المعالجة: ${err?.message || "حدث خلل أثناء تحليل الصورة"}`,
+      error: err?.message || "فشل حفظ إعدادات الـ CMS",
     };
   }
 }
 
-// 3. Save Scanned AI Rows
-export async function adminSaveScannedRowsAction(rows: ScannedRow[]) {
+export async function adminScanMenuAction(formData: FormData) {
   try {
-    const existingCats = await db.select().from(categories);
-    const catMap = new Map<string, number>();
-
-    for (const cat of existingCats) {
-      catMap.set(cat.nameAr.toLowerCase().trim(), cat.id);
-      catMap.set(cat.nameEn.toLowerCase().trim(), cat.id);
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !apiKey.startsWith("AIzaSy")) {
+      return {
+        success: false,
+        error: "مفتاح Gemini API غير معرف أو غير صحيح في بيئة العمل.",
+      };
     }
 
-    let itemsInserted = 0;
-
-    for (const row of rows) {
-      const catAr = (row.categoryNameAr || "أصناف أخرى").trim();
-      const catEn = (row.categoryNameEn || "Other Items").trim();
-      const key = catAr.toLowerCase();
-
-      let categoryId = catMap.get(key);
-
-      if (!categoryId) {
-        const [insertedCat] = await db
-          .insert(categories)
-          .values({
-            nameAr: catAr,
-            nameEn: catEn,
-            sortOrder: 99,
-          })
-          .returning({ id: categories.id });
-
-        categoryId = insertedCat.id;
-        catMap.set(key, categoryId);
-      }
-
-      await db.insert(menuItems).values({
-        categoryId,
-        nameAr: row.itemNameAr || "صنف جديد",
-        nameEn: row.itemNameEn || "New Item",
-        descriptionAr: row.descriptionAr || "",
-        descriptionEn: row.descriptionEn || "",
-        price: row.price ? Math.round(row.price * 100) : 0,
-        isAvailable: true,
-        imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
-        sortOrder: 99,
-      });
-
-      itemsInserted++;
+    const file = formData.get("file") as File;
+    if (!file) {
+      return { success: false, error: "لم يتم اختيار صورة المنيو" };
     }
 
-    return { success: true, count: itemsInserted };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات" };
+    const bytes = await file.arrayBuffer();
+    const base64Data = Buffer.from(bytes).toString("base64");
+
+    const promptText = `
+أنت خبير في قراءة وقوائم طعام المطاعم (Menu Parser).
+قم بتحليل صورة منيو المطعم المرفقة واستخراج جميع الوجبات والأصناف بدقة 100%.
+
+يجب أن ترجع النتيجة كـ JSON Array فقط بالشكل التالي دون أي نصوص إضافية:
+[
+  {
+    "categoryAr": "وجبات البروست",
+    "categoryEn": "Broast Meals",
+    "nameAr": "وجبة 4 قطع",
+    "nameEn": "4 Pcs Meal",
+    "descriptionAr": "قطع دجاج مقرمش + بطاطس + ثومية",
+    "descriptionEn": "Crispy chicken + fries + garlic dip",
+    "price": 160
   }
-}
+]
+`;
 
-// 4. Save Frontend Dynamic Content Settings
-export async function saveFrontendSettingsAction(data: FrontendSettings) {
-  try {
-    const entries = Object.entries(data);
+    const models = [
+      "gemini-1.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-pro",
+    ];
 
-    for (const [key, value] of entries) {
-      const strVal = String(value ?? "");
+    let jsonResponseText = "";
 
-      const existing = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.key, key));
-
-      if (existing.length > 0) {
-        await db
-          .update(settings)
-          .set({ value: strVal, updatedAt: new Date() })
-          .where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({
-          key,
-          value: strVal,
-          updatedAt: new Date(),
+    for (const modelName of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: promptText },
+                  {
+                    inline_data: {
+                      mime_type: file.type || "image/jpeg",
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
         });
+
+        if (res.ok) {
+          const result = await res.json();
+          const textRes =
+            result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (textRes) {
+            jsonResponseText = textRes;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed model ${modelName}, trying next...`);
       }
     }
 
-    return { success: true };
+    if (!jsonResponseText) {
+      return {
+        success: false,
+        error: "لم ينجح ذكاء Gemini في استخراج بيانات المنيو، يرجى إعادة المحاولة برفع صورة أوضح.",
+      };
+    }
+
+    const cleanedJson = jsonResponseText
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const parsedItems = JSON.parse(cleanedJson);
+
+    return {
+      success: true,
+      items: parsedItems,
+    };
   } catch (err: any) {
-    return { success: false, error: err?.message || "فشل حفظ الإعدادات" };
+    console.error("Error in adminScanMenuAction:", err);
+    return {
+      success: false,
+      error: "حدث خطأ أثناء تحليل الصورة بالذكاء الاصطناعي",
+    };
   }
 }
 
-// 5. Category Management Actions
-export async function adminSaveCategoryAction(data: any) {
+export async function adminSaveScannedRowsAction(items: any[]) {
   try {
-    if (data.id) {
+    if (!items || items.length === 0) {
+      return { success: false, error: "لا توجد عناصر للحفظ" };
+    }
+
+    const existingCats = await db.select().from(categories);
+    const catMap = new Map<string, string>();
+    existingCats.forEach((c) => catMap.set(c.nameAr, c.id));
+
+    let maxSort = existingCats.length;
+
+    for (const item of items) {
+      const catNameAr = item.categoryAr || "أصناف أخرى";
+      let catId = catMap.get(catNameAr);
+
+      if (!catId) {
+        catId = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        maxSort++;
+        await db.insert(categories).values({
+          id: catId,
+          nameAr: catNameAr,
+          nameEn: item.categoryEn || catNameAr,
+          sortOrder: maxSort,
+        });
+        catMap.set(catNameAr, catId);
+      }
+
+      const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      await db.insert(menuItems).values({
+        id: itemId,
+        categoryId: catId,
+        nameAr: item.nameAr,
+        nameEn: item.nameEn || item.nameAr,
+        descriptionAr: item.descriptionAr || "",
+        descriptionEn: item.descriptionEn || "",
+        price: Number(item.price) || 0,
+        imageUrl: "",
+        badge: "",
+        sortOrder: 1,
+        isAvailable: 1,
+      });
+    }
+
+    return { success: true, message: "تمت إضافة الأصناف المستخرجة للمنيو بنجاح!" };
+  } catch (err: any) {
+    console.error("Error in adminSaveScannedRowsAction:", err);
+    return { success: false, error: "حدث خطأ أثناء حفظ أصناف المنيو" };
+  }
+}
+
+export async function adminGetAllAction() {
+  try {
+    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    if (!cats || cats.length === 0) {
+      await ensureSeedDatabase();
+      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    }
+
+    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+    const ords = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const zones = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
+    const setts = await db.select().from(settings);
+
+    return {
+      success: true,
+      categories: cats,
+      items,
+      orders: ords,
+      zones,
+      settings: setts,
+    };
+  } catch (err: any) {
+    console.error("Error in adminGetAllAction:", err);
+    return { success: false, error: "فشل جلب بيانات لوحة التحكم" };
+  }
+}
+
+export async function adminTriggerSeedAction() {
+  try {
+    await ensureSeedDatabase();
+    return { success: true, message: "تمت إعادة تغذية قاعدة البيانات بنجاح!" };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "فشل التغذية التلقائية" };
+  }
+}
+
+// Category Actions
+export async function adminSaveCategoryAction(cat: any) {
+  try {
+    if (cat.id) {
       await db
         .update(categories)
         .set({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          sortOrder: data.sortOrder || 0,
+          nameAr: cat.nameAr,
+          nameEn: cat.nameEn,
+          sortOrder: cat.sortOrder || 0,
         })
-        .where(eq(categories.id, data.id));
+        .where(eq(categories.id, cat.id));
     } else {
+      const id = `cat-${Date.now()}`;
       await db.insert(categories).values({
-        nameAr: data.nameAr,
-        nameEn: data.nameEn,
-        sortOrder: data.sortOrder || 0,
+        id,
+        nameAr: cat.nameAr,
+        nameEn: cat.nameEn,
+        sortOrder: cat.sortOrder || 0,
       });
     }
     return { success: true };
@@ -287,24 +261,7 @@ export async function adminSaveCategoryAction(data: any) {
   }
 }
 
-export async function adminCreateCategoryAction(formData: FormData) {
-  return adminSaveCategoryAction({
-    nameAr: formData.get("nameAr"),
-    nameEn: formData.get("nameEn"),
-    sortOrder: parseInt((formData.get("sortOrder") as string) || "0", 10),
-  });
-}
-
-export async function adminUpdateCategoryAction(id: number, formData: FormData) {
-  return adminSaveCategoryAction({
-    id,
-    nameAr: formData.get("nameAr"),
-    nameEn: formData.get("nameEn"),
-    sortOrder: parseInt((formData.get("sortOrder") as string) || "0", 10),
-  });
-}
-
-export async function adminDeleteCategoryAction(id: number) {
+export async function adminDeleteCategoryAction(id: string) {
   try {
     await db.delete(categories).where(eq(categories.id, id));
     return { success: true };
@@ -313,37 +270,39 @@ export async function adminDeleteCategoryAction(id: number) {
   }
 }
 
-// 6. Items Management Actions
-export async function adminSaveItemAction(data: any) {
+// Item Actions
+export async function adminSaveItemAction(item: any) {
   try {
-    const pricePiasters = typeof data.price === "number" ? Math.round(data.price * 100) : 0;
-
-    if (data.id) {
+    if (item.id) {
       await db
         .update(menuItems)
         .set({
-          categoryId: data.categoryId,
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          descriptionAr: data.descriptionAr || "",
-          descriptionEn: data.descriptionEn || "",
-          price: pricePiasters,
-          imageUrl: data.imageUrl || "",
-          isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
-          sortOrder: data.sortOrder || 0,
+          categoryId: item.categoryId,
+          nameAr: item.nameAr,
+          nameEn: item.nameEn,
+          descriptionAr: item.descriptionAr,
+          descriptionEn: item.descriptionEn,
+          price: Number(item.price),
+          imageUrl: item.imageUrl || "",
+          badge: item.badge || "",
+          sortOrder: item.sortOrder || 0,
+          isAvailable: item.isAvailable ? 1 : 0,
         })
-        .where(eq(menuItems.id, data.id));
+        .where(eq(menuItems.id, item.id));
     } else {
+      const id = `item-${Date.now()}`;
       await db.insert(menuItems).values({
-        categoryId: data.categoryId,
-        nameAr: data.nameAr,
-        nameEn: data.nameEn,
-        descriptionAr: data.descriptionAr || "",
-        descriptionEn: data.descriptionEn || "",
-        price: pricePiasters,
-        imageUrl: data.imageUrl || "",
-        isAvailable: true,
-        sortOrder: 0,
+        id,
+        categoryId: item.categoryId,
+        nameAr: item.nameAr,
+        nameEn: item.nameEn,
+        descriptionAr: item.descriptionAr || "",
+        descriptionEn: item.descriptionEn || "",
+        price: Number(item.price),
+        imageUrl: item.imageUrl || "",
+        badge: item.badge || "",
+        sortOrder: item.sortOrder || 0,
+        isAvailable: item.isAvailable ? 1 : 0,
       });
     }
     return { success: true };
@@ -352,32 +311,7 @@ export async function adminSaveItemAction(data: any) {
   }
 }
 
-export async function adminCreateItemAction(formData: FormData) {
-  return adminSaveItemAction({
-    categoryId: parseInt(formData.get("categoryId") as string, 10),
-    nameAr: formData.get("nameAr"),
-    nameEn: formData.get("nameEn"),
-    descriptionAr: formData.get("descriptionAr"),
-    descriptionEn: formData.get("descriptionEn"),
-    price: parseFloat((formData.get("price") as string) || "0"),
-    imageUrl: formData.get("imageUrl"),
-  });
-}
-
-export async function adminUpdateItemAction(id: number, formData: FormData) {
-  return adminSaveItemAction({
-    id,
-    categoryId: parseInt(formData.get("categoryId") as string, 10),
-    nameAr: formData.get("nameAr"),
-    nameEn: formData.get("nameEn"),
-    descriptionAr: formData.get("descriptionAr"),
-    descriptionEn: formData.get("descriptionEn"),
-    price: parseFloat((formData.get("price") as string) || "0"),
-    imageUrl: formData.get("imageUrl"),
-  });
-}
-
-export async function adminDeleteItemAction(id: number) {
+export async function adminDeleteItemAction(id: string) {
   try {
     await db.delete(menuItems).where(eq(menuItems.id, id));
     return { success: true };
@@ -386,53 +320,51 @@ export async function adminDeleteItemAction(id: number) {
   }
 }
 
-export async function adminToggleItemAvailableAction(id: number, currentStatus: boolean) {
+// Order Actions
+export async function adminUpdateOrderStatusAction(id: number, status: string) {
   try {
     await db
-      .update(menuItems)
-      .set({ isAvailable: !currentStatus })
-      .where(eq(menuItems.id, id));
+      .update(orders)
+      .set({ status })
+      .where(eq(orders.id, id));
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
 
-// 7. Order Status Actions
-export async function adminSetOrderStatusAction(orderId: number, status: string) {
+export async function adminDeleteOrderAction(id: number) {
   try {
-    await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+    await db.delete(orders).where(eq(orders.id, id));
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
 
-export async function adminUpdateOrderStatusAction(orderId: number, status: string) {
-  return adminSetOrderStatusAction(orderId, status);
-}
-
-// 8. Delivery Zone Actions
-export async function adminSaveZoneAction(data: any) {
+// Zone Actions
+export async function adminSaveZoneAction(zone: any) {
   try {
-    const feePiasters = typeof data.fee === "number" ? Math.round(data.fee * 100) : 0;
-
-    if (data.id) {
+    if (zone.id) {
       await db
         .update(deliveryZones)
         .set({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          fee: feePiasters,
-          isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
+          nameAr: zone.nameAr,
+          nameEn: zone.nameEn,
+          fee: Number(zone.fee),
+          estimatedMinutes: Number(zone.estimatedMinutes || 30),
+          sortOrder: zone.sortOrder || 0,
         })
-        .where(eq(deliveryZones.id, data.id));
+        .where(eq(deliveryZones.id, zone.id));
     } else {
+      const id = `zone-${Date.now()}`;
       await db.insert(deliveryZones).values({
-        nameAr: data.nameAr,
-        nameEn: data.nameEn,
-        fee: feePiasters,
-        isAvailable: true,
+        id,
+        nameAr: zone.nameAr,
+        nameEn: zone.nameEn,
+        fee: Number(zone.fee),
+        estimatedMinutes: Number(zone.estimatedMinutes || 30),
+        sortOrder: zone.sortOrder || 0,
       });
     }
     return { success: true };
@@ -441,7 +373,7 @@ export async function adminSaveZoneAction(data: any) {
   }
 }
 
-export async function adminDeleteZoneAction(id: number) {
+export async function adminDeleteZoneAction(id: string) {
   try {
     await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
     return { success: true };
@@ -450,17 +382,15 @@ export async function adminDeleteZoneAction(id: number) {
   }
 }
 
-// 9. General Settings Action
-export async function adminSetSettingAction(key: string, value: string) {
+export async function adminGetSettingsAction() {
   try {
-    const existing = await db.select().from(settings).where(eq(settings.key, key));
-    if (existing.length > 0) {
-      await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key));
-    } else {
-      await db.insert(settings).values({ key, value, updatedAt: new Date() });
-    }
-    return { success: true };
+    const rows = await db.select().from(settings);
+    return { success: true, settings: rows };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
+}
+
+export async function adminSaveSettingsAction(setts: Record<string, string>) {
+  return saveFrontendSettingsAction(setts);
 }
