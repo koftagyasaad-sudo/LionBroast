@@ -7,8 +7,6 @@ import {
   getPassData,
   getOrdersByNumbers,
   getDeliveryZoneById,
-  generatePassCode,
-  toNumericId,
 } from "@/db/queries";
 
 export async function submitOrderAction(payload: any) {
@@ -16,7 +14,7 @@ export async function submitOrderAction(payload: any) {
     const name = String(payload?.customerName || payload?.name || "").trim();
     const phone = String(payload?.customerPhone || payload?.phone || "").trim();
     const address = String(payload?.address || payload?.addressDetails || "").trim();
-    const deliveryZoneId = toNumericId(payload?.deliveryZoneId);
+    const zoneId = payload?.deliveryZoneId ? String(payload.deliveryZoneId) : null;
 
     if (!name || !phone || !address) {
       return { success: false, error: "يرجى ملء كافة البيانات المطلوبة (الاسم، الهاتف، العنوان)." };
@@ -26,62 +24,44 @@ export async function submitOrderAction(payload: any) {
       return { success: false, error: "السلة فارغة. يرجى إضافة أصناف قبل إرسال الطلب." };
     }
 
-    // تحويل الأصناف وقيم الأرقام
-    const formattedItems = payload.items.map((item: any) => {
-      const menuItemId = toNumericId(item.menuItemId ?? item.id);
-      return {
-        menuItemId,
-        quantity: Number(item.quantity || 1),
-        price: Number(item.price || 0),
-        notes: [
-          item.size ? `الحجم: ${item.size}` : "",
-          item.isSpicy ? "حار 🔥" : "",
-          item.notes || "",
-        ]
-          .filter(Boolean)
-          .join(" | "),
-      };
-    });
-
-    if (formattedItems.some((i: { menuItemId: number | null }) => i.menuItemId === null)) {
-      return { success: false, error: "أحد الأصناف غير صالح. يرجى إعادة تحميل المنيو." };
-    }
+    const formattedItems = payload.items.map((item: any) => ({
+      itemId: item.menuItemId ? String(item.menuItemId) : item.id ? String(item.id) : undefined,
+      nameAr: String(item.nameAr || item.name || "صنف"),
+      price: Number(item.price || 0),
+      quantity: Number(item.quantity || 1),
+    }));
 
     // البحث عن العميل أو إنشائه
     let customer = await getCustomerByPhone(phone);
     if (!customer) {
-      customer = await createCustomer({ name, phone, code: generatePassCode() });
+      const code = `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+      customer = await createCustomer({ name, phone, code });
     }
 
-    // حساب رسوم التوصيل
+    // حساب التوصيل والإجمالي
     let deliveryFee = Number(payload?.deliveryFee || 0);
-    if (deliveryZoneId !== null && !deliveryFee) {
-      const zone = await getDeliveryZoneById(deliveryZoneId);
-      if (zone) deliveryFee = Number(zone.fee ?? zone.price ?? 0);
+    if (zoneId && !deliveryFee) {
+      const zone = await getDeliveryZoneById(zoneId);
+      if (zone) deliveryFee = zone.fee || zone.price || 0;
     }
 
-    // حساب الإجمالي
-    const itemsTotal = formattedItems.reduce(
-      (sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity,
-      0
-    );
+    const itemsTotal = formattedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const discountAmount = Number(payload?.discountAmount || 0);
-    const baseTotal = payload?.totalAmount ? Number(payload.totalAmount) : itemsTotal + deliveryFee;
-    const finalTotal = Math.max(0, baseTotal - discountAmount);
+    const finalTotal = Math.max(0, itemsTotal + deliveryFee - discountAmount);
 
     const orderNumber = `LION-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newOrder = await createOrder({
       orderNumber,
-      customerId: customer.id,
-      deliveryZoneId,
-      customerName: name,
       customerPhone: phone,
+      customerName: name,
       address,
-      notes: String(payload?.notes || ""),
-      items: formattedItems as { menuItemId: number; quantity: number; price: number; notes: string }[],
-      totalAmount: finalTotal,
+      zoneId,
+      subtotal: itemsTotal,
       deliveryFee,
+      totalAmount: finalTotal,
+      notes: String(payload?.notes || ""),
+      items: formattedItems,
     });
 
     return {
@@ -114,12 +94,18 @@ export async function saveCustomerAction(data: {
 
     let customer = await getCustomerByPhone(phone);
     if (!customer) {
-      customer = await createCustomer({ name, phone, code: generatePassCode() });
+      const code = `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+      customer = await createCustomer({ name, phone, code });
     }
 
     return {
       success: true,
-      customer: { id: String(customer.id), name: customer.name, phone: customer.phone, passCode: customer.code },
+      customer: {
+        id: String(customer.id),
+        name: customer.name || customer.fullName || "",
+        phone: customer.phone || customer.primaryPhone || "",
+        passCode: customer.code,
+      },
     };
   } catch (err: any) {
     return { success: false, error: err?.message || "حدث خطأ غير متوقع" };
