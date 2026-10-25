@@ -108,8 +108,8 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
   try {
     const rows = await db.select().from(settings);
     const map = new Map<string, string>();
-    for (const r of rows) {
-      map.set(r.key, r.value);
+    for (let i = 0; i < rows.length; i++) {
+      map.set(rows[i].key, rows[i].value);
     }
 
     const pick = (key: string, fallback: string): string => map.get(key) || fallback;
@@ -158,13 +158,21 @@ export async function getPromo(): Promise<Promo> {
 export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
   await ensureSeedDatabase();
   const cats = await db.select().from(categories).orderBy(categories.sortOrder);
-  return cats.map(mapCategoryToDTO);
+  const result: CategoryDTO[] = [];
+  for (let i = 0; i < cats.length; i++) {
+    result.push(mapCategoryToDTO(cats[i]));
+  }
+  return result;
 }
 
 export async function getDeliveryZones(): Promise<ZoneDTO[]> {
   await ensureSeedDatabase();
   const zonesList = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
-  return zonesList.map(mapZoneToDTO);
+  const result: ZoneDTO[] = [];
+  for (let i = 0; i < zonesList.length; i++) {
+    result.push(mapZoneToDTO(zonesList[i]));
+  }
+  return result;
 }
 
 export async function getMenuData(): Promise<{
@@ -179,10 +187,25 @@ export async function getMenuData(): Promise<{
     db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
   ]);
 
+  const categoriesDTO: CategoryDTO[] = [];
+  for (let i = 0; i < cats.length; i++) {
+    categoriesDTO.push(mapCategoryToDTO(cats[i]));
+  }
+
+  const itemsDTO: MenuItemDTO[] = [];
+  for (let i = 0; i < rawItems.length; i++) {
+    itemsDTO.push(mapMenuItemToDTO(rawItems[i]));
+  }
+
+  const zonesDTO: ZoneDTO[] = [];
+  for (let i = 0; i < rawZones.length; i++) {
+    zonesDTO.push(mapZoneToDTO(rawZones[i]));
+  }
+
   return {
-    categories: cats.map(mapCategoryToDTO),
-    items: rawItems.map(mapMenuItemToDTO),
-    zones: rawZones.map(mapZoneToDTO),
+    categories: categoriesDTO,
+    items: itemsDTO,
+    zones: zonesDTO,
   };
 }
 
@@ -241,7 +264,11 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
         .orderBy(desc(orders.createdAt))
     : [];
 
-  const ltv = ordersList.reduce((sum: number, o: OrderRow) => sum + Number(o.totalAmount || 0), 0);
+  let ltv = 0;
+  for (let i = 0; i < ordersList.length; i++) {
+    ltv += Number(ordersList[i].totalAmount || 0);
+  }
+
   const ordersCount = ordersList.length;
 
   let zone: ZoneDTO | null = null;
@@ -257,6 +284,18 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
 
   const memberSince = customer.createdAt ?? new Date();
 
+  const formattedOrdersList = [];
+  for (let i = 0; i < ordersList.length; i++) {
+    const o = ordersList[i];
+    formattedOrdersList.push({
+      id: String(o.id),
+      orderNumber: o.orderNumber,
+      totalAmount: Number(o.totalAmount || 0),
+      status: o.status,
+      createdAt: o.createdAt ?? new Date(),
+    });
+  }
+
   return {
     customer: {
       id: String(customer.id),
@@ -269,13 +308,7 @@ export async function getPassData(code: string): Promise<CustomerPassData | null
       discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
       createdAt: memberSince,
     },
-    ordersList: ordersList.map((o: OrderRow) => ({
-      id: String(o.id),
-      orderNumber: o.orderNumber,
-      totalAmount: Number(o.totalAmount || 0),
-      status: o.status,
-      createdAt: o.createdAt ?? new Date(),
-    })),
+    ordersList: formattedOrdersList,
     ordersCount,
     ltv,
     zone,
@@ -345,15 +378,18 @@ export async function createOrder(payload: {
     .returning();
 
   if (payload.items.length > 0) {
-    await db.insert(orderLines).values(
-      payload.items.map((item: CreateOrderInputItem) => ({
+    const lineValues = [];
+    for (let i = 0; i < payload.items.length; i++) {
+      const item = payload.items[i];
+      lineValues.push({
         orderId: newOrder.id,
         itemId: item.itemId || null,
         nameAr: item.nameAr,
         price: item.price,
         quantity: item.quantity,
-      }))
-    );
+      });
+    }
+    await db.insert(orderLines).values(lineValues);
   }
 
   return newOrder;
