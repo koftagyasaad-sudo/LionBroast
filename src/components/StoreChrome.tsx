@@ -21,24 +21,18 @@ export default function StoreChrome({
   children, 
   zones, 
   promo,
-  aboutAr,
-  aboutEn,
-  dbHotline,
-  dbWhatsapp
+  frontend
 }: { 
   children: ReactNode; 
   zones: ZoneDTO[]; 
   promo: Promo;
-  aboutAr?: string;
-  aboutEn?: string;
-  dbHotline?: string;
-  dbWhatsapp?: string;
+  frontend?: any;
 }) {
   return (
     <>
-      <Header />
+      <Header frontend={frontend} />
       <main>{children}</main>
-      <Footer aboutAr={aboutAr} aboutEn={aboutEn} dbHotline={dbHotline} dbWhatsapp={dbWhatsapp} />
+      <Footer frontend={frontend} />
       <CartDrawer zones={zones} />
       <OnboardingModal zones={zones} />
       <LionPassDrawer />
