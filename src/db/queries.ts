@@ -1,196 +1,361 @@
-import { db } from "@/db";
-import { categories, menuItems, orders, orderLines, settings, customers } from "@/db/schema";
-import { eq, desc, asc, inArray } from "drizzle-orm";
-import { ensureSeedDatabase } from "@/db/seed";
+// src/db/queries.ts
 
-export interface FrontendSettings {
-  brand_ar: string;
-  brand_en: string;
-  logo_url: string;
-  hero_title_ar: string;
-  hero_title_en: string;
-  hero_subtitle_ar: string;
-  hero_subtitle_en: string;
-  hero_image_url: string;
-  marquee_text_ar: string;
-  marquee_text_en: string;
-  hotline: string;
-  whatsapp: string;
-  address_ar: string;
-  address_en: string;
-  working_hours_ar: string;
-  working_hours_en: string;
-  footer_about_ar: string;
-  footer_about_en: string;
-  primary_color: string;
-}
+import { db } from "./index";
+import {
+  categories,
+  menuItems,
+  orders,
+  orderLines,
+  customers,
+  deliveryZones,
+  settings,
+} from "./schema";
+import { eq, inArray, desc, asc } from "drizzle-orm";
+import { ensureSeedDatabase } from "./seed";
 
-export const DEFAULT_FRONTEND_SETTINGS: FrontendSettings = {
-  brand_ar: "بروست الأسد",
-  brand_en: "Broast El-Assad",
-  logo_url: "",
-  hero_title_ar: "الحار اللي يولع",
-  hero_title_en: "The Fire Edition",
-  hero_subtitle_ar: "ستريبس النار بغمسة الهالبينو المدخنة. خصم 20% طوال الأسبوع – جربها لو قدها.",
-  hero_subtitle_en: "Fire strips with smoked jalapeño dip. 20% off all week – try it if you dare.",
-  hero_image_url: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=1200&q=80",
-  marquee_text_ar: "دجاج طازج يومياً 💥 تتبيلة سرية 💥 كرسبي 100%",
-  marquee_text_en: "Fresh Chicken Daily 💥 Secret Recipe since 1998 💥 100% Crispy",
-  hotline: "19955",
-  whatsapp: "201000001555",
-  address_ar: "شارع الجمهورية، دسوق، كفر الشيخ",
-  address_en: "El-Gomhoria St., Desouk, Kafr El-Sheikh",
-  working_hours_ar: "12:00 PM — 3:00 AM",
-  working_hours_en: "12:00 PM — 3:00 AM",
-  footer_about_ar: "بروست الأسد 🦁 أكبر قطعة بروست في دسوق 🔥",
-  footer_about_en: "From the heart of Desouk to Egyptian homes — broast with a secret recipe since 1998.",
-  primary_color: "#f97316",
-};
-
-export async function getFrontendSettings(): Promise<FrontendSettings> {
+/**
+ * 1. إعدادات الواجهة والـ CMS
+ */
+export async function getFrontendSettings() {
   try {
-    const allSettings = await db.select().from(settings);
-
-    // Auto-seed Neon DB if empty
-    if (allSettings.length === 0) {
+    let rows = await db.select().from(settings);
+    if (!rows || rows.length === 0) {
       await ensureSeedDatabase();
-      return getFrontendSettings();
+      rows = await db.select().from(settings);
     }
 
     const settingsMap: Record<string, string> = {};
-    for (const row of allSettings) {
-      settingsMap[row.key] = row.value;
+    for (const r of rows) {
+      settingsMap[r.key] = r.value;
     }
 
     return {
-      brand_ar: settingsMap["brand_ar"] || DEFAULT_FRONTEND_SETTINGS.brand_ar,
-      brand_en: settingsMap["brand_en"] || DEFAULT_FRONTEND_SETTINGS.brand_en,
-      logo_url: settingsMap["logo_url"] || DEFAULT_FRONTEND_SETTINGS.logo_url,
-      hero_title_ar: settingsMap["hero_title_ar"] || DEFAULT_FRONTEND_SETTINGS.hero_title_ar,
-      hero_title_en: settingsMap["hero_title_en"] || DEFAULT_FRONTEND_SETTINGS.hero_title_en,
-      hero_subtitle_ar: settingsMap["hero_subtitle_ar"] || DEFAULT_FRONTEND_SETTINGS.hero_subtitle_ar,
-      hero_subtitle_en: settingsMap["hero_subtitle_en"] || DEFAULT_FRONTEND_SETTINGS.hero_subtitle_en,
-      hero_image_url: settingsMap["hero_image_url"] || DEFAULT_FRONTEND_SETTINGS.hero_image_url,
-      marquee_text_ar: settingsMap["marquee_text_ar"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
-      marquee_text_en: settingsMap["marquee_text_en"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
-      hotline: settingsMap["hotline"] || DEFAULT_FRONTEND_SETTINGS.hotline,
-      whatsapp: settingsMap["whatsapp"] || DEFAULT_FRONTEND_SETTINGS.whatsapp,
-      address_ar: settingsMap["address_ar"] || DEFAULT_FRONTEND_SETTINGS.address_ar,
-      address_en: settingsMap["address_en"] || DEFAULT_FRONTEND_SETTINGS.address_en,
-      working_hours_ar: settingsMap["working_hours_ar"] || DEFAULT_FRONTEND_SETTINGS.working_hours_ar,
-      working_hours_en: settingsMap["working_hours_en"] || DEFAULT_FRONTEND_SETTINGS.working_hours_en,
-      footer_about_ar: settingsMap["footer_about_ar"] || DEFAULT_FRONTEND_SETTINGS.footer_about_ar,
-      footer_about_en: settingsMap["footer_about_en"] || DEFAULT_FRONTEND_SETTINGS.footer_about_en,
-      primary_color: settingsMap["primary_color"] || DEFAULT_FRONTEND_SETTINGS.primary_color,
+      brand_name: settingsMap.brand_name || "بروست الأسد",
+      logo_url: settingsMap.logo_url || "",
+      hero_title_ar: settingsMap.hero_title_ar || "أفضل بروستد في دسوق",
+      hero_title_en: settingsMap.hero_title_en || "Best Broast in Desouk",
+      hero_desc_ar:
+        settingsMap.hero_desc_ar ||
+        "دجاج طازج يومياً، تتبيلة سرية، وقرمشة لا تقاوم!",
+      hero_desc_en:
+        settingsMap.hero_desc_en ||
+        "Fresh daily chicken, secret seasoning, irresistible crunch!",
+      marquee_ar:
+        settingsMap.marquee_ar ||
+        "🔥 خصم 10% على الطلب الأول عبر الموقع! | 🚀 توصيل سريع لجميع مناطق دسوق | 🍗 جرب البروست الحار الآن!",
+      marquee_en:
+        settingsMap.marquee_en ||
+        "🔥 10% OFF your first order! | 🚀 Fast delivery across Desouk | 🍗 Try our Spicy Broast now!",
+      footer_text_ar:
+        settingsMap.footer_text_ar ||
+        "بروست الأسد - طعم القرمشة الحقيقية في دسوق.",
+      footer_text_en:
+        settingsMap.footer_text_en ||
+        "Broast El-Assad - Real Crispy Taste in Desouk.",
+      address_ar:
+        settingsMap.address_ar || "دسوق - شارع الجيش - بجوار عمر أفندي",
+      address_en:
+        settingsMap.address_en || "Desouk - El-Gaish St - Next to Omar Effendi",
+      working_hours_ar:
+        settingsMap.working_hours_ar || "يومياً من 12 ظهراً حتى 2 صباحاً",
+      working_hours_en:
+        settingsMap.working_hours_en || "Daily from 12:00 PM to 2:00 AM",
+      hotline: settingsMap.hotline || "19999",
+      whatsapp_number: settingsMap.whatsapp_number || "201012345678",
     };
   } catch (err) {
-    return DEFAULT_FRONTEND_SETTINGS;
+    console.error("Error in getFrontendSettings:", err);
+    return {
+      brand_name: "بروست الأسد",
+      logo_url: "",
+      hero_title_ar: "أفضل بروستد في دسوق",
+      hero_title_en: "Best Broast in Desouk",
+      hero_desc_ar: "دجاج طازج يومياً، تتبيلة سرية، وقرمشة لا تقاوم!",
+      hero_desc_en: "Fresh daily chicken, secret seasoning, irresistible crunch!",
+      marquee_ar:
+        "🔥 خصم 10% على الطلب الأول عبر الموقع! | 🚀 توصيل سريع لجميع مناطق دسوق | 🍗 جرب البروست الحار الآن!",
+      marquee_en:
+        "🔥 10% OFF your first order! | 🚀 Fast delivery across Desouk | 🍗 Try our Spicy Broast now!",
+      footer_text_ar: "بروست الأسد - طعم القرمشة الحقيقية في دسوق.",
+      footer_text_en: "Broast El-Assad - Real Crispy Taste in Desouk.",
+      address_ar: "دسوق - شارع الجيش - بجوار عمر أفندي",
+      address_en: "Desouk - El-Gaish St - Next to Omar Effendi",
+      working_hours_ar: "يومياً من 12 ظهراً حتى 2 صباحاً",
+      working_hours_en: "Daily from 12:00 PM to 2:00 AM",
+      hotline: "19999",
+      whatsapp_number: "201012345678",
+    };
   }
 }
 
+/**
+ * 2. استعلامات القائمة والمنيو
+ */
 export async function getCategoriesWithItems() {
   try {
     let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-
-    // Auto seed if database is clean
-    if (cats.length === 0) {
+    if (!cats || cats.length === 0) {
       await ensureSeedDatabase();
       cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
     }
 
-    const result = [];
+    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
 
-    for (const cat of cats) {
-      const itemsList = await db
-        .select()
-        .from(menuItems)
-        .where(eq(menuItems.categoryId, cat.id))
-        .orderBy(asc(menuItems.sortOrder));
-
-      result.push({
+    const result = cats.map((cat) => {
+      const catItems = items.filter((it) => it.categoryId === cat.id);
+      return {
         ...cat,
-        items: itemsList,
-      });
-    }
+        items: catItems,
+      };
+    });
 
     return result;
   } catch (err) {
+    console.error("Error in getCategoriesWithItems:", err);
     return [];
   }
 }
 
 export async function getMenuData() {
-  return await getCategoriesWithItems();
+  return getCategoriesWithItems();
 }
 
 export async function getPromo() {
-  try {
-    const allSettings = await db.select().from(settings);
-    const map: Record<string, string> = {};
-    for (const s of allSettings) map[s.key] = s.value;
+  return {
+    enabled: true,
+    title: "خصم 10% على الطلب الأول",
+    code: "LION10",
+  };
+}
 
-    return {
-      marqueeTextAr: map["marquee_text_ar"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
-      marqueeTextEn: map["marquee_text_en"] || DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
-      isAvailable: true,
-    };
-  } catch {
-    return {
-      marqueeTextAr: DEFAULT_FRONTEND_SETTINGS.marquee_text_ar,
-      marqueeTextEn: DEFAULT_FRONTEND_SETTINGS.marquee_text_en,
-      isAvailable: true,
-    };
+/**
+ * 3. استعلامات العملاء (Customers Queries)
+ */
+export async function getCustomerByPhone(phone: string) {
+  try {
+    const rows = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.primaryPhone, phone))
+      .limit(1);
+    return rows[0] || null;
+  } catch (err) {
+    console.error("Error in getCustomerByPhone:", err);
+    return null;
   }
 }
 
-export async function getAllOrders() {
+export async function getCustomerByCode(code: string) {
   try {
-    const rawOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
-    const result = [];
+    const rows = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.code, code))
+      .limit(1);
+    return rows[0] || null;
+  } catch (err) {
+    console.error("Error in getCustomerByCode:", err);
+    return null;
+  }
+}
 
-    for (const o of rawOrders) {
-      const itemsList = await db
+export async function getPassData(phoneOrCode: string) {
+  try {
+    const byPhone = await getCustomerByPhone(phoneOrCode);
+    if (byPhone) return byPhone;
+
+    const byCode = await getCustomerByCode(phoneOrCode);
+    if (byCode) return byCode;
+
+    return null;
+  } catch (err) {
+    console.error("Error in getPassData:", err);
+    return null;
+  }
+}
+
+export async function createCustomer(data: {
+  fullName: string;
+  primaryPhone: string;
+  primaryAddress?: string;
+}) {
+  const code = `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+  const [newCust] = await db
+    .insert(customers)
+    .values({
+      code,
+      fullName: data.fullName,
+      primaryPhone: data.primaryPhone,
+      primaryAddress: data.primaryAddress || "",
+      totalOrders: 0,
+      totalSpent: 0,
+      loyaltyPoints: 0,
+      discountPercent: 0,
+    })
+    .returning();
+
+  return newCust;
+}
+
+/**
+ * 4. استعلامات مناطق التوصيل (Delivery Zones Queries)
+ */
+export async function getDeliveryZoneById(id: string) {
+  try {
+    if (!id) return null;
+    const rows = await db
+      .select()
+      .from(deliveryZones)
+      .where(eq(deliveryZones.id, id))
+      .limit(1);
+    return rows[0] || null;
+  } catch (err) {
+    console.error("Error in getDeliveryZoneById:", err);
+    return null;
+  }
+}
+
+export async function getDeliveryZones() {
+  try {
+    let zones = await db
+      .select()
+      .from(deliveryZones)
+      .orderBy(asc(deliveryZones.sortOrder));
+
+    if (!zones || zones.length === 0) {
+      await ensureSeedDatabase();
+      zones = await db
         .select()
-        .from(orderLines)
-        .where(eq(orderLines.orderId, o.id));
-
-      result.push({
-        ...o,
-        items: itemsList,
-      });
+        .from(deliveryZones)
+        .orderBy(asc(deliveryZones.sortOrder));
     }
 
-    return result;
+    return zones;
   } catch (err) {
+    console.error("Error in getDeliveryZones:", err);
+    return [];
+  }
+}
+
+/**
+ * 5. استعلامات الطلبات (Orders Queries)
+ */
+export async function getAllOrders() {
+  try {
+    const ords = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    if (!ords || ords.length === 0) return [];
+
+    const orderIds = ords.map((o) => o.id);
+    const lines = await db
+      .select()
+      .from(orderLines)
+      .where(inArray(orderLines.orderId, orderIds));
+
+    return ords.map((ord) => ({
+      ...ord,
+      items: lines.filter((l) => l.orderId === ord.id),
+    }));
+  } catch (err) {
+    console.error("Error in getAllOrders:", err);
     return [];
   }
 }
 
 export async function getOrdersByNumbers(orderNumbers: string[]) {
-  if (!orderNumbers || orderNumbers.length === 0) return [];
   try {
-    return await db.select().from(orders).where(inArray(orders.orderNumber, orderNumbers));
+    if (!orderNumbers || orderNumbers.length === 0) return [];
+
+    const ords = await db
+      .select()
+      .from(orders)
+      .where(inArray(orders.orderNumber, orderNumbers))
+      .orderBy(desc(orders.createdAt));
+
+    if (!ords || ords.length === 0) return [];
+
+    const orderIds = ords.map((o) => o.id);
+    const lines = await db
+      .select()
+      .from(orderLines)
+      .where(inArray(orderLines.orderId, orderIds));
+
+    return ords.map((ord) => {
+      const items = lines.filter((l) => l.orderId === ord.id);
+      return {
+        ...ord,
+        items,
+        itemsCount: items.reduce((sum, item) => sum + item.quantity, 0) || 1,
+      };
+    });
   } catch (err) {
+    console.error("Error in getOrdersByNumbers:", err);
     return [];
   }
 }
 
-export async function getPassData(code: string) {
-  try {
-    const [cust] = await db.select().from(customers).where(eq(customers.code, code));
-    if (!cust) return null;
+export async function createOrder(data: {
+  orderNumber: string;
+  customerPhone: string;
+  customerName: string;
+  address: string;
+  zoneId?: string | null;
+  subtotal: number;
+  deliveryFee: number;
+  totalAmount: number;
+  notes?: string;
+  items: {
+    itemId?: string;
+    nameAr: string;
+    price: number;
+    quantity: number;
+  }[];
+}) {
+  const [newOrder] = await db
+    .insert(orders)
+    .values({
+      orderNumber: data.orderNumber,
+      customerPhone: data.customerPhone,
+      customerName: data.customerName,
+      address: data.address,
+      zoneId: data.zoneId || null,
+      subtotal: data.subtotal,
+      deliveryFee: data.deliveryFee,
+      totalAmount: data.totalAmount,
+      status: "pending",
+      notes: data.notes || "",
+    })
+    .returning();
 
-    const customerOrders = await db
-      .select()
-      .from(orders)
-      .where(eq(orders.customerCode, code))
-      .orderBy(desc(orders.createdAt));
-
-    return {
-      customer: cust,
-      orders: customerOrders,
-    };
-  } catch (err) {
-    return null;
+  if (data.items && data.items.length > 0) {
+    await db.insert(orderLines).values(
+      data.items.map((it) => ({
+        orderId: newOrder.id,
+        itemId: it.itemId || null,
+        nameAr: it.nameAr,
+        price: it.price,
+        quantity: it.quantity,
+      }))
+    );
   }
+
+  // تحديث نقاط ونشاط العميل في حال وجود حسابه
+  const existingCust = await getCustomerByPhone(data.customerPhone);
+  if (existingCust) {
+    const updatedOrders = (existingCust.totalOrders || 0) + 1;
+    const updatedSpent = (existingCust.totalSpent || 0) + data.totalAmount;
+    const addedPoints = Math.floor(data.totalAmount / 10);
+    const updatedPoints = (existingCust.loyaltyPoints || 0) + addedPoints;
+
+    await db
+      .update(customers)
+      .set({
+        totalOrders: updatedOrders,
+        totalSpent: updatedSpent,
+        loyaltyPoints: updatedPoints,
+        updatedAt: new Date(),
+      })
+      .where(eq(customers.id, existingCust.id));
+  }
+
+  return newOrder;
 }
