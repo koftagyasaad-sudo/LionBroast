@@ -1,122 +1,364 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Save, Type, MessageSquare, PhoneCall, MapPin, Store } from "lucide-react";
-import type { TabProps } from "@/components/admin/AdminShell";
-import { adminSetSettingAction } from "@/app/admin-actions";
+import { saveFrontendSettingsAction } from "@/app/admin-actions";
+import { FrontendSettings } from "@/db/queries";
+import { Save, Image as ImageIcon, Check, Globe, Phone, Clock, MapPin, Sparkles, Building } from "lucide-react";
 
-const input =
-  "rounded-xl border border-white/10 bg-carbon-950 px-3 py-2 text-sm font-semibold outline-none placeholder:text-white/30 focus:border-brand-500 w-full";
+interface FrontendTabProps {
+  initialSettings: FrontendSettings;
+}
 
-export default function FrontendTab({ token, data, refresh }: TabProps) {
-  const settingsMap = Object.fromEntries(data.settings.map((s) => [s.key, s.value]));
-  
-  const [content, setContent] = useState({
-    // الهوية الأساسية
-    brandAr: settingsMap.brand_ar ?? "بروست الأسد",
-    brandEn: settingsMap.brand_en ?? "Broast El-Assad",
-    addressAr: settingsMap.address_ar ?? "شارع الجمهورية، دسوق، كفر الشيخ",
-    addressEn: settingsMap.address_en ?? "El-Gomhoria St., Desouk, Kafr El-Sheikh",
-    hours: settingsMap.hours ?? "12:00 PM — 3:00 AM",
-    
-    // الهيرو
-    heroTitleAr: settingsMap.hero_title_ar ?? "الحار اللي يولّع",
-    heroTitleEn: settingsMap.hero_title_en ?? "The Fire Edition",
-    heroSubAr: settingsMap.hero_sub_ar ?? "ستريبس النار بغمسة الهالبينو المدخنة. خصم ٢٠٪ طوال الأسبوع — جرّبها لو قدها.",
-    heroSubEn: settingsMap.hero_sub_en ?? "Fire strips with smoked jalapeño dip. 20% off all week — try it if you dare.",
-    
-    // إضافات
-    marqueeAr: settingsMap.marquee_ar ?? "دجاج طازج يومياً 🔥 تتبيلة سرية من 1998 🔥 كرسبي ١٠٠٪",
-    marqueeEn: settingsMap.marquee_en ?? "Fresh Chicken Daily 🔥 Secret Recipe since 1998 🔥 100% Crispy",
-    aboutAr: settingsMap.about_ar ?? "من قلب دسوق للبيوت المصرية — بروست بكراسة سرية من 1998، دجاج طازج يومياً، وزيت بيتغير كل شوية.",
-    aboutEn: settingsMap.about_en ?? "From the heart of Desouk to Egyptian homes — broast with a secret recipe since 1998.",
-    hotline: settingsMap.hotline ?? "19955",
-    whatsapp: settingsMap.whatsapp ?? "201000001555",
-  });
+export default function FrontendTab({ initialSettings }: FrontendTabProps) {
+  const [formData, setFormData] = useState<FrontendSettings>(initialSettings);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const handleChange = (key: keyof FrontendSettings, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+    setSavedSuccess(false);
+  };
 
-  const saveContent = async () => {
-    setSaving(true);
-    await adminSetSettingAction(token, "brand_ar", content.brandAr);
-    await adminSetSettingAction(token, "brand_en", content.brandEn);
-    await adminSetSettingAction(token, "address_ar", content.addressAr);
-    await adminSetSettingAction(token, "address_en", content.addressEn);
-    await adminSetSettingAction(token, "hours", content.hours);
-    
-    await adminSetSettingAction(token, "hero_title_ar", content.heroTitleAr);
-    await adminSetSettingAction(token, "hero_title_en", content.heroTitleEn);
-    await adminSetSettingAction(token, "hero_sub_ar", content.heroSubAr);
-    await adminSetSettingAction(token, "hero_sub_en", content.heroSubEn);
-    
-    await adminSetSettingAction(token, "marquee_ar", content.marqueeAr);
-    await adminSetSettingAction(token, "marquee_en", content.marqueeEn);
-    await adminSetSettingAction(token, "about_ar", content.aboutAr);
-    await adminSetSettingAction(token, "about_en", content.aboutEn);
-    await adminSetSettingAction(token, "hotline", content.hotline);
-    await adminSetSettingAction(token, "whatsapp", content.whatsapp);
-    
-    setSaved(true);
-    setSaving(false);
-    setTimeout(() => setSaved(false), 2000);
-    await refresh();
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSavedSuccess(false);
+
+    try {
+      const res = await saveFrontendSettingsAction(formData);
+      if (res.success) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 4000);
+      } else {
+        alert("حدث خطأ أثناء الحفظ: " + res.error);
+      }
+    } catch (err) {
+      alert("حدث خطأ غير متوقع أثناء الحفظ.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2 pb-10">
-      
-      {/* القسم الأول: بيانات المطعم (جديد) */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5 lg:col-span-2">
-        <h2 className="flex items-center gap-2 text-lg font-extrabold text-white">
-          <Store className="size-5 text-emerald-500" /> الهوية وبيانات المطعم
-        </h2>
-        <div className="mt-5 grid md:grid-cols-2 gap-4">
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">اسم المطعم (عربي)</p><input className={input} value={content.brandAr} onChange={(e) => setContent({ ...content, brandAr: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Brand Name (English)</p><input className={input} dir="ltr" value={content.brandEn} onChange={(e) => setContent({ ...content, brandEn: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">العنوان (عربي)</p><input className={input} value={content.addressAr} onChange={(e) => setContent({ ...content, addressAr: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Address (English)</p><input className={input} dir="ltr" value={content.addressEn} onChange={(e) => setContent({ ...content, addressEn: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">مواعيد العمل</p><input className={input} dir="ltr" value={content.hours} onChange={(e) => setContent({ ...content, hours: e.target.value })} /></div>
-        </div>
-      </div>
-
-      {/* القسم الثاني: الهيرو */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
-        <h2 className="flex items-center gap-2 text-lg font-extrabold">
-          <Type className="size-5 text-brand-500" /> الواجهة الرئيسية (Hero)
-        </h2>
-        <div className="mt-5 space-y-4">
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">العنوان الرئيسي (عربي)</p><input className={input} value={content.heroTitleAr} onChange={(e) => setContent({ ...content, heroTitleAr: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Main Title (English)</p><input className={input} dir="ltr" value={content.heroTitleEn} onChange={(e) => setContent({ ...content, heroTitleEn: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الوصف (عربي)</p><textarea className={input} rows={2} value={content.heroSubAr} onChange={(e) => setContent({ ...content, heroSubAr: e.target.value })} /></div>
-          <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Subtitle (English)</p><textarea className={input} rows={2} dir="ltr" value={content.heroSubEn} onChange={(e) => setContent({ ...content, heroSubEn: e.target.value })} /></div>
-        </div>
-      </div>
-
-      {/* القسم الثالث: إعدادات إضافية وأرقام التواصل */}
-      <div className="flex flex-col gap-5">
-        <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
-          <h2 className="flex items-center gap-2 text-lg font-extrabold">
-            <MessageSquare className="size-5 text-cheese-400" /> نصوص وإعدادات إضافية
+    <div className="space-y-6 pb-12" dir="rtl">
+      <div className="flex items-center justify-between border-b pb-4 dark:border-zinc-800">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <Building className="w-6 h-6 text-rose-600" />
+            إعدادات هوية الموقع والمحتوى (CMS)
           </h2>
-          <div className="mt-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1"><PhoneCall className="size-3"/> الخط الساخن</p><input className={input} dir="ltr" value={content.hotline} onChange={(e) => setContent({ ...content, hotline: e.target.value })} /></div>
-              <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40 flex items-center gap-1"><PhoneCall className="size-3 text-[#25D366]"/> الواتساب (بالكود)</p><input className={input} dir="ltr" placeholder="2010..." value={content.whatsapp} onChange={(e) => setContent({ ...content, whatsapp: e.target.value })} /></div>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            قم بتعديل اللوجو، الاسم، النصوص الرئيسية، وبيانات التواصل لتظهر على الواجهة مباشرة.
+          </p>
+        </div>
+        
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-rose-600/20 transition-all disabled:opacity-50"
+        >
+          {savedSuccess ? (
+            <>
+              <Check className="w-5 h-5 text-emerald-300" />
+              <span>تم الحفظ بنجاح!</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              <span>{isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <form onSubmit={handleSave} className="space-y-8">
+        {/* Brand & Logo Settings */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b pb-3 dark:border-zinc-800">
+            <Globe className="w-5 h-5 text-rose-500" />
+            هوية العلامة التجارية واللوجو
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                اسم العلامة التجارية (عربي)
+              </label>
+              <input
+                type="text"
+                value={formData.brand_ar}
+                onChange={(e) => handleChange("brand_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                required
+              />
             </div>
-            <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">الشريط المتحرك (عربي) - افصل بـ 🔥</p><textarea className={input} rows={2} value={content.marqueeAr} onChange={(e) => setContent({ ...content, marqueeAr: e.target.value })} /></div>
-            <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Marquee (English) - Sep by 🔥</p><textarea className={input} rows={2} dir="ltr" value={content.marqueeEn} onChange={(e) => setContent({ ...content, marqueeEn: e.target.value })} /></div>
-            <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">وصف الفوتر (عربي)</p><textarea className={input} rows={2} value={content.aboutAr} onChange={(e) => setContent({ ...content, aboutAr: e.target.value })} /></div>
-            <div><p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Footer About (English)</p><textarea className={input} rows={2} dir="ltr" value={content.aboutEn} onChange={(e) => setContent({ ...content, aboutEn: e.target.value })} /></div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                اسم العلامة التجارية (إنجليزي)
+              </label>
+              <input
+                type="text"
+                value={formData.brand_en}
+                onChange={(e) => handleChange("brand_en", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-rose-500" />
+              رابط شعار / لوجو الموقع (Logo URL)
+            </label>
+            <input
+              type="url"
+              placeholder="https://example.com/logo.png"
+              value={formData.logo_url || ""}
+              onChange={(e) => handleChange("logo_url", e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none text-left"
+              dir="ltr"
+            />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+              ضع رابط صورة اللوجو (PNG أو SVG بخلفية شفافة يفضل). في حال تركه فارغاً سيتم إظهار اسم المطعم كنص.
+            </p>
+
+            {formData.logo_url && (
+              <div className="mt-3 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-xl inline-flex items-center gap-3">
+                <span className="text-xs text-zinc-500">معاينة اللوجو:</span>
+                <img
+                  src={formData.logo_url}
+                  alt="Logo Preview"
+                  className="h-10 w-auto object-contain max-w-[150px]"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* زر الحفظ */}
-        <button onClick={saveContent} disabled={saving} className="glow-brand flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-4 text-sm font-extrabold text-white transition hover:scale-[1.01] disabled:opacity-50">
-          {saved ? <Check className="size-5" /> : <Save className="size-5" />}
-          {saved ? "تم الحفظ بنجاح" : "حفظ كل التعديلات"}
-        </button>
-      </div>
+        {/* Hero Banner Settings */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b pb-3 dark:border-zinc-800">
+            <Sparkles className="w-5 h-5 text-amber-500" />
+            واجهة الصفحة الرئيسية (Hero Section)
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                العنوان الرئيسي (عربي)
+              </label>
+              <input
+                type="text"
+                value={formData.hero_title_ar}
+                onChange={(e) => handleChange("hero_title_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                العنوان الرئيسي (إنجليزي)
+              </label>
+              <input
+                type="text"
+                value={formData.hero_title_en}
+                onChange={(e) => handleChange("hero_title_en", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                الوصف الفرعي (عربي)
+              </label>
+              <textarea
+                rows={2}
+                value={formData.hero_subtitle_ar}
+                onChange={(e) => handleChange("hero_subtitle_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                الوصف الفرعي (إنجليزي)
+              </label>
+              <textarea
+                rows={2}
+                value={formData.hero_subtitle_en}
+                onChange={(e) => handleChange("hero_subtitle_en", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+              رابط صورة البانر الرئيسي (Hero Image URL)
+            </label>
+            <input
+              type="url"
+              value={formData.hero_image_url}
+              onChange={(e) => handleChange("hero_image_url", e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none text-left"
+              dir="ltr"
+            />
+          </div>
+        </div>
+
+        {/* Dynamic Ticker / Marquee */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b pb-3 dark:border-zinc-800">
+            <Clock className="w-5 h-5 text-blue-500" />
+            شريط الإعلانات العريض (Marquee Ticker)
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                نص الشريط (عربي)
+              </label>
+              <input
+                type="text"
+                value={formData.marquee_text_ar}
+                onChange={(e) => handleChange("marquee_text_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                نص الشريط (إنجليزي)
+              </label>
+              <input
+                type="text"
+                value={formData.marquee_text_en}
+                onChange={(e) => handleChange("marquee_text_en", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Contact Details */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b pb-3 dark:border-zinc-800">
+            <Phone className="w-5 h-5 text-emerald-500" />
+            بيانات التواصل والعنوان
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                الخط الساخن / الهاتف
+              </label>
+              <input
+                type="text"
+                value={formData.hotline}
+                onChange={(e) => handleChange("hotline", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none text-left"
+                dir="ltr"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                رقم الواتساب (بالكود الدولي)
+              </label>
+              <input
+                type="text"
+                value={formData.whatsapp}
+                onChange={(e) => handleChange("whatsapp", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none text-left"
+                dir="ltr"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                العنوان (عربي)
+              </label>
+              <input
+                type="text"
+                value={formData.address_ar}
+                onChange={(e) => handleChange("address_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                مواعيد العمل (عربي)
+              </label>
+              <input
+                type="text"
+                value={formData.working_hours_ar}
+                onChange={(e) => handleChange("working_hours_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer About Text */}
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 border-b pb-3 dark:border-zinc-800">
+            <MapPin className="w-5 h-5 text-purple-500" />
+            نص أسفل الصفحة (Footer)
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                نبذة عن المطعم (عربي)
+              </label>
+              <textarea
+                rows={3}
+                value={formData.footer_about_ar}
+                onChange={(e) => handleChange("footer_about_ar", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                نبذة عن المطعم (إنجليزي)
+              </label>
+              <textarea
+                rows={3}
+                value={formData.footer_about_en}
+                onChange={(e) => handleChange("footer_about_en", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-4">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold px-8 py-3 rounded-xl shadow-xl shadow-rose-600/20 transition-all disabled:opacity-50"
+          >
+            {savedSuccess ? (
+              <>
+                <Check className="w-5 h-5 text-emerald-300" />
+                <span>تم الحفظ!</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                <span>{isSaving ? "جاري الحفظ..." : "حفظ جميع التغييرات"}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
