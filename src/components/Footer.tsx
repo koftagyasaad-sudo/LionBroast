@@ -6,25 +6,18 @@ import { BRAND, HOTLINE, WHATSAPP_NUMBER } from "@/lib/constants";
 import { waLink } from "@/lib/utils";
 import { useDict, useIsAr } from "@/lib/hooks";
 
-export default function Footer({ 
-  aboutAr, 
-  aboutEn,
-  dbHotline,
-  dbWhatsapp 
-}: { 
-  aboutAr?: string; 
-  aboutEn?: string;
-  dbHotline?: string;
-  dbWhatsapp?: string;
-}) {
+export default function Footer({ frontend }: { frontend?: any }) {
   const t = useDict();
   const isAr = useIsAr();
   
-  const aboutText = isAr ? (aboutAr || t.footer.about) : (aboutEn || t.footer.about);
-  
-  // بنستخدم الرقم الجاي من لوحة التحكم لو موجود، ولو مش موجود نستخدم الأساسي
-  const activeHotline = dbHotline || HOTLINE;
-  const activeWhatsapp = dbWhatsapp || WHATSAPP_NUMBER;
+  // دمج بيانات لوحة التحكم مع القيم الافتراضية
+  const aboutText = isAr ? (frontend?.aboutAr || t.footer.about) : (frontend?.aboutEn || t.footer.about);
+  const activeHotline = frontend?.hotline || HOTLINE;
+  const activeWhatsapp = frontend?.whatsapp || WHATSAPP_NUMBER;
+  const brandName = isAr ? (frontend?.brandAr || BRAND.nameAr) : (frontend?.brandEn || BRAND.name);
+  const brandSub = isAr ? (frontend?.brandEn || BRAND.name) : (frontend?.brandAr || BRAND.nameAr);
+  const address = isAr ? (frontend?.addressAr || BRAND.addressAr) : (frontend?.addressEn || BRAND.addressEn);
+  const hours = frontend?.hours || BRAND.hours;
 
   return (
     <footer id="contact" className="relative mt-24 border-t border-line bg-surface">
@@ -35,8 +28,8 @@ export default function Footer({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/img/icon-512.png" alt="logo" className="size-12 rounded-2xl object-cover ring-2 ring-brand-500/50" />
             <div>
-              <p className="text-lg font-extrabold">{t.brand}</p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-500">{isAr ? BRAND.name : BRAND.nameAr}</p>
+              <p className="text-lg font-extrabold">{brandName}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-500">{brandSub}</p>
             </div>
           </div>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">{aboutText}</p>
@@ -69,11 +62,11 @@ export default function Footer({
             </li>
             <li className="flex items-start gap-2">
               <MapPin className="mt-0.5 size-4 shrink-0 text-brand-500" />
-              <span>{t.footer.branch}: {isAr ? BRAND.addressAr : BRAND.addressEn}</span>
+              <span>{t.footer.branch}: {address}</span>
             </li>
             <li className="flex items-center gap-2">
               <Clock4 className="size-4 shrink-0 text-cheese-400" />
-              <span>{t.footer.hours}: <span dir="ltr">{BRAND.hours}</span></span>
+              <span>{t.footer.hours}: <span dir="ltr">{hours}</span></span>
             </li>
           </ul>
         </div>
