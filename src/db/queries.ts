@@ -1,534 +1,293 @@
-// src/db/queries.ts
-
 import { db } from "./index";
-import {
-  categories,
-  menuItems,
-  orders,
-  orderLines,
-  customers,
-  deliveryZones,
-  settings,
-  type Category,
-  type MenuItem,
-  type DeliveryZone,
-} from "./schema";
-import { eq, inArray, desc, asc } from "drizzle-orm";
+import { categories, menuItems, deliveryZones, settings, customers, orders, orderLines } from "./schema";
+import { eq, desc, inArray } from "drizzle-orm";
+import type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo, FrontendSettings, CustomerPassData } from "@/lib/types";
 import { ensureSeedDatabase } from "./seed";
-import type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo } from "@/lib/types";
 
-export type { CategoryDTO, MenuItemDTO, ZoneDTO, Promo };
-
-export type FrontendSettings = {
-  brand_name: string;
-  logo_url: string;
-  hero_title_ar: string;
-  hero_title_en: string;
-  hero_desc_ar: string;
-  hero_desc_en: string;
-  marquee_ar: string;
-  marquee_en: string;
-  footer_text_ar: string;
-  footer_text_en: string;
-  address_ar: string;
-  address_en: string;
-  working_hours_ar: string;
-  working_hours_en: string;
-  hotline: string;
-  whatsapp_number: string;
-};
-
-export type CustomerPassData = {
-  customer: {
-    code: string;
-    fullName: string;
-    primaryPhone: string;
-    primaryAddress: string;
-    totalOrders: number;
-    totalSpent: number;
-    loyaltyPoints: number;
-    discountPercent: number;
+// Mapper Functions
+export function mapCategoryToDTO(cat: typeof categories.$inferSelect): CategoryDTO {
+  return {
+    id: cat.id,
+    nameAr: cat.nameAr,
+    nameEn: cat.nameEn || undefined,
+    sortOrder: cat.sortOrder || 0,
+    image: "",
+    isActive: true,
   };
-  ordersList: Array<{
-    orderNumber: string;
-    status: string;
-    totalAmount: number;
-    createdAt: string;
-  }>;
-  ordersCount: number;
-  ltv: number;
-  zone: any;
-};
+}
 
-export type MenuData = {
-  categories: CategoryDTO[];
-  items: MenuItemDTO[];
-  zones: ZoneDTO[];
-};
-
-function mapMenuItemToDTO(item: MenuItem): MenuItemDTO {
-  const isAvail = item.isAvailable === 1 || (item.isAvailable as any) === true;
+export function mapMenuItemToDTO(item: typeof menuItems.$inferSelect): MenuItemDTO {
   return {
     id: item.id,
     categoryId: item.categoryId,
     nameAr: item.nameAr,
-    nameEn: item.nameEn,
-    descriptionAr: item.descriptionAr || "",
-    descriptionEn: item.descriptionEn || "",
-    price: item.price,
-    imageUrl: item.imageUrl || "",
-    image: item.imageUrl || "",
-    badge: item.badge || "",
-    sortOrder: item.sortOrder,
-    isAvailable: isAvail ? 1 : 0,
-    sizes: [],
-    spicyOption: false,
-    isBestSeller: Boolean(item.badge && item.badge.includes("الأكثر مبيعاً")),
+    nameEn: item.nameEn || undefined,
+    descriptionAr: item.descriptionAr || undefined,
+    descriptionEn: item.descriptionEn || undefined,
+    price: Number(item.price || 0),
+    image: item.image || undefined,
+    isAvailable: Boolean(item.isAvailable),
+    sortOrder: item.sortOrder || 0,
+    spicyOption: Boolean(item.spicyOption),
+    isBestSeller: Boolean(item.isBestSeller),
+    sizes: item.sizes ? (item.sizes as { name: string; price: number }[]) : undefined,
   };
 }
 
-function mapCategoryToDTO(cat: Category, catItems: MenuItemDTO[]): CategoryDTO {
+export function mapZoneToDTO(zone: typeof deliveryZones.$inferSelect): ZoneDTO {
   return {
-    id: cat.id,
-    nameAr: cat.nameAr,
-    nameEn: cat.nameEn,
-    sortOrder: cat.sortOrder,
-    image: "",
-    isActive: true,
-    items: catItems,
-  };
-}
-
-function mapZoneToDTO(z: DeliveryZone): ZoneDTO {
-  return {
-    id: z.id,
-    nameAr: z.nameAr,
-    nameEn: z.nameEn,
-    fee: z.fee,
-    price: z.fee,
-    estimatedMinutes: z.estimatedMinutes,
-    sortOrder: z.sortOrder,
+    id: zone.id,
+    nameAr: zone.nameAr,
+    nameEn: zone.nameEn || undefined,
+    price: Number(zone.fee || 0),
+    fee: Number(zone.fee || 0),
+    estimatedMinutes: zone.estimatedMinutes || 30,
     isActive: true,
   };
 }
 
-/**
- * 1. إعدادات الواجهة والـ CMS
- */
-export async function getFrontendSettings(): Promise<FrontendSettings> {
+export async function getSettingByKey(key: string): Promise<{ key: string; val: string } | null> {
+  await ensureSeedDatabase();
   try {
-    let rows = await db.select().from(settings);
-    if (!rows || rows.length === 0) {
-      await ensureSeedDatabase();
-      rows = await db.select().from(settings);
-    }
+    const res = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+    return res[0] || null;
+  } catch (err) {
+    console.error("Error fetching setting:", key, err);
+    return null;
+  }
+}
 
-    const settingsMap: Record<string, string> = {};
+export async function getFrontendSettings(): Promise<FrontendSettings> {
+  await ensureSeedDatabase();
+  try {
+    const rows = await db.select().from(settings);
+    const map = new Map<string, string>();
     for (const r of rows) {
-      settingsMap[r.key] = r.value;
+      map.set(r.key, r.val);
     }
 
     return {
-      brand_name: settingsMap.brand_name || "بروست الأسد",
-      logo_url: settingsMap.logo_url || "",
-      hero_title_ar: settingsMap.hero_title_ar || "أفضل بروستد في دسوق",
-      hero_title_en: settingsMap.hero_title_en || "Best Broast in Desouk",
-      hero_desc_ar:
-        settingsMap.hero_desc_ar ||
-        "دجاج طازج يومياً، تتبيلة سرية، وقرمشة لا تقاوم!",
-      hero_desc_en:
-        settingsMap.hero_desc_en ||
-        "Fresh daily chicken, secret seasoning, irresistible crunch!",
-      marquee_ar:
-        settingsMap.marquee_ar ||
-        "🔥 خصم 10% على الطلب الأول عبر الموقع! | 🚀 توصيل سريع لجميع مناطق دسوق | 🍗 جرب البروست الحار الآن!",
-      marquee_en:
-        settingsMap.marquee_en ||
-        "🔥 10% OFF your first order! | 🚀 Fast delivery across Desouk | 🍗 Try our Spicy Broast now!",
-      footer_text_ar:
-        settingsMap.footer_text_ar ||
-        "بروست الأسد - طعم القرمشة الحقيقية في دسوق.",
-      footer_text_en:
-        settingsMap.footer_text_en ||
-        "Broast El-Assad - Real Crispy Taste in Desouk.",
-      address_ar:
-        settingsMap.address_ar || "دسوق - شارع الجيش - بجوار عمر أفندي",
-      address_en:
-        settingsMap.address_en || "Desouk - El-Gaish St - Next to Omar Effendi",
-      working_hours_ar:
-        settingsMap.working_hours_ar || "يومياً من 12 ظهراً حتى 2 صباحاً",
-      working_hours_en:
-        settingsMap.working_hours_en || "Daily from 12:00 PM to 2:00 AM",
-      hotline: settingsMap.hotline || "19999",
-      whatsapp_number: settingsMap.whatsapp_number || "201012345678",
+      brandNameAr: map.get("brand_name_ar") || "بروست الأسد",
+      brandNameEn: map.get("brand_name_en") || "Lion Broast",
+      logoUrl: map.get("logo_url") || "",
+      heroTitleAr: map.get("hero_title_ar") || "أقوى بروست مقرمش وطازج في دسوق",
+      heroSubtitleAr: map.get("hero_subtitle_ar") || "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
+      marqueeTextAr: map.get("marquee_text_ar") || "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+      footerTextAr: map.get("footer_text_ar") || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
+      addressAr: map.get("address_ar") || "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
+      workingHoursAr: map.get("working_hours_ar") || "يومياً من 12 ظهراً حتى 2 صباحاً",
+      hotline: map.get("hotline") || "01000000000",
+      whatsapp: map.get("whatsapp") || "201000000000",
+      deliveryFee: Number(map.get("delivery_fee") || 15),
+      taxPercent: Number(map.get("tax_percent") || 0),
     };
   } catch (err) {
     console.error("Error in getFrontendSettings:", err);
     return {
-      brand_name: "بروست الأسد",
-      logo_url: "",
-      hero_title_ar: "أفضل بروستد في دسوق",
-      hero_title_en: "Best Broast in Desouk",
-      hero_desc_ar: "دجاج طازج يومياً، تتبيلة سرية، وقرمشة لا تقاوم!",
-      hero_desc_en: "Fresh daily chicken, secret seasoning, irresistible crunch!",
-      marquee_ar:
-        "🔥 خصم 10% على الطلب الأول عبر الموقع! | 🚀 توصيل سريع لجميع مناطق دسوق | 🍗 جرب البروست الحار الآن!",
-      marquee_en:
-        "🔥 10% OFF your first order! | 🚀 Fast delivery across Desouk | 🍗 Try our Spicy Broast now!",
-      footer_text_ar: "بروست الأسد - طعم القرمشة الحقيقية في دسوق.",
-      footer_text_en: "Broast El-Assad - Real Crispy Taste in Desouk.",
-      address_ar: "دسوق - شارع الجيش - بجوار عمر أفندي",
-      address_en: "Desouk - El-Gaish St - Next to Omar Effendi",
-      working_hours_ar: "يومياً من 12 ظهراً حتى 2 صباحاً",
-      working_hours_en: "Daily from 12:00 PM to 2:00 AM",
-      hotline: "19999",
-      whatsapp_number: "201012345678",
-    };
-  }
-}
-
-/**
- * 2. استعلامات القائمة والمنيو
- */
-export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
-  try {
-    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    if (!cats || cats.length === 0) {
-      await ensureSeedDatabase();
-      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    }
-
-    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const mappedItems = itemsList.map(mapMenuItemToDTO);
-
-    return cats.map((cat) =>
-      mapCategoryToDTO(
-        cat,
-        mappedItems.filter((it) => it.categoryId === cat.id)
-      )
-    );
-  } catch (err) {
-    console.error("Error in getCategoriesWithItems:", err);
-    return [];
-  }
-}
-
-export async function getMenuData(): Promise<MenuData> {
-  try {
-    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    if (!cats || cats.length === 0) {
-      await ensureSeedDatabase();
-      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    }
-
-    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const zonesList = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
-
-    const mappedItems: MenuItemDTO[] = itemsList.map(mapMenuItemToDTO);
-    const categoriesWithItems: CategoryDTO[] = cats.map((cat) =>
-      mapCategoryToDTO(
-        cat,
-        mappedItems.filter((it) => it.categoryId === cat.id)
-      )
-    );
-    const mappedZones: ZoneDTO[] = zonesList.map(mapZoneToDTO);
-
-    return {
-      categories: categoriesWithItems,
-      items: mappedItems,
-      zones: mappedZones,
-    };
-  } catch (err) {
-    console.error("Error in getMenuData:", err);
-    return {
-      categories: [],
-      items: [],
-      zones: [],
+      brandNameAr: "بروست الأسد",
+      brandNameEn: "Lion Broast",
+      logoUrl: "",
+      heroTitleAr: "أقوى بروست مقرمش وطازج في دسوق",
+      heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
+      marqueeTextAr: "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+      footerTextAr: "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
+      addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
+      workingHoursAr: "يومياً من 12 ظهراً حتى 2 صباحاً",
+      hotline: "01000000000",
+      whatsapp: "201000000000",
+      deliveryFee: 15,
+      taxPercent: 0,
     };
   }
 }
 
 export async function getPromo(): Promise<Promo> {
+  await ensureSeedDatabase();
+  try {
+    const bannerSetting = await getSettingByKey("promo_banner");
+    if (bannerSetting && bannerSetting.val) {
+      const parsed = JSON.parse(bannerSetting.val);
+      return {
+        enabled: Boolean(parsed.enabled ?? true),
+        title: String(parsed.title || "خصم 15% على أول طلب بـ كود: LION15"),
+        code: String(parsed.code || "LION15"),
+        textAr: String(parsed.textAr || parsed.title || "خصم 15% على أول طلب بـ كود: LION15"),
+        textEn: String(parsed.textEn || parsed.title || "15% OFF on first order code: LION15"),
+      };
+    }
+  } catch (err) {
+    console.error("Error reading promo setting:", err);
+  }
+
   return {
     enabled: true,
-    title: "خصم 10% على الطلب الأول",
-    code: "LION10",
-    textAr: "استخدم كود LION10 للحصول على خصم 10% على أول طلب!",
-    textEn: "Use code LION10 for 10% OFF your first order!",
+    title: "خصم 15% على أول طلب بـ كود: LION15",
+    code: "LION15",
+    textAr: "خصم 15% على أول طلب بـ كود: LION15",
+    textEn: "15% OFF on first order code: LION15",
   };
 }
 
-/**
- * 3. استعلامات العملاء والكروت
- */
-export async function getCustomerByPhone(phone: string) {
-  try {
-    const rows = await db
-      .select()
-      .from(customers)
-      .where(eq(customers.primaryPhone, phone))
-      .limit(1);
-
-    if (rows[0]) return rows[0];
-
-    const fallbackRows = await db
-      .select()
-      .from(customers)
-      .where(eq(customers.phone, phone))
-      .limit(1);
-
-    return fallbackRows[0] || null;
-  } catch (err) {
-    console.error("Error in getCustomerByPhone:", err);
-    return null;
-  }
-}
-
-export async function getCustomerByCode(code: string) {
-  try {
-    const rows = await db
-      .select()
-      .from(customers)
-      .where(eq(customers.code, code))
-      .limit(1);
-    return rows[0] || null;
-  } catch (err) {
-    console.error("Error in getCustomerByCode:", err);
-    return null;
-  }
-}
-
-export async function getPassData(phoneOrCode: string): Promise<CustomerPassData | null> {
-  try {
-    const cust =
-      (await getCustomerByPhone(phoneOrCode)) ||
-      (await getCustomerByCode(phoneOrCode));
-
-    if (!cust) return null;
-
-    const phone = cust.primaryPhone || cust.phone || "";
-    let customerOrders: any[] = [];
-    if (phone) {
-      customerOrders = await db
-        .select()
-        .from(orders)
-        .where(eq(orders.customerPhone, phone))
-        .orderBy(desc(orders.createdAt));
-    }
-
-    return {
-      customer: {
-        code: cust.code,
-        fullName: cust.fullName || cust.name || "عميل بروست الأسد",
-        primaryPhone: cust.primaryPhone || cust.phone || "",
-        primaryAddress: cust.primaryAddress || cust.address || "",
-        totalOrders: cust.totalOrders || customerOrders.length || 0,
-        totalSpent: cust.totalSpent || 0,
-        loyaltyPoints: cust.loyaltyPoints || 0,
-        discountPercent: cust.discountPercent || 0,
-      },
-      ordersList: customerOrders.map((o) => ({
-        orderNumber: o.orderNumber,
-        status: o.status,
-        totalAmount: o.totalAmount,
-        createdAt: o.createdAt
-          ? new Date(o.createdAt).toISOString()
-          : new Date().toISOString(),
-      })),
-      ordersCount: cust.totalOrders || customerOrders.length || 0,
-      ltv: cust.totalSpent || 0,
-      zone: null,
-    };
-  } catch (err) {
-    console.error("Error in getPassData:", err);
-    return null;
-  }
-}
-
-export async function createCustomer(data: {
-  fullName: string;
-  primaryPhone: string;
-  primaryAddress?: string;
-}) {
-  const code = `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-  const [newCust] = await db
-    .insert(customers)
-    .values({
-      code,
-      fullName: data.fullName,
-      name: data.fullName,
-      primaryPhone: data.primaryPhone,
-      phone: data.primaryPhone,
-      primaryAddress: data.primaryAddress || "",
-      address: data.primaryAddress || "",
-      totalOrders: 0,
-      totalSpent: 0,
-      loyaltyPoints: 0,
-      discountPercent: 0,
-    })
-    .returning();
-
-  return newCust;
-}
-
-/**
- * 4. استعلامات مناطق التوصيل
- */
-export async function getDeliveryZoneById(id: string) {
-  try {
-    if (!id) return null;
-    const rows = await db
-      .select()
-      .from(deliveryZones)
-      .where(eq(deliveryZones.id, id))
-      .limit(1);
-    if (!rows[0]) return null;
-    return mapZoneToDTO(rows[0]);
-  } catch (err) {
-    console.error("Error in getDeliveryZoneById:", err);
-    return null;
-  }
+export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
+  await ensureSeedDatabase();
+  const cats = await db.select().from(categories).orderBy(categories.sortOrder);
+  return cats.map(mapCategoryToDTO);
 }
 
 export async function getDeliveryZones(): Promise<ZoneDTO[]> {
-  try {
-    let zones = await db
-      .select()
-      .from(deliveryZones)
-      .orderBy(asc(deliveryZones.sortOrder));
-
-    if (!zones || zones.length === 0) {
-      await ensureSeedDatabase();
-      zones = await db
-        .select()
-        .from(deliveryZones)
-        .orderBy(asc(deliveryZones.sortOrder));
-    }
-
-    return zones.map(mapZoneToDTO);
-  } catch (err) {
-    console.error("Error in getDeliveryZones:", err);
-    return [];
-  }
+  await ensureSeedDatabase();
+  const zonesList = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
+  return zonesList.map(mapZoneToDTO);
 }
 
-/**
- * 5. استعلامات الطلبات
- */
-export async function getAllOrders() {
-  try {
-    const ords = await db.select().from(orders).orderBy(desc(orders.createdAt));
-    if (!ords || ords.length === 0) return [];
+export async function getMenuData(): Promise<{ categories: CategoryDTO[]; items: MenuItemDTO[]; zones: ZoneDTO[] }> {
+  await ensureSeedDatabase();
+  const [cats, rawItems, rawZones] = await Promise.all([
+    db.select().from(categories).orderBy(categories.sortOrder),
+    db.select().from(menuItems).orderBy(menuItems.sortOrder),
+    db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
+  ]);
 
-    const orderIds = ords.map((o) => o.id);
-    const lines = await db
+  return {
+    categories: cats.map(mapCategoryToDTO),
+    items: rawItems.map(mapMenuItemToDTO),
+    zones: rawZones.map(mapZoneToDTO),
+  };
+}
+
+export async function getCustomerByPhone(phone: string) {
+  await ensureSeedDatabase();
+  const res = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1);
+  return res[0] || null;
+}
+
+export async function getCustomerByCode(passCode: string) {
+  await ensureSeedDatabase();
+  const res = await db.select().from(customers).where(eq(customers.passCode, passCode)).limit(1);
+  return res[0] || null;
+}
+
+export async function getPassData(passCode: string): Promise<CustomerPassData | null> {
+  await ensureSeedDatabase();
+  const customer = await getCustomerByCode(passCode);
+  if (!customer) return null;
+
+  const ordersList = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, customer.id))
+    .orderBy(desc(orders.createdAt));
+
+  const ltv = ordersList.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+
+  let zone: ZoneDTO | null = null;
+  if (ordersList.length > 0 && ordersList[0].deliveryZoneId) {
+    const z = await db
       .select()
-      .from(orderLines)
-      .where(inArray(orderLines.orderId, orderIds));
-
-    return ords.map((ord) => ({
-      ...ord,
-      items: lines.filter((l) => l.orderId === ord.id),
-    }));
-  } catch (err) {
-    console.error("Error in getAllOrders:", err);
-    return [];
+      .from(deliveryZones)
+      .where(eq(deliveryZones.id, ordersList[0].deliveryZoneId))
+      .limit(1);
+    if (z[0]) zone = mapZoneToDTO(z[0]);
   }
+
+  return {
+    customer: {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      passCode: customer.passCode,
+      totalOrders: customer.totalOrders || ordersList.length,
+      totalSpent: Number(customer.totalSpent || ltv),
+      loyaltyPoints: customer.loyaltyPoints || 0,
+      discountPercent: customer.discountPercent || 0,
+      createdAt: customer.createdAt || new Date(),
+    },
+    ordersList: ordersList.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      totalAmount: Number(o.totalAmount),
+      status: o.status,
+      createdAt: o.createdAt || new Date(),
+    })),
+    ordersCount: ordersList.length,
+    ltv,
+    zone,
+  };
+}
+
+export async function createCustomer(data: { name: string; phone: string; passCode: string }) {
+  await ensureSeedDatabase();
+  const inserted = await db
+    .insert(customers)
+    .values({
+      name: data.name,
+      phone: data.phone,
+      passCode: data.passCode,
+    })
+    .returning();
+  return inserted[0];
+}
+
+export async function getDeliveryZoneById(id: string): Promise<ZoneDTO | null> {
+  await ensureSeedDatabase();
+  const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, id)).limit(1);
+  return res[0] ? mapZoneToDTO(res[0]) : null;
+}
+
+export async function getAllOrders() {
+  await ensureSeedDatabase();
+  return db.select().from(orders).orderBy(desc(orders.createdAt));
 }
 
 export async function getOrdersByNumbers(orderNumbers: string[]) {
-  try {
-    if (!orderNumbers || orderNumbers.length === 0) return [];
-
-    const ords = await db
-      .select()
-      .from(orders)
-      .where(inArray(orders.orderNumber, orderNumbers))
-      .orderBy(desc(orders.createdAt));
-
-    if (!ords || ords.length === 0) return [];
-
-    const orderIds = ords.map((o) => o.id);
-    const lines = await db
-      .select()
-      .from(orderLines)
-      .where(inArray(orderLines.orderId, orderIds));
-
-    return ords.map((ord) => {
-      const items = lines.filter((l) => l.orderId === ord.id);
-      return {
-        ...ord,
-        items,
-        itemsCount: items.reduce((sum, item) => sum + item.quantity, 0) || 1,
-      };
-    });
-  } catch (err) {
-    console.error("Error in getOrdersByNumbers:", err);
-    return [];
-  }
+  await ensureSeedDatabase();
+  if (!orderNumbers || orderNumbers.length === 0) return [];
+  return db
+    .select()
+    .from(orders)
+    .where(inArray(orders.orderNumber, orderNumbers))
+    .orderBy(desc(orders.createdAt));
 }
 
-export async function createOrder(data: {
+export async function createOrder(payload: {
   orderNumber: string;
-  customerPhone: string;
+  customerId: string;
+  deliveryZoneId: string;
   customerName: string;
+  customerPhone: string;
   address: string;
-  zoneId?: string | null;
-  subtotal: number;
-  deliveryFee: number;
-  totalAmount: number;
   notes?: string;
-  items: {
-    itemId?: string;
-    nameAr: string;
-    price: number;
-    quantity: number;
-  }[];
+  items: { menuItemId: string; quantity: number; price: number; notes?: string }[];
+  totalAmount: number;
+  deliveryFee: number;
 }) {
+  await ensureSeedDatabase();
   const [newOrder] = await db
     .insert(orders)
     .values({
-      orderNumber: data.orderNumber,
-      customerPhone: data.customerPhone,
-      customerName: data.customerName,
-      address: data.address,
-      zoneId: data.zoneId || null,
-      subtotal: data.subtotal,
-      deliveryFee: data.deliveryFee,
-      totalAmount: data.totalAmount,
+      orderNumber: payload.orderNumber,
+      customerId: payload.customerId,
+      deliveryZoneId: payload.deliveryZoneId,
+      customerName: payload.customerName,
+      customerPhone: payload.customerPhone,
+      address: payload.address,
+      notes: payload.notes || "",
+      totalAmount: payload.totalAmount.toString(),
+      deliveryFee: payload.deliveryFee.toString(),
       status: "pending",
-      notes: data.notes || "",
     })
     .returning();
 
-  if (data.items && data.items.length > 0) {
+  if (payload.items.length > 0) {
     await db.insert(orderLines).values(
-      data.items.map((it) => ({
+      payload.items.map((item) => ({
         orderId: newOrder.id,
-        itemId: it.itemId || null,
-        nameAr: it.nameAr,
-        price: it.price,
-        quantity: it.quantity,
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        unitPrice: item.price.toString(),
+        notes: item.notes || "",
       }))
     );
-  }
-
-  const existingCust = await getCustomerByPhone(data.customerPhone);
-  if (existingCust) {
-    const updatedOrders = (existingCust.totalOrders || 0) + 1;
-    const updatedSpent = (existingCust.totalSpent || 0) + data.totalAmount;
-    const addedPoints = Math.floor(data.totalAmount / 10);
-    const updatedPoints = (existingCust.loyaltyPoints || 0) + addedPoints;
-
-    await db
-      .update(customers)
-      .set({
-        totalOrders: updatedOrders,
-        totalSpent: updatedSpent,
-        loyaltyPoints: updatedPoints,
-        updatedAt: new Date(),
-      })
-      .where(eq(customers.id, existingCust.id));
   }
 
   return newOrder;
