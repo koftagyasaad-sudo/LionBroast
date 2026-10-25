@@ -33,6 +33,9 @@ const DEFAULT_SETTINGS: FrontendSettings = {
   heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
   marqueeTextAr:
     "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+  marqueeAr:
+    "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+  marqueeEn: "🔥 Fast and hot delivery all across Desouk | Order now 🔥",
   footerTextAr:
     "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
   addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
@@ -113,6 +116,7 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
     }
 
     const pick = (key: string, fallback: string): string => map.get(key) || fallback;
+    const marqueeVal = pick("marquee_text_ar", DEFAULT_SETTINGS.marqueeTextAr);
 
     return {
       brandNameAr: pick("brand_name_ar", DEFAULT_SETTINGS.brandNameAr),
@@ -120,7 +124,9 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
       logoUrl: pick("logo_url", DEFAULT_SETTINGS.logoUrl),
       heroTitleAr: pick("hero_title_ar", DEFAULT_SETTINGS.heroTitleAr),
       heroSubtitleAr: pick("hero_subtitle_ar", DEFAULT_SETTINGS.heroSubtitleAr),
-      marqueeTextAr: pick("marquee_text_ar", DEFAULT_SETTINGS.marqueeTextAr),
+      marqueeTextAr: marqueeVal,
+      marqueeAr: marqueeVal,
+      marqueeEn: map.get("marquee_text_en") || marqueeVal,
       footerTextAr: pick("footer_text_ar", DEFAULT_SETTINGS.footerTextAr),
       addressAr: pick("address_ar", DEFAULT_SETTINGS.addressAr),
       workingHoursAr: pick("working_hours_ar", DEFAULT_SETTINGS.workingHoursAr),
