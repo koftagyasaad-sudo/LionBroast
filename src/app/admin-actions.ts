@@ -1,9 +1,9 @@
 "use server";
 
 import { db } from "@/db";
-import { categories, items, orders, settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { FrontendSettings } from "@/db/queries";
+import { categories, menuItems, orders, settings, deliveryZones, customers } from "@/db/schema";
+import { eq, desc, asc } from "drizzle-orm";
+import { FrontendSettings, getFrontendSettings } from "@/db/queries";
 
 export interface ScannedRow {
   categoryNameAr: string;
@@ -15,7 +15,31 @@ export interface ScannedRow {
   price: number;
 }
 
-// 1. AI Menu Scanner Action using Google Gemini REST API
+// 1. Fetch All Admin Data
+export async function adminGetAllAction() {
+  try {
+    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+    const ordersList = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const zonesList = await db.select().from(deliveryZones);
+    const settingsList = await db.select().from(settings);
+
+    return {
+      success: true,
+      data: {
+        categories: cats,
+        items: itemsList,
+        orders: ordersList,
+        zones: zonesList,
+        settings: settingsList,
+      },
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "فشل جلب البيانات" };
+  }
+}
+
+// 2. Gemini AI Menu Scanner Action
 export async function adminScanMenuAction(payload: {
   fileName: string;
   imageBase64: string;
@@ -27,18 +51,17 @@ export async function adminScanMenuAction(payload: {
     if (!apiKey) {
       return {
         success: false,
-        error: "مفتاح GEMINI_API_KEY غير مضاف في إعدادات البيئة على Vercel (Environment Variables). يرجى إضافته ثم عمل Redeploy للموقع.",
+        error: "مفتاح GEMINI_API_KEY غير مضاف في Vercel Environment Variables. يرجى إضافته ثم عمل Redeploy للموقع.",
       };
     }
 
     if (!apiKey.startsWith("AIzaSy")) {
       return {
         success: false,
-        error: `المفتاح الحالي GEMINI_API_KEY يبدو غير صحيح (يبدأ بـ "${apiKey.slice(0, 6)}..."). يجب استخدام API Key من Google AI Studio والذي يبدأ بـ "AIzaSy".`,
+        error: `المفتاح الحالي GEMINI_API_KEY يبدو غير صحيح. يجب استخدام API Key المولد من Google AI Studio والذي يبدأ بـ "AIzaSy".`,
       };
     }
 
-    // Prepare clean Base64 string
     const base64Data = payload.imageBase64.includes(",")
       ? payload.imageBase64.split(",")[1]
       : payload.imageBase64;
@@ -47,9 +70,8 @@ export async function adminScanMenuAction(payload: {
 
     const promptText = `أنت مساعد متخصص في قراءة وتفكيك قوائم الطعام (المينيو) من الصور.
 قم بتحليل صورة المينيو المرفقة واستخرج جميع الأصناف والأقسام منها بدقة متناهية.
-يجب إرجاع النتيجة حصراً في صيغة JSON Array بدون أي كلام إضافي أو تنسيق Markdown (لا تضع \`\`\`json).
+يجب إرجاع النتيجة حصراً في صيغة JSON Array بدون أي كلام إضافي أو تنسيق Markdown.
 
-كل عنصر في القائمة يجب أن يكون كالتالي:
 [
   {
     "categoryNameAr": "اسم القسم بالعربي",
@@ -60,12 +82,7 @@ export async function adminScanMenuAction(payload: {
     "descriptionEn": "الوصف بالإنجليزي إن وجد",
     "price": 150
   }
-]
-
-شروط:
-1. السعر عدد فقط بدون عملة.
-2. إذا غاب السعر ضع 0.
-3. ترجم الأسماء بدقة للغتين العربية والإنجليزية.`;
+]`;
 
     const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
     let responseText = "";
@@ -120,7 +137,7 @@ export async function adminScanMenuAction(payload: {
     if (!responseText) {
       return {
         success: false,
-        error: `فشل استجابة نموذج جوجل الذكي: ${lastApiError || "خطأ غير معروف"}`,
+        error: `فشل استجابة نموذج الذكاء الاصطناعي: ${lastApiError || "خطأ غير معروف"}`,
       };
     }
 
@@ -135,7 +152,7 @@ export async function adminScanMenuAction(payload: {
     if (!Array.isArray(parsed) || parsed.length === 0) {
       return {
         success: false,
-        error: "لم يتم العثور على أطباق قابلة للقراءة في صورة المينيو. يرجى استخدام صورة أوضح.",
+        error: "لم يتم العثور على أطباق قابلة للقراءة في صورة المينيو. يرجى رفع صورة أكثر وضوحاً.",
       };
     }
 
@@ -148,7 +165,7 @@ export async function adminScanMenuAction(payload: {
   }
 }
 
-// 2. Save Scanned Rows to DB
+// 3. Save Scanned AI Rows
 export async function adminSaveScannedRowsAction(rows: ScannedRow[]) {
   try {
     const existingCats = await db.select().from(categories);
@@ -182,7 +199,7 @@ export async function adminSaveScannedRowsAction(rows: ScannedRow[]) {
         catMap.set(key, categoryId);
       }
 
-      await db.insert(items).values({
+      await db.insert(menuItems).values({
         categoryId,
         nameAr: row.itemNameAr || "صنف جديد",
         nameEn: row.itemNameEn || "New Item",
@@ -203,7 +220,7 @@ export async function adminSaveScannedRowsAction(rows: ScannedRow[]) {
   }
 }
 
-// 3. Save Frontend Settings Action
+// 4. Save Frontend Dynamic Content Settings
 export async function saveFrontendSettingsAction(data: FrontendSettings) {
   try {
     const entries = Object.entries(data);
@@ -236,37 +253,46 @@ export async function saveFrontendSettingsAction(data: FrontendSettings) {
   }
 }
 
-// 4. CRUD Actions for Categories
-export async function adminCreateCategoryAction(formData: FormData) {
+// 5. Category Management Actions
+export async function adminSaveCategoryAction(data: any) {
   try {
-    const nameAr = formData.get("nameAr") as string;
-    const nameEn = formData.get("nameEn") as string;
-    const sortOrder = parseInt((formData.get("sortOrder") as string) || "0", 10);
-
-    if (!nameAr || !nameEn) throw new Error("الأسماء مطلوبة بالعربية والإنجليزية");
-
-    await db.insert(categories).values({ nameAr, nameEn, sortOrder });
+    if (data.id) {
+      await db
+        .update(categories)
+        .set({
+          nameAr: data.nameAr,
+          nameEn: data.nameEn,
+          sortOrder: data.sortOrder || 0,
+        })
+        .where(eq(categories.id, data.id));
+    } else {
+      await db.insert(categories).values({
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        sortOrder: data.sortOrder || 0,
+      });
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
 
+export async function adminCreateCategoryAction(formData: FormData) {
+  return adminSaveCategoryAction({
+    nameAr: formData.get("nameAr"),
+    nameEn: formData.get("nameEn"),
+    sortOrder: parseInt((formData.get("sortOrder") as string) || "0", 10),
+  });
+}
+
 export async function adminUpdateCategoryAction(id: number, formData: FormData) {
-  try {
-    const nameAr = formData.get("nameAr") as string;
-    const nameEn = formData.get("nameEn") as string;
-    const sortOrder = parseInt((formData.get("sortOrder") as string) || "0", 10);
-
-    await db
-      .update(categories)
-      .set({ nameAr, nameEn, sortOrder })
-      .where(eq(categories.id, id));
-
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  return adminSaveCategoryAction({
+    id,
+    nameAr: formData.get("nameAr"),
+    nameEn: formData.get("nameEn"),
+    sortOrder: parseInt((formData.get("sortOrder") as string) || "0", 10),
+  });
 }
 
 export async function adminDeleteCategoryAction(id: number) {
@@ -278,67 +304,73 @@ export async function adminDeleteCategoryAction(id: number) {
   }
 }
 
-// 5. CRUD Actions for Items
-export async function adminCreateItemAction(formData: FormData) {
+// 6. Items Management Actions
+export async function adminSaveItemAction(data: any) {
   try {
-    const categoryId = parseInt(formData.get("categoryId") as string, 10);
-    const nameAr = formData.get("nameAr") as string;
-    const nameEn = formData.get("nameEn") as string;
-    const descriptionAr = (formData.get("descriptionAr") as string) || "";
-    const descriptionEn = (formData.get("descriptionEn") as string) || "";
-    const pricePiasters = Math.round(parseFloat((formData.get("price") as string) || "0") * 100);
-    const imageUrl = (formData.get("imageUrl") as string) || "";
+    const pricePiasters = typeof data.price === "number" ? Math.round(data.price * 100) : 0;
 
-    await db.insert(items).values({
-      categoryId,
-      nameAr,
-      nameEn,
-      descriptionAr,
-      descriptionEn,
-      price: pricePiasters,
-      imageUrl,
-      isAvailable: true,
-      sortOrder: 0,
-    });
-
+    if (data.id) {
+      await db
+        .update(menuItems)
+        .set({
+          categoryId: data.categoryId,
+          nameAr: data.nameAr,
+          nameEn: data.nameEn,
+          descriptionAr: data.descriptionAr || "",
+          descriptionEn: data.descriptionEn || "",
+          price: pricePiasters,
+          imageUrl: data.imageUrl || "",
+          isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
+          sortOrder: data.sortOrder || 0,
+        })
+        .where(eq(menuItems.id, data.id));
+    } else {
+      await db.insert(menuItems).values({
+        categoryId: data.categoryId,
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        descriptionAr: data.descriptionAr || "",
+        descriptionEn: data.descriptionEn || "",
+        price: pricePiasters,
+        imageUrl: data.imageUrl || "",
+        isAvailable: true,
+        sortOrder: 0,
+      });
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
 
+export async function adminCreateItemAction(formData: FormData) {
+  return adminSaveItemAction({
+    categoryId: parseInt(formData.get("categoryId") as string, 10),
+    nameAr: formData.get("nameAr"),
+    nameEn: formData.get("nameEn"),
+    descriptionAr: formData.get("descriptionAr"),
+    descriptionEn: formData.get("descriptionEn"),
+    price: parseFloat((formData.get("price") as string) || "0"),
+    imageUrl: formData.get("imageUrl"),
+  });
+}
+
 export async function adminUpdateItemAction(id: number, formData: FormData) {
-  try {
-    const categoryId = parseInt(formData.get("categoryId") as string, 10);
-    const nameAr = formData.get("nameAr") as string;
-    const nameEn = formData.get("nameEn") as string;
-    const descriptionAr = (formData.get("descriptionAr") as string) || "";
-    const descriptionEn = (formData.get("descriptionEn") as string) || "";
-    const pricePiasters = Math.round(parseFloat((formData.get("price") as string) || "0") * 100);
-    const imageUrl = (formData.get("imageUrl") as string) || "";
-
-    await db
-      .update(items)
-      .set({
-        categoryId,
-        nameAr,
-        nameEn,
-        descriptionAr,
-        descriptionEn,
-        price: pricePiasters,
-        imageUrl,
-      })
-      .where(eq(items.id, id));
-
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  return adminSaveItemAction({
+    id,
+    categoryId: parseInt(formData.get("categoryId") as string, 10),
+    nameAr: formData.get("nameAr"),
+    nameEn: formData.get("nameEn"),
+    descriptionAr: formData.get("descriptionAr"),
+    descriptionEn: formData.get("descriptionEn"),
+    price: parseFloat((formData.get("price") as string) || "0"),
+    imageUrl: formData.get("imageUrl"),
+  });
 }
 
 export async function adminDeleteItemAction(id: number) {
   try {
-    await db.delete(items).where(eq(items.id, id));
+    await db.delete(menuItems).where(eq(menuItems.id, id));
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
@@ -348,19 +380,76 @@ export async function adminDeleteItemAction(id: number) {
 export async function adminToggleItemAvailableAction(id: number, currentStatus: boolean) {
   try {
     await db
-      .update(items)
+      .update(menuItems)
       .set({ isAvailable: !currentStatus })
-      .where(eq(items.id, id));
+      .where(eq(menuItems.id, id));
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
 
-// 6. Order Status Action
-export async function adminUpdateOrderStatusAction(orderId: number, status: string) {
+// 7. Order Status Actions
+export async function adminSetOrderStatusAction(orderId: number, status: string) {
   try {
     await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminUpdateOrderStatusAction(orderId: number, status: string) {
+  return adminSetOrderStatusAction(orderId, status);
+}
+
+// 8. Delivery Zone Actions
+export async function adminSaveZoneAction(data: any) {
+  try {
+    const feePiasters = typeof data.fee === "number" ? Math.round(data.fee * 100) : 0;
+
+    if (data.id) {
+      await db
+        .update(deliveryZones)
+        .set({
+          nameAr: data.nameAr,
+          nameEn: data.nameEn,
+          fee: feePiasters,
+          isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
+        })
+        .where(eq(deliveryZones.id, data.id));
+    } else {
+      await db.insert(deliveryZones).values({
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        fee: feePiasters,
+        isAvailable: true,
+      });
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function adminDeleteZoneAction(id: number) {
+  try {
+    await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+// 9. General Settings Action
+export async function adminSetSettingAction(key: string, value: string) {
+  try {
+    const existing = await db.select().from(settings).where(eq(settings.key, key));
+    if (existing.length > 0) {
+      await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key));
+    } else {
+      await db.insert(settings).values({ key, value, updatedAt: new Date() });
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
