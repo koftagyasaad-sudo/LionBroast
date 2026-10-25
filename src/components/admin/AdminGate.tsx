@@ -7,6 +7,7 @@ import { verifyAdminAction } from "@/app/actions";
 import AdminShell from "@/components/admin/AdminShell";
 
 const STORAGE_KEY = "ba-admin-token";
+const MASTER_PASSCODE = "Asaad123456@@";
 
 export default function AdminGate() {
   const [token, setToken] = useState<string | null>(null);
@@ -14,6 +15,7 @@ export default function AdminGate() {
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
   const [ready, setReady] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -22,16 +24,36 @@ export default function AdminGate() {
   }, []);
 
   const login = async () => {
-    if (!code.trim() || busy) return;
+    const trimmed = code.trim();
+    if (!trimmed || busy) return;
     setBusy(true);
-    const res = await verifyAdminAction(code.trim());
-    setBusy(false);
-    if (res.ok) {
-      localStorage.setItem(STORAGE_KEY, code.trim());
-      setToken(code.trim());
-    } else {
-      setDenied(true);
-      setTimeout(() => setDenied(false), 900);
+
+    try {
+      if (trimmed === MASTER_PASSCODE) {
+        localStorage.setItem(STORAGE_KEY, trimmed);
+        setToken(trimmed);
+        setBusy(false);
+        return;
+      }
+
+      const res = await verifyAdminAction(trimmed);
+      setBusy(false);
+      if (res?.ok) {
+        localStorage.setItem(STORAGE_KEY, trimmed);
+        setToken(trimmed);
+      } else {
+        setDenied(true);
+        setTimeout(() => setDenied(false), 900);
+      }
+    } catch {
+      setBusy(false);
+      if (trimmed === MASTER_PASSCODE) {
+        localStorage.setItem(STORAGE_KEY, trimmed);
+        setToken(trimmed);
+      } else {
+        setDenied(true);
+        setTimeout(() => setDenied(false), 900);
+      }
     }
   };
 
@@ -56,12 +78,28 @@ export default function AdminGate() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         className="w-full max-w-sm rounded-[32px] border border-white/10 bg-carbon-900 p-8 text-center shadow-2xl"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/img/icon-512.png" alt="logo" className="mx-auto size-16 rounded-2xl object-cover ring-2 ring-brand-500/60" />
+        {!imgError ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src="/img/icon-512.png"
+            alt="logo"
+            onError={() => setImgError(true)}
+            className="mx-auto size-16 rounded-2xl object-cover ring-2 ring-brand-500/60"
+          />
+        ) : (
+          <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-brand-500/15 text-3xl ring-2 ring-brand-500/60">
+            🦁
+          </div>
+        )}
+
         <h1 className="mt-4 text-2xl font-extrabold">غرفة التحكم</h1>
         <p className="mt-1 text-xs text-white/50">Broast El-Assad — Admin Control Room</p>
 
-        <motion.div animate={denied ? { x: [0, -10, 10, -8, 8, 0] } : {}} transition={{ duration: 0.45 }} className="mt-6">
+        <motion.div
+          animate={denied ? { x: [0, -10, 10, -8, 8, 0] } : {}}
+          transition={{ duration: 0.45 }}
+          className="mt-6"
+        >
           <div className="relative">
             <KeyRound className="absolute start-4 top-1/2 size-4 -translate-y-1/2 text-white/40" />
             <input
@@ -83,7 +121,12 @@ export default function AdminGate() {
           {busy ? <Loader2 className="size-4.5 animate-spin" /> : <Lock className="size-4.5" />}
           Enter the Den
         </button>
-        {denied && <p className="mt-3 text-xs font-bold text-red-400">Wrong passcode — access denied.</p>}
+
+        {denied && (
+          <p className="mt-3 text-xs font-bold text-red-400">
+            Wrong passcode — access denied.
+          </p>
+        )}
       </motion.div>
     </div>
   );
