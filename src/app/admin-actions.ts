@@ -6,6 +6,15 @@ import { eq } from "drizzle-orm";
 import { ensureSeedDatabase } from "@/db/seed";
 import { mapCategoryToDTO, mapMenuItemToDTO, mapZoneToDTO } from "@/db/queries";
 
+export interface ScannedMenuItem {
+  categoryName: string;
+  nameAr: string;
+  descriptionAr?: string;
+  price?: number;
+  spicyOption?: boolean;
+  isBestSeller?: boolean;
+}
+
 export async function adminScanMenuAction(formData: FormData) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -74,8 +83,8 @@ export async function adminScanMenuAction(formData: FormData) {
       const jsonRes = await res.json();
       resultText = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
       if (resultText) break;
-    } catch (err: any) {
-      lastErr = err.message;
+    } catch (err: unknown) {
+      lastErr = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -104,8 +113,9 @@ export async function adminSaveSettingsAction(payload: Record<string, string>) {
       }
     }
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "خطأ أثناء حفظ الإعدادات";
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -157,12 +167,28 @@ export async function adminDeleteCategoryAction(id: string) {
   return { success: true };
 }
 
-export async function adminSaveItemAction(data: any) {
+export interface AdminItemInput {
+  id?: string;
+  categoryId: string;
+  nameAr: string;
+  nameEn?: string;
+  descriptionAr?: string;
+  descriptionEn?: string;
+  price: number;
+  image?: string;
+  imageUrl?: string;
+  isAvailable?: boolean;
+  sortOrder?: number;
+  spicyOption?: boolean;
+  isBestSeller?: boolean;
+}
+
+export async function adminSaveItemAction(data: AdminItemInput) {
   await ensureSeedDatabase();
-  const badgeParts = [];
+  const badgeParts: string[] = [];
   if (data.spicyOption) badgeParts.push("spicy");
   if (data.isBestSeller) badgeParts.push("bestseller");
-  const badgeVal = badgeParts.join(",") || null;
+  const badgeVal = badgeParts.length > 0 ? badgeParts.join(",") : null;
 
   if (data.id) {
     await db
@@ -256,7 +282,7 @@ export const adminGetSettingsAction = adminGetAllAction;
 export const adminSetSettingAction = adminSaveSettingsAction;
 export const adminSetOrderStatusAction = adminUpdateOrderStatusAction;
 
-export async function adminSaveScannedRowsAction(rows: any[]) {
+export async function adminSaveScannedRowsAction(rows: ScannedMenuItem[]) {
   await ensureSeedDatabase();
   for (const row of rows) {
     let cat = await db.select().from(categories).where(eq(categories.nameAr, row.categoryName)).limit(1);
@@ -271,7 +297,7 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
     }
 
     const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const badgeParts = [];
+    const badgeParts: string[] = [];
     if (row.spicyOption) badgeParts.push("spicy");
     if (row.isBestSeller) badgeParts.push("bestseller");
 
@@ -283,7 +309,7 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
       descriptionAr: row.descriptionAr || "",
       descriptionEn: "",
       price: Number(row.price || 0),
-      badge: badgeParts.join(",") || null,
+      badge: badgeParts.length > 0 ? badgeParts.join(",") : null,
       isAvailable: 1,
     });
   }
