@@ -1,34 +1,48 @@
+// src/app/api/customer/[code]/route.ts
+
 import { NextResponse } from "next/server";
 import { getPassData } from "@/db/queries";
 
-export const dynamic = "force-dynamic";
+export async function GET(
+  request: Request,
+  props: { params: Promise<{ code: string }> }
+) {
+  try {
+    const params = await props.params;
+    const code = params.code;
 
-/** POS / rider lookup endpoint consumed by the Lion Pass QR. */
-export async function GET(_req: Request, { params }: { params: Promise<{ code: string }> }) {
-  const { code } = await params;
-  const data = await getPassData(code.toUpperCase());
-  if (!data) {
-    return NextResponse.json({ found: false }, { status: 404 });
+    if (!code) {
+      return NextResponse.json({ found: false, error: "كود العميل مطلوب" }, { status: 400 });
+    }
+
+    const data = await getPassData(code);
+    if (!data) {
+      return NextResponse.json({ found: false }, { status: 404 });
+    }
+
+    const { customer, ordersList, ordersCount, ltv, zone } = data;
+
+    return NextResponse.json({
+      found: true,
+      customer: {
+        code: customer.code,
+        fullName: customer.fullName,
+        primaryPhone: customer.primaryPhone,
+        totalOrders: customer.totalOrders,
+        totalSpent: customer.totalSpent,
+        loyaltyPoints: customer.loyaltyPoints,
+        discountPercent: customer.discountPercent,
+      },
+      ordersList,
+      ordersCount,
+      ltv,
+      zone,
+    });
+  } catch (err: any) {
+    console.error("Error in GET /api/customer/[code]:", err);
+    return NextResponse.json(
+      { found: false, error: err?.message || "حدث خطأ أثناء الاستعلام" },
+      { status: 500 }
+    );
   }
-  const { customer, ordersList, ordersCount, ltv, zone } = data;
-  return NextResponse.json({
-    found: true,
-    customer: {
-      code: customer.customerCode,
-      name: customer.name,
-      primaryPhone: customer.primaryPhone,
-      secondaryPhone: customer.secondaryPhone,
-      address: [customer.street, customer.building, customer.flat, customer.landmark].filter(Boolean).join(", "),
-      zone: zone ? { nameAr: zone.nameAr, nameEn: zone.nameEn, fee: zone.price } : null,
-      loyaltyPoints: ordersCount * 10,
-    },
-    stats: { ordersCount, ltv },
-    recentOrders: ordersList.slice(0, 10).map((o) => ({
-      orderNumber: o.orderNumber,
-      status: o.status,
-      total: o.total,
-      createdAt: o.createdAt,
-      items: o.items.length,
-    })),
-  });
 }
