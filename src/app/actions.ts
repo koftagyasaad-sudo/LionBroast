@@ -9,7 +9,39 @@ import {
   getDeliveryZoneById,
 } from "@/db/queries";
 
-export async function submitOrderAction(payload: any) {
+export interface OrderInputPayload {
+  customerName?: string;
+  name?: string;
+  customerPhone?: string;
+  phone?: string;
+  address?: string;
+  addressDetails?: string;
+  deliveryZoneId?: string | number;
+  deliveryFee?: number;
+  discountAmount?: number;
+  totalAmount?: number;
+  notes?: string;
+  items?: Array<{
+    menuItemId?: string | number;
+    id?: string | number;
+    nameAr?: string;
+    name?: string;
+    price?: number;
+    quantity?: number;
+    size?: string;
+    isSpicy?: boolean;
+    notes?: string;
+  }>;
+}
+
+export interface FormattedItem {
+  itemId?: string;
+  nameAr: string;
+  price: number;
+  quantity: number;
+}
+
+export async function submitOrderAction(payload: OrderInputPayload) {
   try {
     const name = String(payload?.customerName || payload?.name || "").trim();
     const phone = String(payload?.customerPhone || payload?.phone || "").trim();
@@ -24,28 +56,29 @@ export async function submitOrderAction(payload: any) {
       return { success: false, error: "السلة فارغة. يرجى إضافة أصناف قبل إرسال الطلب." };
     }
 
-    const formattedItems = payload.items.map((item: any) => ({
+    const formattedItems: FormattedItem[] = payload.items.map((item) => ({
       itemId: item.menuItemId ? String(item.menuItemId) : item.id ? String(item.id) : undefined,
       nameAr: String(item.nameAr || item.name || "صنف"),
       price: Number(item.price || 0),
       quantity: Number(item.quantity || 1),
     }));
 
-    // البحث عن العميل أو إنشائه
     let customer = await getCustomerByPhone(phone);
     if (!customer) {
       const code = `LION-${Math.floor(100000 + Math.random() * 900000)}`;
       customer = await createCustomer({ name, phone, code });
     }
 
-    // حساب التوصيل والإجمالي
     let deliveryFee = Number(payload?.deliveryFee || 0);
     if (zoneId && !deliveryFee) {
       const zone = await getDeliveryZoneById(zoneId);
       if (zone) deliveryFee = zone.fee || zone.price || 0;
     }
 
-    const itemsTotal = formattedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const itemsTotal = formattedItems.reduce(
+      (sum: number, i: FormattedItem) => sum + i.price * i.quantity,
+      0
+    );
     const discountAmount = Number(payload?.discountAmount || 0);
     const finalTotal = Math.max(0, itemsTotal + deliveryFee - discountAmount);
 
@@ -71,9 +104,10 @@ export async function submitOrderAction(payload: any) {
       passCode: customer.code,
       totalAmount: finalTotal,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع عند تسجيل الطلب.";
     console.error("Error in submitOrderAction:", err);
-    return { success: false, error: err?.message || "حدث خطأ غير متوقع عند تسجيل الطلب." };
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -107,8 +141,9 @@ export async function saveCustomerAction(data: {
         passCode: customer.code,
       },
     };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "حدث خطأ غير متوقع" };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -122,8 +157,9 @@ export async function fetchCustomerPassAction(passCode: string) {
       return { success: false, error: "لم نتمكن من العثور على بطاقة الولاء بهذا الكود" };
     }
     return { success: true, data: passData };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "حدث خطأ غير متوقع" };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -134,8 +170,9 @@ export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
     if (!orderNumbers || orderNumbers.length === 0) return { success: true, orders: [] };
     const ordersList = await getOrdersByNumbers(orderNumbers);
     return { success: true, orders: ordersList };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "حدث خطأ غير متوقع" };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
+    return { success: false, error: errorMsg };
   }
 }
 
