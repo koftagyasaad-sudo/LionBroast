@@ -1,142 +1,87 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  boolean,
-  integer,
-  doublePrecision,
-  jsonb,
-  timestamp,
-  index,
-} from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 
-/* ------------------------------------------------------------------ */
-/* Customers — registered via the first-visit onboarding modal         */
-/* ------------------------------------------------------------------ */
-export const customers = pgTable(
-  "customers",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    customerCode: text("customer_code").notNull().unique(), // ASD-XXXXX
-    name: text("name").notNull(),
-    primaryPhone: text("primary_phone").notNull().unique(), // WhatsApp-ready
-    secondaryPhone: text("secondary_phone"),
-    street: text("street").notNull(),
-    building: text("building"),
-    flat: text("flat"),
-    landmark: text("landmark"),
-    zoneId: uuid("zone_id"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("customers_phone_idx").on(t.primaryPhone)],
-);
-
-/* ------------------------------------------------------------------ */
-/* Delivery zones — flat-rate pricing, admin editable                  */
-/* ------------------------------------------------------------------ */
-export const deliveryZones = pgTable("delivery_zones", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  nameAr: text("name_ar").notNull(),
-  nameEn: text("name_en").notNull(),
-  price: doublePrecision("price").notNull().default(0),
-  isActive: boolean("is_active").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
-
-/* ------------------------------------------------------------------ */
-/* Menu categories                                                     */
-/* ------------------------------------------------------------------ */
+// Categories Table
 export const categories = pgTable("categories", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  id: serial("id").primaryKey(),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
-  image: text("image"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").default(0).notNull(),
 });
 
-export type ItemSize = { id: string; ar: string; en: string; price: number };
+// Menu Items Table
+export const menuItems = pgTable("items", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").references(() => categories.id),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en").notNull(),
+  descriptionAr: text("description_ar").default(""),
+  descriptionEn: text("description_en").default(""),
+  price: integer("price").notNull(), // stored in piasters (e.g. 15000 = 150 EGP)
+  imageUrl: text("image_url").default(""),
+  isAvailable: boolean("is_available").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+});
 
-/* ------------------------------------------------------------------ */
-/* Menu items                                                          */
-/* ------------------------------------------------------------------ */
-export const menuItems = pgTable(
-  "menu_items",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    categoryId: uuid("category_id").notNull(),
-    nameAr: text("name_ar").notNull(),
-    nameEn: text("name_en").notNull(),
-    descriptionAr: text("description_ar"),
-    descriptionEn: text("description_en"),
-    price: doublePrecision("price").notNull().default(0),
-    sizes: jsonb("sizes").$type<ItemSize[]>().notNull().default([]),
-    spicyOption: boolean("spicy_option").notNull().default(false), // Original / Spicy variant
-    isBestSeller: boolean("is_best_seller").notNull().default(false),
-    isAvailable: boolean("is_available").notNull().default(true),
-    image: text("image"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("menu_items_category_idx").on(t.categoryId), index("menu_items_best_idx").on(t.isBestSeller)],
-);
+// Alias for items
+export const items = menuItems;
 
-export type OrderLine = {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  price: number;
-  unitPrice: number;
-  qty: number;
-  flavor?: "original" | "spicy" | null;
-  sizeLabel?: string | null;
-};
+// Orders Table
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  orderNumber: text("order_number").notNull().unique(),
+  customerCode: text("customer_code").default(""),
+  customerName: text("customer_name").notNull(),
+  phone: text("phone").notNull(),
+  address: text("address").notNull(),
+  subtotal: integer("subtotal").notNull(),
+  deliveryFee: integer("delivery_fee").default(0).notNull(),
+  total: integer("total").notNull(),
+  status: text("status").default("pending").notNull(),
+  notes: text("notes").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
-export const ORDER_STATUSES = [
-  "PENDING",
-  "CONFIRMED",
-  "PREPARING",
-  "ON_THE_WAY",
-  "DELIVERED",
-  "CANCELLED",
-] as const;
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
+// Order Items / Lines
+export const orderLines = pgTable("order_lines", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").references(() => orders.id),
+  itemId: integer("item_id"),
+  itemNameAr: text("item_name_ar").default(""),
+  itemNameEn: text("item_name_en").default(""),
+  quantity: integer("quantity").notNull(),
+  price: integer("price").notNull(),
+  notes: text("notes").default(""),
+});
 
-/* ------------------------------------------------------------------ */
-/* Orders — logged atomically at WhatsApp checkout                     */
-/* ------------------------------------------------------------------ */
-export const orders = pgTable(
-  "orders",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    orderNumber: text("order_number").notNull().unique(),
-    customerId: uuid("customer_id"),
-    customerCode: text("customer_code"),
-    customerName: text("customer_name").notNull(),
-    primaryPhone: text("primary_phone").notNull(),
-    secondaryPhone: text("secondary_phone"),
-    address: text("address").notNull(),
-    mapsLink: text("maps_link"),
-    deliveryZone: text("delivery_zone").notNull(),
-    items: jsonb("items").$type<OrderLine[]>().notNull(),
-    subtotal: doublePrecision("subtotal").notNull(),
-    deliveryFee: doublePrecision("delivery_fee").notNull(),
-    total: doublePrecision("total").notNull(),
-    status: text("status").notNull().default("PENDING"),
-    notes: text("notes"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("orders_customer_idx").on(t.customerId), index("orders_created_idx").on(t.createdAt)],
-);
+// Alias for orderItems
+export const orderItems = orderLines;
 
-/* ------------------------------------------------------------------ */
-/* Key/value settings — promo banner, hotline, etc.                    */
-/* ------------------------------------------------------------------ */
+// Customers
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  address: text("address").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Delivery Zones
+export const deliveryZones = pgTable("delivery_zones", {
+  id: serial("id").primaryKey(),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en").notNull(),
+  fee: integer("fee").notNull(),
+  isAvailable: boolean("is_available").default(true).notNull(),
+});
+
+// Settings Table
 export const settings = pgTable("settings", {
-  key: text("key").primaryKey(),
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
   value: text("value").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Alias for storeSettings
+export const storeSettings = settings;
