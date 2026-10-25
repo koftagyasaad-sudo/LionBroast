@@ -1,6 +1,5 @@
 import { db } from "@/db";
 import { categories, menuItems, deliveryZones, settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function ensureSeedDatabase() {
   try {
@@ -173,9 +172,4 @@ export async function ensureSeedDatabase() {
     }
 
     console.log("✅ تم تغذية قاعدة بيانات Neon بنجاح!");
-    return { success: true, message: "تمت تغذية قاعدة بيانات Neon بجميع البيانات بنجاح!" };
-  } catch (err: any) {
-    console.error("فشل تغذية قاعدة البيانات:", err);
-    return { success: false, error: err?.message || "حدث خطأ أثناء التغذية" };
-  }
-}
+    return { success: true, message: 
