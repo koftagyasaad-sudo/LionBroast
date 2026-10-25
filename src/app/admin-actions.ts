@@ -1,9 +1,10 @@
 "use server";
 
 import { db } from "@/db";
-import { categories, menuItems, orders, settings, deliveryZones, customers } from "@/db/schema";
+import { categories, menuItems, orders, settings, deliveryZones } from "@/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
-import { FrontendSettings, getFrontendSettings } from "@/db/queries";
+import { FrontendSettings } from "@/db/queries";
+import { ensureSeedDatabase } from "@/db/seed";
 
 export interface ScannedRow {
   categoryNameAr: string;
@@ -15,9 +16,17 @@ export interface ScannedRow {
   price: number;
 }
 
+// 0. Manual Seed Trigger for Admin Panel
+export async function adminTriggerSeedAction() {
+  return await ensureSeedDatabase();
+}
+
 // 1. Fetch All Admin Data
 export async function adminGetAllAction() {
   try {
+    // Ensure dynamic database seeding on initial load
+    await ensureSeedDatabase();
+
     const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
     const itemsList = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
     const ordersList = await db.select().from(orders).orderBy(desc(orders.createdAt));
