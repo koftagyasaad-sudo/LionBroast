@@ -9,10 +9,20 @@ import {
   orders,
   deliveryZones,
   settings,
-  orderLines,
 } from "@/db/schema";
-import { eq, inArray, desc, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import { ensureSeedDatabase } from "@/db/seed";
+import type { FrontendSettings } from "@/db/queries";
+
+export interface ScannedRow {
+  categoryAr: string;
+  categoryEn?: string;
+  nameAr: string;
+  nameEn?: string;
+  descriptionAr?: string;
+  descriptionEn?: string;
+  price: number;
+}
 
 export async function saveFrontendSettingsAction(data: Record<string, string>) {
   try {
@@ -147,7 +157,7 @@ export async function adminScanMenuAction(formData: FormData) {
   }
 }
 
-export async function adminSaveScannedRowsAction(items: any[]) {
+export async function adminSaveScannedRowsAction(items: ScannedRow[]) {
   try {
     if (!items || items.length === 0) {
       return { success: false, error: "لا توجد عناصر للحفظ" };
@@ -234,7 +244,6 @@ export async function adminTriggerSeedAction() {
   }
 }
 
-// Category Actions
 export async function adminSaveCategoryAction(cat: any) {
   try {
     if (cat.id) {
@@ -270,7 +279,6 @@ export async function adminDeleteCategoryAction(id: string) {
   }
 }
 
-// Item Actions
 export async function adminSaveItemAction(item: any) {
   try {
     if (item.id) {
@@ -320,7 +328,6 @@ export async function adminDeleteItemAction(id: string) {
   }
 }
 
-// Order Actions
 export async function adminUpdateOrderStatusAction(id: number, status: string) {
   try {
     await db
@@ -342,7 +349,6 @@ export async function adminDeleteOrderAction(id: number) {
   }
 }
 
-// Zone Actions
 export async function adminSaveZoneAction(zone: any) {
   try {
     if (zone.id) {
