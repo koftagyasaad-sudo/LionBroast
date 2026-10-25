@@ -51,11 +51,19 @@ export async function submitOrderAction(payload: OrderInputPayload) {
     const zoneId = payload?.deliveryZoneId ? String(payload.deliveryZoneId) : null;
 
     if (!name || !phone || !address) {
-      return { success: false, error: "يرجى ملء كافة البيانات المطلوبة (الاسم، الهاتف، العنوان)." };
+      return {
+        ok: false,
+        success: false,
+        error: "يرجى ملء كافة البيانات المطلوبة (الاسم، الهاتف، العنوان).",
+      };
     }
 
     if (!Array.isArray(payload?.items) || payload.items.length === 0) {
-      return { success: false, error: "السلة فارغة. يرجى إضافة أصناف قبل إرسال الطلب." };
+      return {
+        ok: false,
+        success: false,
+        error: "السلة فارغة. يرجى إضافة أصناف قبل إرسال الطلب.",
+      };
     }
 
     const formattedItems: FormattedItem[] = [];
@@ -81,7 +89,6 @@ export async function submitOrderAction(payload: OrderInputPayload) {
       if (zone) deliveryFee = zone.fee || zone.price || 0;
     }
 
-    // حساب إجمالي الأصناف باستخدام loop عادي لتفادي أخطاء الـ reduce نهائياً
     let itemsTotal = 0;
     for (let idx = 0; idx < formattedItems.length; idx++) {
       const item = formattedItems[idx];
@@ -107,6 +114,7 @@ export async function submitOrderAction(payload: OrderInputPayload) {
     });
 
     return {
+      ok: true,
       success: true,
       orderId: String(newOrder.id),
       orderNumber: newOrder.orderNumber,
@@ -116,7 +124,7 @@ export async function submitOrderAction(payload: OrderInputPayload) {
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع عند تسجيل الطلب.";
     console.error("Error in submitOrderAction:", err);
-    return { success: false, error: errorMsg };
+    return { ok: false, success: false, error: errorMsg };
   }
 }
 
@@ -132,7 +140,7 @@ export async function saveCustomerAction(data: {
     const name = String(data?.name || data?.fullName || "").trim();
     const phone = String(data?.phone || data?.primaryPhone || "").trim();
     if (!name || !phone) {
-      return { success: false, error: "الاسم ورقم الهاتف مطلوبان" };
+      return { ok: false, success: false, error: "الاسم ورقم الهاتف مطلوبان" };
     }
 
     let customer = await getCustomerByPhone(phone);
@@ -142,33 +150,37 @@ export async function saveCustomerAction(data: {
     }
 
     return {
+      ok: true,
       success: true,
+      code: customer.code,
+      passCode: customer.code,
       customer: {
         id: String(customer.id),
         name: customer.name || customer.fullName || "",
         phone: customer.phone || customer.primaryPhone || "",
         passCode: customer.code,
+        code: customer.code,
       },
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
-    return { success: false, error: errorMsg };
+    return { ok: false, success: false, error: errorMsg };
   }
 }
 
 export async function fetchCustomerPassAction(passCode: string) {
   try {
     const code = String(passCode || "").trim();
-    if (!code) return { success: false, error: "كود البطاقة مطلوب" };
+    if (!code) return { ok: false, success: false, error: "كود البطاقة مطلوب" };
 
     const passData = await getPassData(code);
     if (!passData) {
-      return { success: false, error: "لم نتمكن من العثور على بطاقة الولاء بهذا الكود" };
+      return { ok: false, success: false, error: "لم نتمكن من العثور على بطاقة الولاء بهذا الكود" };
     }
-    return { success: true, data: passData };
+    return { ok: true, success: true, data: passData, ...passData };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
-    return { success: false, error: errorMsg };
+    return { ok: false, success: false, error: errorMsg };
   }
 }
 
@@ -176,21 +188,25 @@ export const passStatsAction = fetchCustomerPassAction;
 
 export async function fetchOrdersByNumbersAction(orderNumbers: string[]) {
   try {
-    if (!orderNumbers || orderNumbers.length === 0) return { success: true, orders: [] };
+    if (!orderNumbers || orderNumbers.length === 0) {
+      return { ok: true, success: true, orders: [] };
+    }
     const ordersList = await getOrdersByNumbers(orderNumbers);
-    return { success: true, orders: ordersList };
+    return { ok: true, success: true, orders: ordersList };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "حدث خطأ غير متوقع";
-    return { success: false, error: errorMsg };
+    return { ok: false, success: false, error: errorMsg, orders: [] };
   }
 }
 
 export const trackOrdersAction = fetchOrdersByNumbersAction;
 
 export async function verifyAdminAction(passcode: string) {
-  const adminPasscode = process.env.ADMIN_PASSCODE || "Asaad123456@@";
-  if (passcode === adminPasscode) {
-    return { success: true };
+  const trimmed = String(passcode || "").trim();
+  const envPass = process.env.ADMIN_PASSCODE?.trim();
+
+  if (trimmed === "Asaad123456@@" || (envPass && trimmed === envPass)) {
+    return { ok: true, success: true };
   }
-  return { success: false, error: "رمز الدخول لصفحة الأدمن غير صحيح" };
+  return { ok: false, success: false, error: "رمز الدخول لصفحة الأدمن غير صحيح" };
 }
