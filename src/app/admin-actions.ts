@@ -1,139 +1,50 @@
-// src/app/admin-actions.ts
-
 "use server";
 
-import { db } from "@/db/index";
-import {
-  categories,
-  menuItems,
-  orders,
-  deliveryZones,
-  settings,
-} from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { db } from "@/db";
+import { categories, menuItems, deliveryZones, settings, orders } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { ensureSeedDatabase } from "@/db/seed";
+import { mapCategoryToDTO, mapMenuItemToDTO, mapZoneToDTO } from "@/db/queries";
 
-export interface ScannedRow {
-  categoryAr: string;
-  categoryEn?: string;
-  nameAr: string;
-  nameEn?: string;
-  descriptionAr?: string;
-  descriptionEn?: string;
-  price: number;
-}
-
-/**
- * 1. حفظ إعدادات الهوية والـ CMS
- */
-export async function saveFrontendSettingsAction(data: Record<string, string>) {
-  try {
-    for (const [key, value] of Object.entries(data)) {
-      await db
-        .insert(settings)
-        .values({ key, value })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value },
-        });
-    }
-
-    return {
-      success: true,
-      message: "تم حفظ إعدادات الهوية والـ CMS بنجاح!",
-    };
-  } catch (err: any) {
-    console.error("Error in saveFrontendSettingsAction:", err);
-    return {
-      success: false,
-      error: err?.message || "فشل حفظ إعدادات الـ CMS",
-    };
-  }
-}
-
-export async function adminSaveSettingsAction(setts: Record<string, string>) {
-  return saveFrontendSettingsAction(setts);
-}
-
-/**
- * 2. حفظ إعداد فردي (مستخدم داخل OpsTab)
- */
-export async function adminSetSettingAction(key: string, value: string) {
-  try {
-    await db
-      .insert(settings)
-      .values({ key, value })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value },
-      });
-    return { success: true };
-  } catch (err: any) {
-    console.error("Error in adminSetSettingAction:", err);
-    return { success: false, error: err?.message || "فشل حفظ الإعداد" };
-  }
-}
-
-export async function adminGetSettingsAction() {
-  try {
-    const rows = await db.select().from(settings);
-    return { success: true, settings: rows };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
-}
-
-/**
- * 3. ماسح المنيو بالذكاء الاصطناعي (Gemini Scanner)
- */
 export async function adminScanMenuAction(formData: FormData) {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || !apiKey.startsWith("AIzaSy")) {
-      return {
-        success: false,
-        error: "مفتاح Gemini API غير معرف أو غير صحيح في بيئة العمل.",
-      };
-    }
-
-    const file = formData.get("file") as File;
-    if (!file) {
-      return { success: false, error: "لم يتم اختيار صورة المنيو" };
-    }
-
-    const bytes = await file.arrayBuffer();
-    const base64Data = Buffer.from(bytes).toString("base64");
-
-    const promptText = `
-أنت خبير في قراءة وقوائم طعام المطاعم (Menu Parser).
-قم بتحليل صورة منيو المطعم المرفقة واستخراج جميع الوجبات والأصناف بدقة 100%.
-
-يجب أن ترجع النتيجة كـ JSON Array فقط بالشكل التالي دون أي نصوص إضافية:
-[
-  {
-    "categoryAr": "وجبات البروست",
-    "categoryEn": "Broast Meals",
-    "nameAr": "وجبة 4 قطع",
-    "nameEn": "4 Pcs Meal",
-    "descriptionAr": "قطع دجاج مقرمش + بطاطس + ثومية",
-    "descriptionEn": "Crispy chicken + fries + garlic dip",
-    "price": 160
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { success: false, error: "GEMINI_API_KEY غير معرف في بيئة العمل Vercel" };
   }
-]
-`;
 
-    const models = [
-      "gemini-1.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-pro",
-    ];
+  const file = formData.get("file") as File;
+  if (!file) {
+    return { success: false, error: "لم يتم اختيار أي صورة" };
+  }
 
-    let jsonResponseText = "";
+  const buffer = await file.arrayBuffer();
+  const base64Data = Buffer.from(buffer).toString("base64");
+  const mimeType = file.type || "image/jpeg";
 
-    for (const modelName of models) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const res = await fetch(url, {
+  const promptText = `أنت خبير في تحليلات قوائم الطعام للمطاعم. قم بتحليل صورة قائمة الطعام المرفقة واستخرج جميع الأصناف والأقسام باللغة العربية.
+أرجع النتيجة بصيغة JSON فقط، بدون أي نص إضافي أو ماركداون، وفق الهيكل التالي:
+{
+  "items": [
+    {
+      "categoryName": "اسم القسم (مثل: وجبات البروست, السندوتشات, العروض)",
+      "nameAr": "اسم الوجبة/الصنف بالعربية",
+      "descriptionAr": "وصف الوجبة أو المكونات إن وجدت",
+      "price": 120,
+      "spicyOption": false,
+      "isBestSeller": false
+    }
+  ]
+}`;
+
+  const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
+  let resultText = "";
+  let lastErr = "";
+
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -143,7 +54,7 @@ export async function adminScanMenuAction(formData: FormData) {
                   { text: promptText },
                   {
                     inline_data: {
-                      mime_type: file.type || "image/jpeg",
+                      mime_type: mimeType,
                       data: base64Data,
                     },
                   },
@@ -151,301 +62,206 @@ export async function adminScanMenuAction(formData: FormData) {
               },
             ],
           }),
-        });
-
-        if (res.ok) {
-          const result = await res.json();
-          const textRes =
-            result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          if (textRes) {
-            jsonResponseText = textRes;
-            break;
-          }
         }
-      } catch (e) {
-        console.warn(`Failed model ${modelName}, trying next...`);
-      }
-    }
+      );
 
-    if (!jsonResponseText) {
-      return {
-        success: false,
-        error: "لم ينجح ذكاء Gemini في استخراج بيانات المنيو، يرجى إعادة المحاولة برفع صورة أوضح.",
-      };
-    }
-
-    const cleanedJson = jsonResponseText
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const parsedItems = JSON.parse(cleanedJson);
-
-    return {
-      success: true,
-      items: parsedItems,
-    };
-  } catch (err: any) {
-    console.error("Error in adminScanMenuAction:", err);
-    return {
-      success: false,
-      error: "حدث خطأ أثناء تحليل الصورة بالذكاء الاصطناعي",
-    };
-  }
-}
-
-export async function adminSaveScannedRowsAction(items: ScannedRow[]) {
-  try {
-    if (!items || items.length === 0) {
-      return { success: false, error: "لا توجد عناصر للحفظ" };
-    }
-
-    const existingCats = await db.select().from(categories);
-    const catMap = new Map<string, string>();
-    existingCats.forEach((c) => catMap.set(c.nameAr, c.id));
-
-    let maxSort = existingCats.length;
-
-    for (const item of items) {
-      const catNameAr = item.categoryAr || "أصناف أخرى";
-      let catId = catMap.get(catNameAr);
-
-      if (!catId) {
-        catId = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        maxSort++;
-        await db.insert(categories).values({
-          id: catId,
-          nameAr: catNameAr,
-          nameEn: item.categoryEn || catNameAr,
-          sortOrder: maxSort,
-        });
-        catMap.set(catNameAr, catId);
+      if (!res.ok) {
+        const errJson = await res.json();
+        lastErr = errJson.error?.message || res.statusText;
+        continue;
       }
 
-      const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-      await db.insert(menuItems).values({
-        id: itemId,
-        categoryId: catId,
-        nameAr: item.nameAr,
-        nameEn: item.nameEn || item.nameAr,
-        descriptionAr: item.descriptionAr || "",
-        descriptionEn: item.descriptionEn || "",
-        price: Number(item.price) || 0,
-        imageUrl: "",
-        badge: "",
-        sortOrder: 1,
-        isAvailable: 1,
-      });
+      const jsonRes = await res.json();
+      resultText = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (resultText) break;
+    } catch (err: any) {
+      lastErr = err.message;
     }
+  }
 
-    return { success: true, message: "تمت إضافة الأصناف المستخرجة للمنيو بنجاح!" };
-  } catch (err: any) {
-    console.error("Error in adminSaveScannedRowsAction:", err);
-    return { success: false, error: "حدث خطأ أثناء حفظ أصناف المنيو" };
+  if (!resultText) {
+    return { success: false, error: `فشل الاتصال بـ Gemini API: ${lastErr}` };
+  }
+
+  try {
+    const cleanedText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanedText);
+    return { success: true, data: parsed.items || [] };
+  } catch {
+    return { success: false, error: "تعذر استخراج بيانات JSON صحيحة من الصورة" };
   }
 }
 
-/**
- * 4. جلب كافة البيانات للوحة التحكم (Dashboard Initial Data)
- */
-export async function adminGetAllAction() {
+export async function adminSaveSettingsAction(payload: Record<string, string>) {
+  await ensureSeedDatabase();
   try {
-    let cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    if (!cats || cats.length === 0) {
-      await ensureSeedDatabase();
-      cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    }
-
-    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-    const ords = await db.select().from(orders).orderBy(desc(orders.createdAt));
-    const zones = await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
-    const setts = await db.select().from(settings);
-
-    return {
-      success: true,
-      categories: cats,
-      items,
-      orders: ords,
-      zones,
-      settings: setts,
-    };
-  } catch (err: any) {
-    console.error("Error in adminGetAllAction:", err);
-    return { success: false, error: "فشل جلب بيانات لوحة التحكم" };
-  }
-}
-
-export async function adminTriggerSeedAction() {
-  try {
-    await ensureSeedDatabase();
-    return { success: true, message: "تمت إعادة تغذية قاعدة البيانات بنجاح!" };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "فشل التغذية التلقائية" };
-  }
-}
-
-/**
- * 5. إدارة التصنيفات (Category CRUD)
- */
-export async function adminSaveCategoryAction(cat: any) {
-  try {
-    if (cat.id) {
-      await db
-        .update(categories)
-        .set({
-          nameAr: cat.nameAr,
-          nameEn: cat.nameEn,
-          sortOrder: cat.sortOrder || 0,
-        })
-        .where(eq(categories.id, cat.id));
-    } else {
-      const id = `cat-${Date.now()}`;
-      await db.insert(categories).values({
-        id,
-        nameAr: cat.nameAr,
-        nameEn: cat.nameEn,
-        sortOrder: cat.sortOrder || 0,
-      });
+    for (const [key, val] of Object.entries(payload)) {
+      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+      if (existing.length > 0) {
+        await db.update(settings).set({ val: String(val) }).where(eq(settings.key, key));
+      } else {
+        await db.insert(settings).values({ key, val: String(val) });
+      }
     }
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err?.message };
+    return { success: false, error: err.message };
   }
+}
+
+export async function adminGetAllAction() {
+  await ensureSeedDatabase();
+  const [cats, items, zonesList, settingsList, ordersList] = await Promise.all([
+    db.select().from(categories).orderBy(categories.sortOrder),
+    db.select().from(menuItems).orderBy(menuItems.sortOrder),
+    db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
+    db.select().from(settings),
+    db.select().from(orders),
+  ]);
+
+  return {
+    categories: cats.map(mapCategoryToDTO),
+    items: items.map(mapMenuItemToDTO),
+    zones: zonesList.map(mapZoneToDTO),
+    settings: settingsList,
+    orders: ordersList,
+  };
+}
+
+export async function adminSaveCategoryAction(data: { id?: string; nameAr: string; nameEn?: string; sortOrder?: number }) {
+  await ensureSeedDatabase();
+  if (data.id) {
+    await db
+      .update(categories)
+      .set({ nameAr: data.nameAr, nameEn: data.nameEn, sortOrder: data.sortOrder || 0 })
+      .where(eq(categories.id, data.id));
+  } else {
+    await db.insert(categories).values({
+      nameAr: data.nameAr,
+      nameEn: data.nameEn,
+      sortOrder: data.sortOrder || 0,
+    });
+  }
+  return { success: true };
 }
 
 export async function adminDeleteCategoryAction(id: string) {
-  try {
-    await db.delete(categories).where(eq(categories.id, id));
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  await ensureSeedDatabase();
+  await db.delete(categories).where(eq(categories.id, id));
+  return { success: true };
 }
 
-/**
- * 6. إدارة عناصر المنيو (Item CRUD)
- */
-export async function adminSaveItemAction(item: any) {
-  try {
-    if (item.id) {
-      await db
-        .update(menuItems)
-        .set({
-          categoryId: item.categoryId,
-          nameAr: item.nameAr,
-          nameEn: item.nameEn,
-          descriptionAr: item.descriptionAr,
-          descriptionEn: item.descriptionEn,
-          price: Number(item.price),
-          imageUrl: item.imageUrl || "",
-          badge: item.badge || "",
-          sortOrder: item.sortOrder || 0,
-          isAvailable: item.isAvailable ? 1 : 0,
-        })
-        .where(eq(menuItems.id, item.id));
-    } else {
-      const id = `item-${Date.now()}`;
-      await db.insert(menuItems).values({
-        id,
-        categoryId: item.categoryId,
-        nameAr: item.nameAr,
-        nameEn: item.nameEn,
-        descriptionAr: item.descriptionAr || "",
-        descriptionEn: item.descriptionEn || "",
-        price: Number(item.price),
-        imageUrl: item.imageUrl || "",
-        badge: item.badge || "",
-        sortOrder: item.sortOrder || 0,
-        isAvailable: item.isAvailable ? 1 : 0,
-      });
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
+export async function adminSaveItemAction(data: any) {
+  await ensureSeedDatabase();
+  if (data.id) {
+    await db
+      .update(menuItems)
+      .set({
+        categoryId: data.categoryId,
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        descriptionAr: data.descriptionAr,
+        descriptionEn: data.descriptionEn,
+        price: data.price.toString(),
+        image: data.image,
+        isAvailable: data.isAvailable ?? true,
+        sortOrder: data.sortOrder || 0,
+        spicyOption: data.spicyOption ?? false,
+        isBestSeller: data.isBestSeller ?? false,
+      })
+      .where(eq(menuItems.id, data.id));
+  } else {
+    await db.insert(menuItems).values({
+      categoryId: data.categoryId,
+      nameAr: data.nameAr,
+      nameEn: data.nameEn,
+      descriptionAr: data.descriptionAr,
+      descriptionEn: data.descriptionEn,
+      price: data.price.toString(),
+      image: data.image,
+      isAvailable: data.isAvailable ?? true,
+      sortOrder: data.sortOrder || 0,
+      spicyOption: data.spicyOption ?? false,
+      isBestSeller: data.isBestSeller ?? false,
+    });
   }
+  return { success: true };
 }
 
 export async function adminDeleteItemAction(id: string) {
-  try {
-    await db.delete(menuItems).where(eq(menuItems.id, id));
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  await ensureSeedDatabase();
+  await db.delete(menuItems).where(eq(menuItems.id, id));
+  return { success: true };
 }
 
-/**
- * 7. إدارة الطلبات وحالاتها (Order Actions)
- */
-export async function adminSetOrderStatusAction(idOrNumber: number | string, status: string) {
-  try {
-    if (typeof idOrNumber === "number") {
-      await db.update(orders).set({ status }).where(eq(orders.id, idOrNumber));
-    } else {
-      const num = Number(idOrNumber);
-      if (!isNaN(num) && idOrNumber !== "") {
-        await db.update(orders).set({ status }).where(eq(orders.id, num));
-      } else {
-        await db.update(orders).set({ status }).where(eq(orders.orderNumber, idOrNumber));
-      }
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "فشل تحديث حالة الطلب" };
-  }
+export async function adminUpdateOrderStatusAction(orderId: string, status: string) {
+  await ensureSeedDatabase();
+  await db.update(orders).set({ status }).where(eq(orders.id, orderId));
+  return { success: true };
 }
 
-export async function adminUpdateOrderStatusAction(idOrNumber: number | string, status: string) {
-  return adminSetOrderStatusAction(idOrNumber, status);
+export async function adminDeleteOrderAction(id: string) {
+  await ensureSeedDatabase();
+  await db.delete(orders).where(eq(orders.id, id));
+  return { success: true };
 }
 
-export async function adminDeleteOrderAction(id: number) {
-  try {
-    await db.delete(orders).where(eq(orders.id, id));
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
+export async function adminSaveZoneAction(data: { id?: string; nameAr: string; nameEn?: string; fee: number; estimatedMinutes: number }) {
+  await ensureSeedDatabase();
+  if (data.id) {
+    await db
+      .update(deliveryZones)
+      .set({
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        fee: data.fee.toString(),
+        estimatedMinutes: data.estimatedMinutes,
+      })
+      .where(eq(deliveryZones.id, data.id));
+  } else {
+    await db.insert(deliveryZones).values({
+      nameAr: data.nameAr,
+      nameEn: data.nameEn,
+      fee: data.fee.toString(),
+      estimatedMinutes: data.estimatedMinutes,
+    });
   }
-}
-
-/**
- * 8. إدارة مناطق التوصيل (Zone CRUD)
- */
-export async function adminSaveZoneAction(zone: any) {
-  try {
-    if (zone.id) {
-      await db
-        .update(deliveryZones)
-        .set({
-          nameAr: zone.nameAr,
-          nameEn: zone.nameEn,
-          fee: Number(zone.fee),
-          estimatedMinutes: Number(zone.estimatedMinutes || 30),
-          sortOrder: zone.sortOrder || 0,
-        })
-        .where(eq(deliveryZones.id, zone.id));
-    } else {
-      const id = `zone-${Date.now()}`;
-      await db.insert(deliveryZones).values({
-        id,
-        nameAr: zone.nameAr,
-        nameEn: zone.nameEn,
-        fee: Number(zone.fee),
-        estimatedMinutes: Number(zone.estimatedMinutes || 30),
-        sortOrder: zone.sortOrder || 0,
-      });
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  return { success: true };
 }
 
 export async function adminDeleteZoneAction(id: string) {
-  try {
-    await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
-  }
+  await ensureSeedDatabase();
+  await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
+  return { success: true };
 }
+
+// Aliases for compatibility
+export const saveFrontendSettingsAction = adminSaveSettingsAction;
+export const adminSaveSettings = adminSaveSettingsAction;
+export const adminGetSettingsAction = adminGetAllAction;
+export const adminSetSettingAction = adminSaveSettingsAction;
+export const adminSetOrderStatusAction = adminUpdateOrderStatusAction;
+export const adminSaveScannedRowsAction = async (rows: any[]) => {
+  await ensureSeedDatabase();
+  for (const row of rows) {
+    let cat = await db.select().from(categories).where(eq(categories.nameAr, row.categoryName)).limit(1);
+    let catId = cat[0]?.id;
+    if (!catId) {
+      const [newCat] = await db.insert(categories).values({ nameAr: row.categoryName }).returning();
+      catId = newCat.id;
+    }
+    await db.insert(menuItems).values({
+      categoryId: catId,
+      nameAr: row.nameAr,
+      descriptionAr: row.descriptionAr || "",
+      price: (row.price || 0).toString(),
+      spicyOption: Boolean(row.spicyOption),
+      isBestSeller: Boolean(row.isBestSeller),
+    });
+  }
+  return { success: true };
+};
+export const adminTriggerSeedAction = async () => {
+  await ensureSeedDatabase();
+  return { success: true };
+};
