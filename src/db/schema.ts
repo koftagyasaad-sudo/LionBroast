@@ -1,4 +1,5 @@
 import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { type InferSelectModel, type InferInsertModel } from "drizzle-orm";
 
 // Categories Table
 export const categories = pgTable("categories", {
@@ -56,7 +57,7 @@ export const orderLines = pgTable("order_lines", {
 // Alias for orderItems
 export const orderItems = orderLines;
 
-// Customers
+// Customers Table
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
@@ -66,7 +67,7 @@ export const customers = pgTable("customers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Delivery Zones
+// Delivery Zones Table
 export const deliveryZones = pgTable("delivery_zones", {
   id: serial("id").primaryKey(),
   nameAr: text("name_ar").notNull(),
@@ -85,3 +86,14 @@ export const settings = pgTable("settings", {
 
 // Alias for storeSettings
 export const storeSettings = settings;
+
+// Export TypeScript Types needed across actions and pages
+export type Category = InferSelectModel<typeof categories>;
+export type MenuItem = InferSelectModel<typeof menuItems>;
+export type Item = MenuItem;
+export type Order = InferSelectModel<typeof orders>;
+export type OrderLine = InferSelectModel<typeof orderLines>;
+export type OrderItem = OrderLine;
+export type Customer = InferSelectModel<typeof customers>;
+export type DeliveryZone = InferSelectModel<typeof deliveryZones>;
+export type Setting = InferSelectModel<typeof settings>;
