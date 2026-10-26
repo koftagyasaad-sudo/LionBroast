@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Fully secured against toLocaleString errors)
+// FETCH ALL ADMIN DASHBOARD DATA (Fully secured & complete)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -82,7 +82,6 @@ export async function adminGetAllAction(token?: string) {
     const customersCount = customersList.length;
     const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    // كائن أرقام واحصائيات آمن بنسبة 100% لمنع خطأ toLocaleString
     const kpisObj = {
       revenue: totalRevenue,
       totalRevenue: totalRevenue,
@@ -179,7 +178,6 @@ export async function verifyAdminAction(passcode: string) {
   return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
-// Aliases for Admin UI Tabs
 export async function upsertCategoryAction(data: any) {
   try {
     const id = data?.id || `cat-${Date.now()}`;
@@ -443,7 +441,7 @@ export async function adminScanMenuAction() {
   return { ok: true, success: true, rows: [] };
 }
 
-export async function adminSaveScannedRowsAction(rows: any[]) {
+export async function adminSaveScannedRowsAction(_rows: any[]) {
   try {
     return { ok: true, success: true };
   } catch (err: unknown) {
