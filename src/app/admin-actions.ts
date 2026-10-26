@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Bulletproof & Fully Compatible)
+// FETCH ALL ADMIN DASHBOARD DATA (Bulletproof & Fully Compatible with AdminShell)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -82,20 +82,20 @@ export async function adminGetAllAction(token?: string) {
     const customersCount = customersList.length;
     const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    // توفير الهياكل المزدوجة التي تناديها OverviewTab وتوابعها لتجنب أي undefined
+    // توفير كافة الهياكل الرقمية الممكنة لتجنب أي خطأ toLocaleString نهائياً
     const metricsObject = {
-      revenue: totalRevenue,
-      totalRevenue: totalRevenue,
-      sales: totalRevenue,
-      orders: ordersCount,
-      totalOrders: ordersCount,
-      ordersCount: ordersCount,
-      customers: customersCount,
-      totalCustomers: customersCount,
-      customersCount: customersCount,
-      avgOrder: avgOrder,
-      averageOrderValue: avgOrder,
-      aov: avgOrder,
+      revenue: Number(totalRevenue || 0),
+      totalRevenue: Number(totalRevenue || 0),
+      sales: Number(totalRevenue || 0),
+      orders: Number(ordersCount || 0),
+      totalOrders: Number(ordersCount || 0),
+      ordersCount: Number(ordersCount || 0),
+      customers: Number(customersCount || 0),
+      totalCustomers: Number(customersCount || 0),
+      customersCount: Number(customersCount || 0),
+      avgOrder: Number(avgOrder || 0),
+      averageOrderValue: Number(avgOrder || 0),
+      aov: Number(avgOrder || 0),
       pending: ordersList.filter((o) => o.status === "pending").length,
       completed: ordersList.filter((o) => o.status === "delivered" || o.status === "completed").length,
     };
@@ -156,7 +156,7 @@ export async function adminGetAllAction(token?: string) {
       frontend: mergedFrontend,
       promo: promo || {
         enabled: true,
-        title: "خصم 15% على أول طلب بـ كود: ليدز",
+        title: "خصم 15% على أول طلب بـ كود: LION15",
         code: "LION15",
         textAr: "خصم 15% على أول طلب بـ كود: LION15",
         textEn: "15% OFF on first order code: LION15",
