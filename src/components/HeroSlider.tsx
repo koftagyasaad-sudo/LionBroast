@@ -3,12 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Clock3, Flame, Leaf, ShoppingBag, Star, UtensilsCrossed } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Flame,
+  Leaf,
+  ShoppingBag,
+  Star,
+  UtensilsCrossed,
+} from "lucide-react";
 import { IMG } from "@/lib/img";
 import { useDict, useIsAr } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
-const HERO_IMGS = [IMG.heroClassic, IMG.heroSpicy, IMG.heroCombo];
+const DEFAULT_HERO_IMGS = [IMG.heroClassic, IMG.heroSpicy, IMG.heroCombo];
 
 export default function HeroSlider({ frontend }: { frontend?: any }) {
   const t = useDict();
@@ -17,16 +26,44 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  // سحب الشرائح الأساسية وتعديل الشريحة الأولى بالبيانات الجاية من الداتا بيز
+  // سحب الشرائح الأساسية وتعديلها بالبيانات والصور القادمة من لوحة التحكم (الداتا بيز)
   const rawSlides = t.hero.slides;
   const slides = [...rawSlides];
-  
-  if (frontend) {
+
+  if (frontend && slides.length > 0) {
     slides[0] = {
       ...slides[0],
-      title: isAr ? (frontend.heroTitleAr || slides[0].title) : (frontend.heroTitleEn || slides[0].title),
-      sub: isAr ? (frontend.heroSubAr || slides[0].sub) : (frontend.heroSubEn || slides[0].sub),
+      title: isAr
+        ? frontend.heroTitleAr || frontend.hero_title_ar || slides[0].title
+        : frontend.heroTitleEn || frontend.hero_title_en || slides[0].title,
+      sub: isAr
+        ? frontend.heroSubtitleAr ||
+          frontend.heroSubAr ||
+          frontend.hero_subtitle_ar ||
+          slides[0].sub
+        : frontend.heroSubEn || frontend.hero_subtitle_en || slides[0].sub,
     };
+  }
+
+  // دمج صور السلايدر المرفوعة من لوحة التحكم مع الصور الافتراضية
+  const slideImages = [
+    frontend?.heroImage1 || frontend?.hero_image_1 || DEFAULT_HERO_IMGS[0],
+    frontend?.heroImage2 || frontend?.hero_image_2 || DEFAULT_HERO_IMGS[1],
+    frontend?.heroImage3 || frontend?.hero_image_3 || DEFAULT_HERO_IMGS[2],
+  ];
+
+  // إضافة البانرات الإعلانية الإضافية (إن وجدت في لوحة التحكم) كشرائح في السلايدر
+  const extraBanners = [
+    frontend?.adBanner1 || frontend?.ad_banner_1,
+    frontend?.adBanner2 || frontend?.ad_banner_2,
+  ].filter(Boolean);
+
+  for (let i = 0; i < extraBanners.length; i++) {
+    slideImages.push(extraBanners[i]);
+    slides.push({
+      ...slides[0],
+      kicker: isAr ? "عرض خاص 🔥" : "SPECIAL OFFER 🔥",
+    });
   }
 
   const count = slides.length;
@@ -40,6 +77,9 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
 
   const prev = () => go(index - 1);
   const next = () => go(index + 1);
+
+  const currentSlide = slides[index % slides.length] || slides[0];
+  const currentImg = slideImages[index % slideImages.length] || DEFAULT_HERO_IMGS[0];
 
   return (
     <section
@@ -57,7 +97,16 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
           transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={HERO_IMGS[index % HERO_IMGS.length]} alt="" className="h-full w-full object-cover" />
+          <img
+            src={currentImg}
+            alt={currentSlide?.title || "Broast El-Assad"}
+            onError={(e) => {
+              const target = e.currentTarget;
+              const fallback = DEFAULT_HERO_IMGS[index % DEFAULT_HERO_IMGS.length];
+              if (target.src !== fallback) target.src = fallback;
+            }}
+            className="h-full w-full object-cover"
+          />
         </motion.div>
       </AnimatePresence>
       <div className="hero-vignette absolute inset-0" />
@@ -75,33 +124,53 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
             initial="hidden"
             animate="show"
             exit="exit"
-            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } }, exit: { opacity: 0, y: -24, transition: { duration: 0.35 } } }}
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.09 } },
+              exit: { opacity: 0, y: -24, transition: { duration: 0.35 } },
+            }}
             className="max-w-2xl"
           >
             <motion.span
-              variants={{ hidden: { opacity: 0, y: 26 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
+              variants={{
+                hidden: { opacity: 0, y: 26 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+              }}
               className="flame-badge inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest shadow-lg"
             >
               <Flame className="size-3.5" />
-              {slides[index].kicker}
+              {currentSlide.kicker}
             </motion.span>
 
             <motion.h1
-              variants={{ hidden: { opacity: 0, y: 34 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] } } }}
+              variants={{
+                hidden: { opacity: 0, y: 34 },
+                show: {
+                  opacity: 1,
+                  y: 0,
+                  transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+                },
+              }}
               className="mt-5 text-5xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl md:text-7xl"
             >
-              {slides[index].title}
+              {currentSlide.title}
             </motion.h1>
 
             <motion.p
-              variants={{ hidden: { opacity: 0, y: 26 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
+              variants={{
+                hidden: { opacity: 0, y: 26 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+              }}
               className="mt-5 max-w-lg text-base leading-relaxed text-white/80 md:text-lg"
             >
-              {slides[index].sub}
+              {currentSlide.sub}
             </motion.p>
 
             <motion.div
-              variants={{ hidden: { opacity: 0, y: 26 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
+              variants={{
+                hidden: { opacity: 0, y: 26 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+              }}
               className="mt-8 flex flex-wrap items-center gap-3"
             >
               <Link
@@ -109,7 +178,7 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
                 className="glow-brand group flex items-center gap-2.5 rounded-full bg-brand-500 px-7 py-4 text-base font-extrabold text-white transition hover:scale-[1.03] active:scale-[0.98]"
               >
                 <ShoppingBag className="size-5 transition group-hover:-rotate-12" />
-                {slides[index].cta}
+                {currentSlide.cta}
               </Link>
               <Link
                 href="/menu"
@@ -121,12 +190,21 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
             </motion.div>
 
             <motion.div
-              variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.8 } } }}
+              variants={{
+                hidden: { opacity: 0 },
+                show: { opacity: 1, transition: { duration: 0.8 } },
+              }}
               className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold text-white/75"
             >
-              <span className="flex items-center gap-1.5"><Clock3 className="size-4 text-cheese-300" /> {t.hero.deliveryTime}</span>
-              <span className="flex items-center gap-1.5"><Star className="size-4 fill-cheese-300 text-cheese-300" /> {t.hero.rating}</span>
-              <span className="flex items-center gap-1.5"><Leaf className="size-4 text-emerald-400" /> {t.hero.fresh}</span>
+              <span className="flex items-center gap-1.5">
+                <Clock3 className="size-4 text-cheese-300" /> {t.hero.deliveryTime}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Star className="size-4 fill-cheese-300 text-cheese-300" /> {t.hero.rating}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Leaf className="size-4 text-emerald-400" /> {t.hero.fresh}
+              </span>
             </motion.div>
           </motion.div>
         </AnimatePresence>
@@ -135,15 +213,34 @@ export default function HeroSlider({ frontend }: { frontend?: any }) {
       <div className="absolute bottom-8 z-10 flex items-center gap-4 end-4 md:end-8">
         <div className="flex gap-2">
           {slides.map((_, i) => (
-            <button key={i} onClick={() => go(i)} aria-label={`slide ${i + 1}`} className="group relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25">
-              <span className={cn("absolute inset-y-0 start-0 rounded-full bg-gradient-to-r from-cheese-300 to-brand-500 transition-all duration-500", i === index ? "w-full" : "w-0")} />
+            <button
+              key={i}
+              onClick={() => go(i)}
+              aria-label={`slide ${i + 1}`}
+              className="group relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25"
+            >
+              <span
+                className={cn(
+                  "absolute inset-y-0 start-0 rounded-full bg-gradient-to-r from-cheese-300 to-brand-500 transition-all duration-500",
+                  i === index ? "w-full" : "w-0",
+                )}
+              />
             </button>
           ))}
         </div>
         <div className="flex gap-2">
           {[prev, next].map((fn, i) => (
-            <button key={i} onClick={fn} aria-label={i === 0 ? "previous" : "next"} className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:border-brand-500 hover:bg-brand-500">
-              {(i === 0) === isAr ? <ChevronRight className="size-5" /> : <ChevronLeft className="size-5" />}
+            <button
+              key={i}
+              onClick={fn}
+              aria-label={i === 0 ? "previous" : "next"}
+              className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:border-brand-500 hover:bg-brand-500"
+            >
+              {(i === 0) === isAr ? (
+                <ChevronRight className="size-5" />
+              ) : (
+                <ChevronLeft className="size-5" />
+              )}
             </button>
           ))}
         </div>
