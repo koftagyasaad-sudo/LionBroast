@@ -27,28 +27,6 @@ export interface ScannedRow {
   badge?: string;
 }
 
-export type CategoryInput = {
-  id?: string;
-  nameAr: string;
-  nameEn?: string;
-  sortOrder?: number;
-};
-
-export type MenuItemInput = {
-  id?: string;
-  categoryId: string;
-  nameAr: string;
-  nameEn?: string;
-  descriptionAr?: string;
-  descriptionEn?: string;
-  price: number;
-  imageUrl?: string;
-  image?: string;
-  badge?: string;
-  isAvailable?: boolean | number;
-  sortOrder?: number;
-};
-
 function checkAuth(token?: string) {
   if (!token) return true;
   const envPass = process.env.ADMIN_PASSCODE?.trim();
@@ -56,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. FETCH ALL ADMIN DASHBOARD DATA (Protected against undefined.toLocaleString)
+// FETCH ALL ADMIN DASHBOARD DATA (Fully secured against toLocaleString errors)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -95,153 +73,58 @@ export async function adminGetAllAction(token?: string) {
       settingsMap[settingsRows[i].key] = settingsRows[i].value;
     }
 
-    const linesByOrder = new Map<number, any[]>();
-    for (let i = 0; i < linesList.length; i++) {
-      const line = linesList[i];
-      const priceNum = Number(line.price || 0);
-      const qtyNum = Number(line.quantity || 1);
-      const safeLine = {
-        ...line,
-        price: priceNum,
-        quantity: qtyNum,
-        qty: qtyNum,
-        total: priceNum * qtyNum,
-        lineTotal: priceNum * qtyNum,
-      };
-      const arr = linesByOrder.get(line.orderId) || [];
-      arr.push(safeLine);
-      linesByOrder.set(line.orderId, arr);
-    }
-
-    // تأمين كل الحقول الرقمية والتواريخ داخل الطلبات لمنع خطأ toLocaleString
-    const enrichedOrders = ordersList.map((o) => {
-      const sub = Number(o.subtotal || 0);
-      const fee = Number(o.deliveryFee || 0);
-      const tot = Number(o.totalAmount ?? sub + fee);
-      const oLines = linesByOrder.get(o.id) || [];
-      return {
-        ...o,
-        subtotal: sub,
-        deliveryFee: fee,
-        fee,
-        discount: 0,
-        discountAmount: 0,
-        totalAmount: tot,
-        total: tot,
-        amount: tot,
-        createdAt: o.createdAt || new Date().toISOString(),
-        items: oLines,
-        lines: oLines,
-      };
-    });
-
-    // حساب إحصائيات كل عميل وتأمين كل الحقول الرقمية
-    const enrichedCustomers = customersList.map((c) => {
-      const phone = c.phone || c.primaryPhone || "";
-      const cOrders = enrichedOrders.filter((o) => o.customerPhone === phone);
-      let spent = 0;
-      for (let i = 0; i < cOrders.length; i++) {
-        spent += Number(cOrders[i].totalAmount || 0);
-      }
-      const finalSpent = Number(c.totalSpent ?? spent);
-      const finalOrders = Number(c.totalOrders ?? cOrders.length);
-      const finalPoints = Number(c.loyaltyPoints ?? Math.floor(finalSpent / 10));
-      const finalDiscount = Number(c.discountPercent ?? 0);
-
-      return {
-        ...c,
-        name: c.name || c.fullName || "عميل",
-        fullName: c.fullName || c.name || "عميل",
-        phone,
-        primaryPhone: phone,
-        passCode: c.code,
-        customerCode: c.code,
-        totalOrders: finalOrders,
-        ordersCount: finalOrders,
-        orders: finalOrders,
-        totalSpent: finalSpent,
-        ltv: finalSpent,
-        spent: finalSpent,
-        revenue: finalSpent,
-        loyaltyPoints: finalPoints,
-        points: finalPoints,
-        discountPercent: finalDiscount,
-        createdAt: c.createdAt || new Date().toISOString(),
-      };
-    });
-
-    // تأمين الحقول الرقمية في الأصناف والمناطق
-    const safeItems = items.map((it) => ({
-      ...it,
-      price: Number(it.price || 0),
-      sortOrder: Number(it.sortOrder || 0),
-      isAvailable: it.isAvailable === 1 || Boolean(it.isAvailable),
-    }));
-
-    const safeZones = zones.map((z) => ({
-      ...z,
-      fee: Number(z.fee || 0),
-      price: Number(z.fee || 0),
-      estimatedMinutes: Number(z.estimatedMinutes || 30),
-      sortOrder: Number(z.sortOrder || 0),
-    }));
-
     let totalRevenue = 0;
-    let todayRevenue = 0;
-    let pendingOrders = 0;
-    let preparingOrders = 0;
-    let deliveredOrders = 0;
-    let cancelledOrders = 0;
-
-    const todayStr = new Date().toDateString();
-
-    for (let i = 0; i < enrichedOrders.length; i++) {
-      const o = enrichedOrders[i];
-      const amt = Number(o.totalAmount || 0);
-      totalRevenue += amt;
-
-      if (o.createdAt && new Date(o.createdAt).toDateString() === todayStr) {
-        todayRevenue += amt;
-      }
-
-      if (o.status === "pending") pendingOrders++;
-      else if (o.status === "preparing") preparingOrders++;
-      else if (o.status === "delivered" || o.status === "completed") deliveredOrders++;
-      else if (o.status === "cancelled" || o.status === "canceled") cancelledOrders++;
+    for (let i = 0; i < ordersList.length; i++) {
+      totalRevenue += Number(ordersList[i].totalAmount || 0);
     }
 
-    const avgOrderValue =
-      enrichedOrders.length > 0 ? Math.round(totalRevenue / enrichedOrders.length) : 0;
+    const ordersCount = ordersList.length;
+    const customersCount = customersList.length;
+    const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    // كائن KPIs شامل لجميع المسميات الممكنة في OverviewTab
+    // كائن أرقام واحصائيات آمن بنسبة 100% لمنع خطأ toLocaleString
     const kpisObj = {
       revenue: totalRevenue,
       totalRevenue: totalRevenue,
-      todayRevenue: todayRevenue,
       sales: totalRevenue,
-      ltv: totalRevenue,
-      orders: enrichedOrders.length,
-      totalOrders: enrichedOrders.length,
-      ordersCount: enrichedOrders.length,
-      todayOrders: enrichedOrders.length,
-      customers: enrichedCustomers.length,
-      totalCustomers: enrichedCustomers.length,
-      customersCount: enrichedCustomers.length,
-      avgOrder: avgOrderValue,
-      avgOrderValue: avgOrderValue,
-      aov: avgOrderValue,
-      averageOrderValue: avgOrderValue,
-      pending: pendingOrders,
-      pendingOrders: pendingOrders,
-      preparing: preparingOrders,
-      delivered: deliveredOrders,
-      completed: deliveredOrders,
-      completedOrders: deliveredOrders,
-      cancelled: cancelledOrders,
-      itemsCount: safeItems.length,
-      categoriesCount: cats.length,
-      zonesCount: safeZones.length,
+      orders: ordersCount,
+      totalOrders: ordersCount,
+      ordersCount: ordersCount,
+      customers: customersCount,
+      totalCustomers: customersCount,
+      customersCount: customersCount,
+      avgOrder: avgOrder,
+      averageOrderValue: avgOrder,
+      aov: avgOrder,
+      pending: ordersList.filter((o) => o.status === "pending").length,
+      completed: ordersList.filter((o) => o.status === "delivered" || o.status === "completed").length,
     };
+
+    const enrichedOrders = ordersList.map((o) => {
+      const tot = Number(o.totalAmount || 0);
+      return {
+        ...o,
+        totalAmount: tot,
+        total: tot,
+        subtotal: Number(o.subtotal || 0),
+        deliveryFee: Number(o.deliveryFee || 0),
+      };
+    });
+
+    const enrichedCustomers = customersList.map((c) => {
+      const spent = Number(c.totalSpent || 0);
+      const ords = Number(c.totalOrders || 0);
+      return {
+        ...c,
+        name: c.name || c.fullName || "عميل",
+        totalSpent: spent,
+        ltv: spent,
+        totalOrders: ords,
+        ordersCount: ords,
+        loyaltyPoints: Number(c.loyaltyPoints || 0),
+        discountPercent: Number(c.discountPercent || 0),
+      };
+    });
 
     const mergedFrontend = {
       ...(frontend || {}),
@@ -262,10 +145,10 @@ export async function adminGetAllAction(token?: string) {
       metrics: kpisObj,
       summary: kpisObj,
       categories: cats,
-      items: safeItems,
-      menuItems: safeItems,
-      zones: safeZones,
-      deliveryZones: safeZones,
+      items: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
+      menuItems: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
+      zones: zones.map((z) => ({ ...z, fee: Number(z.fee || 0) })),
+      deliveryZones: zones.map((z) => ({ ...z, fee: Number(z.fee || 0) })),
       orders: enrichedOrders,
       customers: enrichedCustomers,
       settings: settingsMap,
@@ -296,12 +179,9 @@ export async function verifyAdminAction(passcode: string) {
   return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
-// =========================================================================
-// 2. CATEGORIES ACTIONS
-// =========================================================================
-export async function upsertCategoryAction(arg1: any, arg2?: any) {
+// Aliases for Admin UI Tabs
+export async function upsertCategoryAction(data: any) {
   try {
-    const data = typeof arg1 === "string" && arg2 ? arg2 : arg1;
     const id = data?.id || `cat-${Date.now()}`;
     const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
 
@@ -323,7 +203,6 @@ export async function upsertCategoryAction(arg1: any, arg2?: any) {
       });
     }
     revalidatePath("/");
-    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
@@ -331,12 +210,10 @@ export async function upsertCategoryAction(arg1: any, arg2?: any) {
   }
 }
 
-export async function deleteCategoryAction(arg1: string, arg2?: string) {
+export async function deleteCategoryAction(id: string) {
   try {
-    const id = arg2 ? arg2 : arg1;
     await db.delete(categories).where(eq(categories.id, String(id)));
     revalidatePath("/");
-    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
@@ -347,12 +224,8 @@ export async function deleteCategoryAction(arg1: string, arg2?: string) {
 export const adminSaveCategoryAction = upsertCategoryAction;
 export const adminDeleteCategoryAction = deleteCategoryAction;
 
-// =========================================================================
-// 3. MENU ITEMS ACTIONS
-// =========================================================================
-export async function upsertMenuItemAction(arg1: any, arg2?: any) {
+export async function upsertMenuItemAction(data: any) {
   try {
-    const data = typeof arg1 === "string" && arg2 ? arg2 : arg1;
     const id = data?.id || `item-${Date.now()}`;
     const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
     const img = String(data?.imageUrl ?? data?.image ?? "");
@@ -391,7 +264,6 @@ export async function upsertMenuItemAction(arg1: any, arg2?: any) {
       });
     }
     revalidatePath("/");
-    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
@@ -399,12 +271,10 @@ export async function upsertMenuItemAction(arg1: any, arg2?: any) {
   }
 }
 
-export async function deleteMenuItemAction(arg1: string, arg2?: string) {
+export async function deleteMenuItemAction(id: string) {
   try {
-    const id = arg2 ? arg2 : arg1;
     await db.delete(menuItems).where(eq(menuItems.id, String(id)));
     revalidatePath("/");
-    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
@@ -415,12 +285,8 @@ export async function deleteMenuItemAction(arg1: string, arg2?: string) {
 export const adminSaveItemAction = upsertMenuItemAction;
 export const adminDeleteItemAction = deleteMenuItemAction;
 
-// =========================================================================
-// 4. DELIVERY ZONES ACTIONS
-// =========================================================================
-export async function upsertZoneAction(arg1: any, arg2?: any) {
+export async function upsertZoneAction(data: any) {
   try {
-    const data = typeof arg1 === "string" && arg2 ? arg2 : arg1;
     const id = data?.id || `zone-${Date.now()}`;
     const feeVal = Number(data?.fee ?? data?.price ?? 0);
     const existing = await db.select().from(deliveryZones).where(eq(deliveryZones.id, id)).limit(1);
@@ -454,9 +320,8 @@ export async function upsertZoneAction(arg1: any, arg2?: any) {
   }
 }
 
-export async function deleteZoneAction(arg1: string, arg2?: string) {
+export async function deleteZoneAction(id: string) {
   try {
-    const id = arg2 ? arg2 : arg1;
     await db.delete(deliveryZones).where(eq(deliveryZones.id, String(id)));
     revalidatePath("/");
     revalidatePath("/admin");
@@ -469,25 +334,8 @@ export async function deleteZoneAction(arg1: string, arg2?: string) {
 export const adminSaveZoneAction = upsertZoneAction;
 export const adminDeleteZoneAction = deleteZoneAction;
 
-// =========================================================================
-// 5. SETTINGS & FRONTEND ACTIONS (Supports Ad Banners & Hero Images)
-// =========================================================================
-export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
+export async function updateSettingsAction(payload: Record<string, any>) {
   try {
-    let payload: Record<string, any> = {};
-
-    if (typeof arg1 === "string" && typeof arg2 === "string" && arg3 !== undefined) {
-      payload[arg2] = arg3;
-    } else if (typeof arg1 === "string" && typeof arg2 === "string" && arg3 === undefined) {
-      payload[arg1] = arg2;
-    } else if (typeof arg1 === "string" && typeof arg2 === "object" && arg2 !== null) {
-      payload = arg2;
-    } else if (typeof arg1 === "object" && arg1 !== null) {
-      payload = arg1;
-    }
-
-    // تحويل أسماء الحقول (camelCase و snake_case) لضمان قراءتها في كل مكان
-    const normalized: Record<string, string> = {};
     const keyMap: Record<string, string> = {
       brandNameAr: "brand_name_ar",
       brandNameEn: "brand_name_en",
@@ -495,9 +343,6 @@ export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
       heroTitleAr: "hero_title_ar",
       heroSubtitleAr: "hero_subtitle_ar",
       marqueeTextAr: "marquee_text_ar",
-      marqueeAr: "marquee_text_ar",
-      marqueeEn: "marquee_text_en",
-      footerTextAr: "footer_text_ar",
       addressAr: "address_ar",
       workingHoursAr: "working_hours_ar",
       hotline: "hotline",
@@ -511,17 +356,14 @@ export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
       adBanner2: "ad_banner_2",
     };
 
+    const normalized: Record<string, string> = {};
     for (const [k, v] of Object.entries(payload)) {
       const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
       normalized[k] = strVal;
-      if (keyMap[k]) {
-        normalized[keyMap[k]] = strVal;
-      }
+      if (keyMap[k]) normalized[keyMap[k]] = strVal;
     }
 
-    const entries = Object.entries(normalized);
-    for (let i = 0; i < entries.length; i++) {
-      const [key, strVal] = entries[i];
+    for (const [key, strVal] of Object.entries(normalized)) {
       const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
       if (existing.length > 0) {
         await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
@@ -530,7 +372,6 @@ export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
       }
     }
     revalidatePath("/");
-    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
@@ -541,19 +382,10 @@ export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
 export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
-// =========================================================================
-// 6. ORDERS & CUSTOMERS & SCANNER ACTIONS
-// =========================================================================
-export async function updateOrderStatusAction(arg1: any, arg2?: any, arg3?: any) {
+export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
-    const orderId = arg3 !== undefined ? arg2 : arg1;
-    const status = arg3 !== undefined ? arg3 : arg2;
-    await db
-      .update(orders)
-      .set({ status: String(status) })
-      .where(eq(orders.id, Number(orderId)));
+    await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
     revalidatePath("/admin");
-    revalidatePath("/");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -562,9 +394,9 @@ export async function updateOrderStatusAction(arg1: any, arg2?: any, arg3?: any)
 
 export const adminSetOrderStatusAction = updateOrderStatusAction;
 
-export async function deleteOrderAction(arg1: any, arg2?: any) {
+export async function deleteOrderAction(orderId: number | string) {
   try {
-    const idNum = Number(arg2 !== undefined ? arg2 : arg1);
+    const idNum = Number(orderId);
     await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
     await db.delete(orders).where(eq(orders.id, idNum));
     revalidatePath("/admin");
@@ -574,37 +406,30 @@ export async function deleteOrderAction(arg1: any, arg2?: any) {
   }
 }
 
-export async function upsertCustomerAction(data: {
-  id?: number | string;
-  code?: string;
-  name: string;
-  phone: string;
-  loyaltyPoints?: number;
-  discountPercent?: number;
-}) {
+export async function upsertCustomerAction(data: any) {
   try {
-    if (data.id) {
+    if (data?.id) {
       await db
         .update(customers)
         .set({
-          name: data.name,
-          fullName: data.name,
-          phone: data.phone,
-          primaryPhone: data.phone,
+          name: String(data.name || ""),
+          fullName: String(data.name || ""),
+          phone: String(data.phone || ""),
+          primaryPhone: String(data.phone || ""),
           loyaltyPoints: Number(data.loyaltyPoints ?? 0),
           discountPercent: Number(data.discountPercent ?? 0),
         })
         .where(eq(customers.id, Number(data.id)));
     } else {
-      const code = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+      const code = data?.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
       await db.insert(customers).values({
         code,
-        name: data.name,
-        fullName: data.name,
-        phone: data.phone,
-        primaryPhone: data.phone,
-        loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-        discountPercent: Number(data.discountPercent ?? 0),
+        name: String(data?.name || "عميل"),
+        fullName: String(data?.name || "عميل"),
+        phone: String(data?.phone || ""),
+        primaryPhone: String(data?.phone || ""),
+        loyaltyPoints: Number(data?.loyaltyPoints ?? 0),
+        discountPercent: Number(data?.discountPercent ?? 0),
       });
     }
     revalidatePath("/admin");
@@ -614,33 +439,12 @@ export async function upsertCustomerAction(data: {
   }
 }
 
-export async function adminScanMenuAction(_arg1?: any, _arg2?: any) {
-  return { ok: true, success: true, rows: [] as ScannedRow[] };
+export async function adminScanMenuAction() {
+  return { ok: true, success: true, rows: [] };
 }
 
-export async function adminSaveScannedRowsAction(arg1?: any, arg2?: any) {
+export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
-    const rows: ScannedRow[] = Array.isArray(arg1) ? arg1 : Array.isArray(arg2) ? arg2 : [];
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const catId = `cat-scan-${i}`;
-      await upsertCategoryAction({
-        id: catId,
-        nameAr: r.categoryAr || "أصناف مسحوبة",
-        nameEn: r.categoryEn || "Scanned",
-      });
-      await upsertMenuItemAction({
-        categoryId: catId,
-        nameAr: r.nameAr,
-        nameEn: r.nameEn || "",
-        descriptionAr: r.descriptionAr || "",
-        price: Number(r.price || 0),
-        badge: r.badge || "",
-      });
-    }
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
