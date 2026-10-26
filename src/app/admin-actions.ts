@@ -106,42 +106,58 @@ export async function verifyAdminAction(passcode: string) {
   return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
-// ----------------- Aliases for Admin Components -----------------
+// =========================================================================
+// EXACT EXPORTS REQUIRED BY ADMIN COMPONENTS (MenuTab, OpsTab, OrdersTab, etc.)
+// =========================================================================
+
 export async function adminSaveCategoryAction(data: any) {
   return upsertCategoryAction(data);
 }
+
 export async function adminDeleteCategoryAction(id: string) {
   return deleteCategoryAction(id);
 }
+
 export async function adminSaveItemAction(data: any) {
   return upsertMenuItemAction(data);
 }
+
 export async function adminDeleteItemAction(id: string) {
   return deleteMenuItemAction(id);
 }
+
 export async function adminSaveZoneAction(data: any) {
   return upsertZoneAction(data);
 }
+
 export async function adminDeleteZoneAction(id: string) {
   return deleteZoneAction(id);
 }
+
 export async function adminSetSettingAction(payload: any) {
   return updateSettingsAction(payload);
 }
+
 export async function saveFrontendSettingsAction(payload: any) {
   return updateSettingsAction(payload);
 }
+
 export async function adminScanMenuAction(formData?: any) {
   return { ok: true, success: true, rows: [] };
 }
+
 export async function adminSaveScannedRowsAction(rows: any[]) {
   return { ok: true, success: true };
 }
+
 export async function adminSetOrderStatusAction(orderId: number | string, status: string) {
   return updateOrderStatusAction(orderId, status);
 }
 
-// ----------------- Core Actions -----------------
+// =========================================================================
+// CORE DB IMPLEMENTATION ACTIONS
+// =========================================================================
+
 export async function upsertCategoryAction(data: {
   id?: string;
   nameAr: string;
@@ -305,94 +321,4 @@ export async function upsertZoneAction(data: {
 export async function deleteZoneAction(id: string) {
   try {
     await db.delete(deliveryZones).where(eq(deliveryZones.id, id));
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function updateSettingsAction(payload: Record<string, string | number | boolean>) {
-  try {
-    const entries = Object.entries(payload);
-    for (let i = 0; i < entries.length; i++) {
-      const [key, val] = entries[i];
-      const strVal = String(val ?? "");
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function updateOrderStatusAction(orderId: number | string, status: string) {
-  try {
-    await db.update(orders).set({ status }).where(eq(orders.id, Number(orderId)));
-    revalidatePath("/admin");
-    revalidatePath("/");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteOrderAction(orderId: number | string) {
-  try {
-    const idNum = Number(orderId);
-    await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
-    await db.delete(orders).where(eq(orders.id, idNum));
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function upsertCustomerAction(data: {
-  id?: number | string;
-  code?: string;
-  name: string;
-  phone: string;
-  loyaltyPoints?: number;
-  discountPercent?: number;
-}) {
-  try {
-    if (data.id) {
-      await db
-        .update(customers)
-        .set({
-          name: data.name,
-          fullName: data.name,
-          phone: data.phone,
-          primaryPhone: data.phone,
-          loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-          discountPercent: Number(data.discountPercent ?? 0),
-        })
-        .where(eq(customers.id, Number(data.id)));
-    } else {
-      const code = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-      await db.insert(customers).values({
-        code,
-        name: data.name,
-        fullName: data.name,
-        phone: data.phone,
-        primaryPhone: data.phone,
-        loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-        discountPercent: Number(data.discountPercent ?? 0),
-      });
-    }
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
+    re
