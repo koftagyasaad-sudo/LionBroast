@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Fully secured & complete)
+// FETCH ALL ADMIN DASHBOARD DATA (Complete & Fully Secured)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
