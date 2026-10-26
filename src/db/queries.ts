@@ -19,13 +19,14 @@ import type {
 } from "@/lib/types";
 import { ensureSeedDatabase } from "./seed";
 
+export type { FrontendSettings };
 export type CustomerRow = typeof customers.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;
 export type MenuItemRow = typeof menuItems.$inferSelect;
 export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
 
-const DEFAULT_SETTINGS: FrontendSettings = {
+const DEFAULT_SETTINGS: FrontendSettings & Record<string, any> = {
   brandNameAr: "بروست الأسد",
   brandNameEn: "Lion Broast",
   logoUrl: "/img/icon-512.png",
@@ -44,6 +45,11 @@ const DEFAULT_SETTINGS: FrontendSettings = {
   whatsapp: "201068390982",
   deliveryFee: 15,
   taxPercent: 0,
+  heroImage1: "",
+  heroImage2: "",
+  heroImage3: "",
+  adBanner1: "",
+  adBanner2: "",
 };
 
 const DEFAULT_PROMO: Promo = {
@@ -114,7 +120,7 @@ export async function getSettingByKey(key: string): Promise<{ key: string; val: 
   }
 }
 
-export async function getFrontendSettings(): Promise<FrontendSettings> {
+export async function getFrontendSettings(): Promise<FrontendSettings & Record<string, any>> {
   await safeEnsureSeed();
   try {
     const rows = await db.select().from(settings);
@@ -142,6 +148,11 @@ export async function getFrontendSettings(): Promise<FrontendSettings> {
       whatsapp: pick("whatsapp", DEFAULT_SETTINGS.whatsapp),
       deliveryFee: Number(map.get("delivery_fee") ?? DEFAULT_SETTINGS.deliveryFee),
       taxPercent: Number(map.get("tax_percent") ?? DEFAULT_SETTINGS.taxPercent),
+      heroImage1: pick("hero_image_1", pick("heroImage1", "")),
+      heroImage2: pick("hero_image_2", pick("heroImage2", "")),
+      heroImage3: pick("hero_image_3", pick("heroImage3", "")),
+      adBanner1: pick("ad_banner_1", pick("adBanner1", "")),
+      adBanner2: pick("ad_banner_2", pick("adBanner2", "")),
     };
   } catch (err) {
     console.error("Error in getFrontendSettings:", err);
