@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Bulletproof & Fully Compatible with AdminShell)
+// FETCH ALL ADMIN DASHBOARD DATA (Complete & Fully Secured)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -82,7 +82,6 @@ export async function adminGetAllAction(token?: string) {
     const customersCount = customersList.length;
     const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    // توفير كافة الهياكل الرقمية الممكنة لتجنب أي خطأ toLocaleString نهائياً
     const metricsObject = {
       revenue: Number(totalRevenue || 0),
       totalRevenue: Number(totalRevenue || 0),
