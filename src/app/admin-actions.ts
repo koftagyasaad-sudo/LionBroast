@@ -56,7 +56,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. FETCH ALL ADMIN DASHBOARD DATA
+// 1. FETCH ALL ADMIN DASHBOARD DATA (Protected against undefined.toLocaleString)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -95,72 +95,181 @@ export async function adminGetAllAction(token?: string) {
       settingsMap[settingsRows[i].key] = settingsRows[i].value;
     }
 
-    const linesByOrder = new Map<number, typeof linesList>();
+    const linesByOrder = new Map<number, any[]>();
     for (let i = 0; i < linesList.length; i++) {
       const line = linesList[i];
+      const priceNum = Number(line.price || 0);
+      const qtyNum = Number(line.quantity || 1);
+      const safeLine = {
+        ...line,
+        price: priceNum,
+        quantity: qtyNum,
+        qty: qtyNum,
+        total: priceNum * qtyNum,
+        lineTotal: priceNum * qtyNum,
+      };
       const arr = linesByOrder.get(line.orderId) || [];
-      arr.push(line);
+      arr.push(safeLine);
       linesByOrder.set(line.orderId, arr);
     }
 
-    const enrichedOrders = ordersList.map((o) => ({
-      ...o,
-      items: linesByOrder.get(o.id) || [],
-      lines: linesByOrder.get(o.id) || [],
+    // تأمين كل الحقول الرقمية والتواريخ داخل الطلبات لمنع خطأ toLocaleString
+    const enrichedOrders = ordersList.map((o) => {
+      const sub = Number(o.subtotal || 0);
+      const fee = Number(o.deliveryFee || 0);
+      const tot = Number(o.totalAmount ?? sub + fee);
+      const oLines = linesByOrder.get(o.id) || [];
+      return {
+        ...o,
+        subtotal: sub,
+        deliveryFee: fee,
+        fee,
+        discount: 0,
+        discountAmount: 0,
+        totalAmount: tot,
+        total: tot,
+        amount: tot,
+        createdAt: o.createdAt || new Date().toISOString(),
+        items: oLines,
+        lines: oLines,
+      };
+    });
+
+    // حساب إحصائيات كل عميل وتأمين كل الحقول الرقمية
+    const enrichedCustomers = customersList.map((c) => {
+      const phone = c.phone || c.primaryPhone || "";
+      const cOrders = enrichedOrders.filter((o) => o.customerPhone === phone);
+      let spent = 0;
+      for (let i = 0; i < cOrders.length; i++) {
+        spent += Number(cOrders[i].totalAmount || 0);
+      }
+      const finalSpent = Number(c.totalSpent ?? spent);
+      const finalOrders = Number(c.totalOrders ?? cOrders.length);
+      const finalPoints = Number(c.loyaltyPoints ?? Math.floor(finalSpent / 10));
+      const finalDiscount = Number(c.discountPercent ?? 0);
+
+      return {
+        ...c,
+        name: c.name || c.fullName || "عميل",
+        fullName: c.fullName || c.name || "عميل",
+        phone,
+        primaryPhone: phone,
+        passCode: c.code,
+        customerCode: c.code,
+        totalOrders: finalOrders,
+        ordersCount: finalOrders,
+        orders: finalOrders,
+        totalSpent: finalSpent,
+        ltv: finalSpent,
+        spent: finalSpent,
+        revenue: finalSpent,
+        loyaltyPoints: finalPoints,
+        points: finalPoints,
+        discountPercent: finalDiscount,
+        createdAt: c.createdAt || new Date().toISOString(),
+      };
+    });
+
+    // تأمين الحقول الرقمية في الأصناف والمناطق
+    const safeItems = items.map((it) => ({
+      ...it,
+      price: Number(it.price || 0),
+      sortOrder: Number(it.sortOrder || 0),
+      isAvailable: it.isAvailable === 1 || Boolean(it.isAvailable),
+    }));
+
+    const safeZones = zones.map((z) => ({
+      ...z,
+      fee: Number(z.fee || 0),
+      price: Number(z.fee || 0),
+      estimatedMinutes: Number(z.estimatedMinutes || 30),
+      sortOrder: Number(z.sortOrder || 0),
     }));
 
     let totalRevenue = 0;
+    let todayRevenue = 0;
     let pendingOrders = 0;
-    let completedOrders = 0;
+    let preparingOrders = 0;
+    let deliveredOrders = 0;
+    let cancelledOrders = 0;
 
-    for (let i = 0; i < ordersList.length; i++) {
-      const o = ordersList[i];
-      totalRevenue += Number(o.totalAmount || 0);
-      if (o.status === "pending" || o.status === "preparing") {
-        pendingOrders++;
-      } else if (o.status === "delivered" || o.status === "completed") {
-        completedOrders++;
+    const todayStr = new Date().toDateString();
+
+    for (let i = 0; i < enrichedOrders.length; i++) {
+      const o = enrichedOrders[i];
+      const amt = Number(o.totalAmount || 0);
+      totalRevenue += amt;
+
+      if (o.createdAt && new Date(o.createdAt).toDateString() === todayStr) {
+        todayRevenue += amt;
       }
+
+      if (o.status === "pending") pendingOrders++;
+      else if (o.status === "preparing") preparingOrders++;
+      else if (o.status === "delivered" || o.status === "completed") deliveredOrders++;
+      else if (o.status === "cancelled" || o.status === "canceled") cancelledOrders++;
     }
 
-    const avgOrderValue = ordersList.length > 0 ? Math.round(totalRevenue / ordersList.length) : 0;
+    const avgOrderValue =
+      enrichedOrders.length > 0 ? Math.round(totalRevenue / enrichedOrders.length) : 0;
+
+    // كائن KPIs شامل لجميع المسميات الممكنة في OverviewTab
+    const kpisObj = {
+      revenue: totalRevenue,
+      totalRevenue: totalRevenue,
+      todayRevenue: todayRevenue,
+      sales: totalRevenue,
+      ltv: totalRevenue,
+      orders: enrichedOrders.length,
+      totalOrders: enrichedOrders.length,
+      ordersCount: enrichedOrders.length,
+      todayOrders: enrichedOrders.length,
+      customers: enrichedCustomers.length,
+      totalCustomers: enrichedCustomers.length,
+      customersCount: enrichedCustomers.length,
+      avgOrder: avgOrderValue,
+      avgOrderValue: avgOrderValue,
+      aov: avgOrderValue,
+      averageOrderValue: avgOrderValue,
+      pending: pendingOrders,
+      pendingOrders: pendingOrders,
+      preparing: preparingOrders,
+      delivered: deliveredOrders,
+      completed: deliveredOrders,
+      completedOrders: deliveredOrders,
+      cancelled: cancelledOrders,
+      itemsCount: safeItems.length,
+      categoriesCount: cats.length,
+      zonesCount: safeZones.length,
+    };
+
+    const mergedFrontend = {
+      ...(frontend || {}),
+      ...settingsMap,
+      heroImage1: settingsMap["hero_image_1"] || "",
+      heroImage2: settingsMap["hero_image_2"] || "",
+      heroImage3: settingsMap["hero_image_3"] || "",
+      adBanner1: settingsMap["ad_banner_1"] || "",
+      adBanner2: settingsMap["ad_banner_2"] || "",
+    };
 
     return {
       ok: true,
       success: true,
-      revenue: totalRevenue,
-      kpis: {
-        revenue: totalRevenue,
-        totalRevenue,
-        orders: ordersList.length,
-        totalOrders: ordersList.length,
-        customers: customersList.length,
-        totalCustomers: customersList.length,
-        avgOrder: avgOrderValue,
-        aov: avgOrderValue,
-        pending: pendingOrders,
-        completed: completedOrders,
-      },
-      stats: {
-        revenue: totalRevenue,
-        totalRevenue,
-        orders: ordersList.length,
-        ordersCount: ordersList.length,
-        customers: customersList.length,
-        customersCount: customersList.length,
-        avgOrder: avgOrderValue,
-        pending: pendingOrders,
-        completed: completedOrders,
-      },
+      ...kpisObj,
+      kpis: kpisObj,
+      stats: kpisObj,
+      metrics: kpisObj,
+      summary: kpisObj,
       categories: cats,
-      items,
-      menuItems: items,
-      zones,
-      deliveryZones: zones,
+      items: safeItems,
+      menuItems: safeItems,
+      zones: safeZones,
+      deliveryZones: safeZones,
       orders: enrichedOrders,
-      customers: customersList,
+      customers: enrichedCustomers,
       settings: settingsMap,
-      frontend: frontend || settingsMap,
+      frontend: mergedFrontend,
       promo: promo || {
         enabled: true,
         title: "خصم 15% على أول طلب بـ كود: LION15",
@@ -188,7 +297,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. CATEGORIES ACTIONS (Supports both direct object & token+object calls)
+// 2. CATEGORIES ACTIONS
 // =========================================================================
 export async function upsertCategoryAction(arg1: any, arg2?: any) {
   try {
@@ -361,30 +470,58 @@ export const adminSaveZoneAction = upsertZoneAction;
 export const adminDeleteZoneAction = deleteZoneAction;
 
 // =========================================================================
-// 5. SETTINGS & FRONTEND ACTIONS
+// 5. SETTINGS & FRONTEND ACTIONS (Supports Ad Banners & Hero Images)
 // =========================================================================
 export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
   try {
     let payload: Record<string, any> = {};
 
     if (typeof arg1 === "string" && typeof arg2 === "string" && arg3 !== undefined) {
-      // Called as (token, key, value)
       payload[arg2] = arg3;
     } else if (typeof arg1 === "string" && typeof arg2 === "string" && arg3 === undefined) {
-      // Called as (key, value)
       payload[arg1] = arg2;
     } else if (typeof arg1 === "string" && typeof arg2 === "object" && arg2 !== null) {
-      // Called as (token, settingsObject)
       payload = arg2;
     } else if (typeof arg1 === "object" && arg1 !== null) {
-      // Called as (settingsObject)
       payload = arg1;
     }
 
-    const entries = Object.entries(payload);
+    // تحويل أسماء الحقول (camelCase و snake_case) لضمان قراءتها في كل مكان
+    const normalized: Record<string, string> = {};
+    const keyMap: Record<string, string> = {
+      brandNameAr: "brand_name_ar",
+      brandNameEn: "brand_name_en",
+      logoUrl: "logo_url",
+      heroTitleAr: "hero_title_ar",
+      heroSubtitleAr: "hero_subtitle_ar",
+      marqueeTextAr: "marquee_text_ar",
+      marqueeAr: "marquee_text_ar",
+      marqueeEn: "marquee_text_en",
+      footerTextAr: "footer_text_ar",
+      addressAr: "address_ar",
+      workingHoursAr: "working_hours_ar",
+      hotline: "hotline",
+      whatsapp: "whatsapp",
+      deliveryFee: "delivery_fee",
+      taxPercent: "tax_percent",
+      heroImage1: "hero_image_1",
+      heroImage2: "hero_image_2",
+      heroImage3: "hero_image_3",
+      adBanner1: "ad_banner_1",
+      adBanner2: "ad_banner_2",
+    };
+
+    for (const [k, v] of Object.entries(payload)) {
+      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+      normalized[k] = strVal;
+      if (keyMap[k]) {
+        normalized[keyMap[k]] = strVal;
+      }
+    }
+
+    const entries = Object.entries(normalized);
     for (let i = 0; i < entries.length; i++) {
-      const [key, val] = entries[i];
-      const strVal = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
+      const [key, strVal] = entries[i];
       const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
       if (existing.length > 0) {
         await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
@@ -393,6 +530,7 @@ export async function updateSettingsAction(arg1: any, arg2?: any, arg3?: any) {
       }
     }
     revalidatePath("/");
+    revalidatePath("/menu");
     revalidatePath("/admin");
     return { ok: true, success: true };
   } catch (err: unknown) {
