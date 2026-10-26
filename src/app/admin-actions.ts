@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Complete & Fully Secured)
+// FETCH ALL ADMIN DASHBOARD DATA (Bulletproof & Fully Compatible)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -82,7 +82,8 @@ export async function adminGetAllAction(token?: string) {
     const customersCount = customersList.length;
     const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    const kpisObj = {
+    // توفير الهياكل المزدوجة التي تناديها OverviewTab وتوابعها لتجنب أي undefined
+    const metricsObject = {
       revenue: totalRevenue,
       totalRevenue: totalRevenue,
       sales: totalRevenue,
@@ -118,6 +119,7 @@ export async function adminGetAllAction(token?: string) {
         name: c.name || c.fullName || "عميل",
         totalSpent: spent,
         ltv: spent,
+        spent: spent,
         totalOrders: ords,
         ordersCount: ords,
         loyaltyPoints: Number(c.loyaltyPoints || 0),
@@ -138,11 +140,11 @@ export async function adminGetAllAction(token?: string) {
     return {
       ok: true,
       success: true,
-      ...kpisObj,
-      kpis: kpisObj,
-      stats: kpisObj,
-      metrics: kpisObj,
-      summary: kpisObj,
+      ...metricsObject,
+      kpis: metricsObject,
+      stats: metricsObject,
+      metrics: metricsObject,
+      summary: metricsObject,
       categories: cats,
       items: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
       menuItems: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
@@ -154,7 +156,7 @@ export async function adminGetAllAction(token?: string) {
       frontend: mergedFrontend,
       promo: promo || {
         enabled: true,
-        title: "خصم 15% على أول طلب بـ كود: LION15",
+        title: "خصم 15% على أول طلب بـ كود: ليدز",
         code: "LION15",
         textAr: "خصم 15% على أول طلب بـ كود: LION15",
         textEn: "15% OFF on first order code: LION15",
