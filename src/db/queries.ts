@@ -1,9 +1,17 @@
 import { db } from "@/db";
-import { categories, menuItems, settings, deliveryZones, customers, orders } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import {
+  categories,
+  menuItems,
+  settings,
+  deliveryZones,
+  customers,
+  orders,
+  orderLines,
+} from "@/db/schema";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 
 // =========================================================================
-// 1. استعلام بطاقة كارت العميل والولاء (حل الخطأ الأحمر نهائياً)
+// 1. استعلامات العملاء وبطاقة الولاء VIP
 // =========================================================================
 export async function getPassData(code: string) {
   try {
@@ -36,11 +44,151 @@ export async function getPassData(code: string) {
   }
 }
 
-// دالة رديفة لدعم استدعاءات الكارت والعملاء
 export const getCustomerByCode = getPassData;
 
+export async function getCustomerByPhone(phone: string) {
+  try {
+    const cleanPhone = String(phone || "").trim();
+    if (!cleanPhone) return null;
+
+    const rows = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.phone, cleanPhone))
+      .limit(1);
+
+    return rows[0] || null;
+  } catch (err) {
+    console.error("getCustomerByPhone error:", err);
+    return null;
+  }
+}
+
+export async function createCustomer(data: any) {
+  try {
+    const code = data?.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
+    const [inserted] = await db
+      .insert(customers)
+      .values({
+        code,
+        name: String(data?.name || data?.fullName || "عميل"),
+        fullName: String(data?.name || data?.fullName || "عميل"),
+        phone: String(data?.phone || data?.primaryPhone || ""),
+        primaryPhone: String(data?.phone || data?.primaryPhone || ""),
+        loyaltyPoints: Number(data?.loyaltyPoints || 0),
+        discountPercent: Number(data?.discountPercent || 0),
+        totalSpent: Number(data?.totalSpent || 0),
+        totalOrders: Number(data?.totalOrders || 0),
+      } as any)
+      .returning();
+
+    return inserted || { id: Date.now(), code, ...data };
+  } catch (err) {
+    console.error("createCustomer error:", err);
+    return null;
+  }
+}
+
 // =========================================================================
-// 2. إعدادات الواجهة (مباشرة ولحظية 100% بدون أي كاش)
+// 2. استعلامات مناطق التوصيل
+// =========================================================================
+export async function getDeliveryZoneById(id: string | number) {
+  try {
+    if (!id) return null;
+    const idNum = Number(id);
+
+    if (!isNaN(idNum)) {
+      const resNum = await db
+        .select()
+        .from(deliveryZones)
+        .where(eq(deliveryZones.id, idNum as any))
+        .limit(1);
+      if (resNum[0]) return resNum[0];
+    }
+
+    const resStr = await db
+      .select()
+      .from(deliveryZones)
+      .where(eq(deliveryZones.id, String(id) as any))
+      .limit(1);
+
+    return resStr[0] || null;
+  } catch (err) {
+    console.error("getDeliveryZoneById error:", err);
+    return null;
+  }
+}
+
+export async function getDeliveryZones() {
+  try {
+    return await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
+  } catch (err) {
+    console.error("getDeliveryZones error:", err);
+    return [];
+  }
+}
+
+// =========================================================================
+// 3. استعلامات وإنشاء الطلبات (Orders)
+// =========================================================================
+export async function createOrder(orderData: any, lines: any[] = []) {
+  try {
+    const [newOrder] = await db
+      .insert(orders)
+      .values({
+        customerId: orderData.customerId ? Number(orderData.customerId) : null,
+        customerName: String(orderData.customerName || orderData.name || "عميل"),
+        customerPhone: String(orderData.customerPhone || orderData.phone || ""),
+        address: String(orderData.address || ""),
+        deliveryZoneId: orderData.deliveryZoneId ? Number(orderData.deliveryZoneId) : null,
+        deliveryFee: Number(orderData.deliveryFee || 0),
+        subtotal: Number(orderData.subtotal || 0),
+        totalAmount: Number(orderData.totalAmount || orderData.total || 0),
+        status: String(orderData.status || "pending"),
+        notes: String(orderData.notes || ""),
+      } as any)
+      .returning();
+
+    if (newOrder && lines && lines.length > 0) {
+      for (const line of lines) {
+        await db.insert(orderLines).values({
+          orderId: newOrder.id,
+          menuItemId: line.menuItemId ? String(line.menuItemId) : null,
+          nameAr: String(line.nameAr || line.name || "وجبة"),
+          nameEn: String(line.nameEn || line.nameAr || ""),
+          price: Number(line.price || 0),
+          quantity: Number(line.quantity || 1),
+          totalPrice: Number((line.price || 0) * (line.quantity || 1)),
+        } as any);
+      }
+    }
+
+    return newOrder;
+  } catch (err) {
+    console.error("createOrder error:", err);
+    return null;
+  }
+}
+
+export async function getOrdersByNumbers(orderNumbers: any[]) {
+  try {
+    if (!orderNumbers || orderNumbers.length === 0) return [];
+    const nums = orderNumbers.map((n) => Number(n)).filter((n) => !isNaN(n));
+    if (nums.length === 0) return [];
+
+    return await db
+      .select()
+      .from(orders)
+      .where(inArray(orders.id, nums))
+      .orderBy(desc(orders.createdAt));
+  } catch (err) {
+    console.error("getOrdersByNumbers error:", err);
+    return [];
+  }
+}
+
+// =========================================================================
+// 4. إعدادات الواجهة الحية (بدون كاش)
 // =========================================================================
 export async function getFrontendSettings() {
   try {
@@ -125,7 +273,7 @@ export async function getFrontendSettings() {
 }
 
 // =========================================================================
-// 3. التصنيفات وقائمة الطعام الحية
+// 5. التصنيفات وقائمة الطعام الحية
 // =========================================================================
 export async function getCategoriesWithItems() {
   try {
@@ -151,17 +299,8 @@ export async function getMenuItems() {
   }
 }
 
-export async function getDeliveryZones() {
-  try {
-    return await db.select().from(deliveryZones).orderBy(asc(deliveryZones.sortOrder));
-  } catch (err) {
-    console.error("getDeliveryZones error:", err);
-    return [];
-  }
-}
-
 // =========================================================================
-// 4. استعلام لوحة الإعلانات الترويجية
+// 6. استعلام لوحة الإعلانات الترويجية
 // =========================================================================
 export async function getPromo() {
   try {
