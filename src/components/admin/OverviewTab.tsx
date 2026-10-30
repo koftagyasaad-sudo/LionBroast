@@ -1,97 +1,198 @@
 "use client";
 
-import { CalendarClock, Flame, ListOrdered, TrendingUp, Users, Wallet } from "lucide-react";
-import type { AdminBundle } from "@/lib/admin-types";
 import { motion } from "framer-motion";
+import {
+  TrendingUp,
+  ShoppingBag,
+  Users,
+  DollarSign,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  ArrowUpRight,
+  UtensilsCrossed,
+  MapPin,
+} from "lucide-react";
+import Link from "next/link";
 
-const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+// دالة أمان هندسية تمنع خطأ toLocaleString نهائياً تحت أي ظرف
+const fmt = (n: any): string => {
+  const num = Number(n);
+  return isNaN(num) ? "0" : num.toLocaleString("ar-EG");
+};
 
-export default function OverviewTab({ data }: { data: AdminBundle }) {
-  const { stats } = data;
+interface OverviewTabProps {
+  data: any;
+}
+
+export default function OverviewTab({ data }: OverviewTabProps) {
+  // استخراج آمن للبيانات مع قيم افتراضية كاملة
+  const kpis = data?.kpis || data?.stats || data?.metrics || {};
+  const orders: any[] = Array.isArray(data?.orders) ? data.orders : [];
+  const customers: any[] = Array.isArray(data?.customers) ? data.customers : [];
+  const items: any[] = Array.isArray(data?.items || data?.menuItems) ? (data.items || data.menuItems) : [];
+  const zones: any[] = Array.isArray(data?.zones || data?.deliveryZones) ? (data.zones || data.deliveryZones) : [];
+
+  const totalRevenue = kpis.revenue ?? kpis.totalRevenue ?? data?.revenue ?? 0;
+  const totalOrders = kpis.orders ?? kpis.totalOrders ?? orders.length;
+  const totalCustomers = kpis.customers ?? kpis.totalCustomers ?? customers.length;
+  const avgOrder = kpis.avgOrder ?? kpis.averageOrderValue ?? (totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0);
+
+  const pendingOrders = orders.filter((o) => o?.status === "pending" || o?.status === "preparing").length;
+  const completedOrders = orders.filter((o) => o?.status === "delivered" || o?.status === "completed").length;
+
   const cards = [
-    { label: "إجمالي الإيرادات", labelEn: "Lifetime Revenue", value: `${fmt(stats.revenue)} EGP`, icon: Wallet, tone: "from-emerald-500 to-emerald-700" },
-    { label: "إيرادات النهاردة", labelEn: "Today's Revenue", value: `${fmt(stats.todayRevenue)} EGP`, icon: TrendingUp, tone: "from-brand-500 to-brand-700" },
-    { label: "إجمالي الطلبات", labelEn: "Total Orders", value: fmt(stats.ordersCount), icon: ListOrdered, tone: "from-cheese-400 to-cheese-500" },
-    { label: "طلبات قيد الانتظار", labelEn: "Pending Orders", value: fmt(stats.pendingCount), icon: CalendarClock, tone: "from-sky-500 to-sky-700" },
-    { label: "العملاء المسجلين", labelEn: "Registered Customers", value: fmt(stats.customersCount), icon: Users, tone: "from-violet-500 to-violet-700" },
-    { label: "طلبات النهاردة", labelEn: "Today's Orders", value: fmt(stats.todayOrders), icon: Flame, tone: "from-rose-500 to-rose-700" },
+    {
+      title: "إجمالي المبيعات",
+      value: `${fmt(totalRevenue)} ج.م`,
+      sub: "إجمالي الدخل المالي المسجل",
+      icon: DollarSign,
+      color: "text-brand-500",
+      bg: "bg-brand-500/10",
+      border: "border-brand-500/20",
+    },
+    {
+      title: "إجمالي الطلبات",
+      value: fmt(totalOrders),
+      sub: `${fmt(pendingOrders)} طلب قيد التنفيذ`,
+      icon: ShoppingBag,
+      color: "text-amber-400",
+      bg: "bg-amber-400/10",
+      border: "border-amber-400/20",
+    },
+    {
+      title: "قاعدة العملاء",
+      value: fmt(totalCustomers),
+      sub: "عميل مسجل في بطاقات الولاء",
+      icon: Users,
+      color: "text-blue-400",
+      bg: "bg-blue-400/10",
+      border: "border-blue-400/20",
+    },
+    {
+      title: "متوسط قيمة الطلب",
+      value: `${fmt(avgOrder)} ج.م`,
+      sub: "معدل السلة الشرائية",
+      icon: TrendingUp,
+      color: "text-emerald-400",
+      bg: "bg-emerald-400/10",
+      border: "border-emerald-400/20",
+    },
   ];
 
-  const maxQty = Math.max(...stats.topItems.map((i) => i.qty), 1);
-
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-extrabold">نظرة عامة · Executive Overview</h1>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+    <div dir="rtl" className="space-y-8 text-white">
+      {/* شبكة مؤشرات الأداء الأساسية */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c, i) => (
           <motion.div
-            key={c.labelEn}
-            initial={{ opacity: 0, y: 18 }}
+            key={i}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="relative overflow-hidden rounded-3xl border border-white/10 bg-carbon-900 p-5"
+            transition={{ duration: 0.3, delay: i * 0.05 }}
+            className={`rounded-2xl border ${c.border} bg-carbon-900 p-5 shadow-lg`}
           >
-            <span className={`absolute -end-6 -top-6 size-24 rounded-full bg-gradient-to-br opacity-25 blur-xl ${c.tone}`} />
-            <span className={`grid size-10 place-items-center rounded-2xl bg-gradient-to-br text-white ${c.tone}`}>
-              <c.icon className="size-5" />
-            </span>
-            <p className="mt-4 text-2xl font-extrabold tracking-tight" dir="ltr">
-              {c.value}
-            </p>
-            <p className="mt-1 text-xs font-bold text-white/70">{c.label}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">{c.labelEn}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white/60">{c.title}</span>
+              <div className={`grid size-10 place-items-center rounded-xl ${c.bg} ${c.color}`}>
+                <c.icon className="size-5" />
+              </div>
+            </div>
+            <div className="mt-3 text-2xl font-extrabold tracking-tight">{c.value}</div>
+            <p className="mt-1 text-xs text-white/40">{c.sub}</p>
           </motion.div>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Top items */}
-        <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
-          <h2 className="flex items-center gap-2 text-sm font-extrabold">
-            <Flame className="size-4 text-brand-500" /> الأكثر مبيعاً · Top Items
-          </h2>
-          <div className="mt-4 space-y-3">
-            {stats.topItems.length === 0 && <p className="text-xs text-white/40">No orders yet — the fryer awaits.</p>}
-            {stats.topItems.map((it) => (
-              <div key={it.name}>
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span>{it.name}</span>
-                  <span className="text-cheese-300" dir="ltr">{it.qty} sold · {fmt(it.revenue)} EGP</span>
-                </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/5">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(it.qty / maxQty) * 100}%` }}
-                    transition={{ duration: 0.9, ease: "easeOut" }}
-                    className="h-full rounded-full flame-badge"
-                  />
-                </div>
-              </div>
-            ))}
+      {/* الحالة السريعة للعمليات والمنيو */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* ملخص المستودع والمنيو */}
+        <div className="rounded-2xl border border-white/10 bg-carbon-900 p-6 space-y-4">
+          <h3 className="flex items-center gap-2 text-base font-extrabold">
+            <UtensilsCrossed className="size-4 text-brand-500" />
+            حالة العمليات الميدانية
+          </h3>
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between rounded-xl bg-carbon-950 p-3 text-sm">
+              <span className="flex items-center gap-2 text-white/70">
+                <CheckCircle2 className="size-4 text-emerald-400" /> الطلبات المكتملة
+              </span>
+              <span className="font-extrabold text-emerald-400">{fmt(completedOrders)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-carbon-950 p-3 text-sm">
+              <span className="flex items-center gap-2 text-white/70">
+                <Clock className="size-4 text-amber-400" /> قيد المطبخ والتوصيل
+              </span>
+              <span className="font-extrabold text-amber-400">{fmt(pendingOrders)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-carbon-950 p-3 text-sm">
+              <span className="flex items-center gap-2 text-white/70">
+                <UtensilsCrossed className="size-4 text-brand-500" /> أصناف المنيو النشطة
+              </span>
+              <span className="font-extrabold">{fmt(items.length)} صنف</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-carbon-950 p-3 text-sm">
+              <span className="flex items-center gap-2 text-white/70">
+                <MapPin className="size-4 text-blue-400" /> مناطق التوصيل المتاحة
+              </span>
+              <span className="font-extrabold">{fmt(zones.length)} منطقة</span>
+            </div>
           </div>
         </div>
 
-        {/* Latest orders */}
-        <div className="rounded-3xl border border-white/10 bg-carbon-900 p-5">
-          <h2 className="flex items-center gap-2 text-sm font-extrabold">
-            <ListOrdered className="size-4 text-cheese-400" /> أحدث الطلبات · Latest Orders
-          </h2>
-          <div className="mt-4 space-y-2">
-            {data.orders.slice(0, 6).map((o) => (
-              <div key={o.id} className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-2.5 text-xs">
-                <div>
-                  <p className="font-mono font-bold" dir="ltr">{o.orderNumber}</p>
-                  <p className="text-[10px] text-white/45">{o.customerName} · {o.deliveryZone}</p>
-                </div>
-                <div className="text-end">
-                  <p className="font-extrabold text-brand-400" dir="ltr">{fmt(o.total)} EGP</p>
-                  <p className="text-[10px] font-bold text-white/50">{o.status}</p>
-                </div>
-              </div>
-            ))}
-            {data.orders.length === 0 && <p className="text-xs text-white/40">Orders placed via WhatsApp checkout appear here instantly.</p>}
+        {/* جدول أحدث الطلبات المسجلة */}
+        <div className="rounded-2xl border border-white/10 bg-carbon-900 p-6 lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <h3 className="flex items-center gap-2 text-base font-extrabold">
+              <ShoppingBag className="size-4 text-brand-500" />
+              أحدث العمليات والطلبات
+            </h3>
+            <span className="text-xs text-white/40">آخر {Math.min(orders.length, 6)} طلبات</span>
           </div>
+
+          {orders.length === 0 ? (
+            <div className="grid h-48 place-items-center text-center text-sm text-white/40">
+              <p>لا توجد طلبات مسجلة حتى الآن في النظام.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/40">
+                    <th className="pb-3 font-semibold">رقم الطلب</th>
+                    <th className="pb-3 font-semibold">العميل</th>
+                    <th className="pb-3 font-semibold">الحالة</th>
+                    <th className="pb-3 font-semibold">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 font-semibold">
+                  {orders.slice(0, 6).map((ord: any, idx: number) => {
+                    const ordTotal = ord?.totalAmount ?? ord?.total ?? ord?.subtotal ?? 0;
+                    return (
+                      <tr key={ord?.id || idx} className="hover:bg-white/[0.02]">
+                        <td className="py-3 font-mono text-brand-500">{ord?.orderNumber || `#${ord?.id || idx}`}</td>
+                        <td className="py-3 text-white/80">{ord?.customerName || ord?.customerPhone || "عميل سريع"}</td>
+                        <td className="py-3">
+                          <span
+                            className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              ord?.status === "completed" || ord?.status === "delivered"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : ord?.status === "cancelled"
+                                ? "bg-red-500/10 text-red-400"
+                                : "bg-amber-500/10 text-amber-400"
+                            }`}
+                          >
+                            {ord?.status || "معلق"}
+                          </span>
+                        </td>
+                        <td className="py-3 font-mono text-white">{fmt(ordTotal)} ج.م</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
