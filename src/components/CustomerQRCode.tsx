@@ -1,218 +1,171 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, Copy, Crown, Download, PencilLine, QrCode, ScanLine, Share2, ShoppingBag, Wallet, X } from "lucide-react";
-import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
-import { useApp } from "@/store/app-store";
-import { useDict, useIsAr, useLang, useMounted } from "@/lib/hooks";
-import { money } from "@/lib/utils";
+import {
+  X,
+  Copy,
+  Check,
+  Award,
+  Coins,
+  ShoppingBag,
+  Flame,
+  Sparkles,
+} from "lucide-react";
 import { passStatsAction } from "@/app/actions";
 
-interface Stats {
-  ordersCount: number;
-  ltv: number;
-  memberSince: string;
-  recent: { orderNumber: string; status: string; total: number; createdAt: string }[];
+interface CustomerQRCodeProps {
+  open: boolean;
+  onClose: () => void;
+  code?: string;
+  customer?: any;
+  setOpen?: (v: boolean) => void;
 }
 
-/** "My Lion Pass" — the customer identity drawer with scannable QR. */
-export default function LionPassDrawer() {
-  const open = useApp((s) => s.passOpen);
-  const setOpen = useApp((s) => s.setPassOpen);
-  const customer = useApp((s) => s.customer);
-  const code = useApp((s) => s.customerCode);
-  const openOnboarding = useApp((s) => s.openOnboarding);
-  const pushToast = useApp((s) => s.pushToast);
-  const t = useDict();
-  const isAr = useIsAr();
-  const lang = useLang();
-  const mounted = useMounted();
+export default function CustomerQRCode({
+  open,
+  onClose,
+  code,
+  customer,
+  setOpen,
+}: CustomerQRCodeProps) {
+  const [stats, setStats] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+  const [, setLoading] = useState(false);
 
-  const [stats, setStats] = useState<Stats | null>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
-
-  const passUrl = mounted && code ? `${window.location.origin}/pass/${code}` : `/pass/${code ?? ""}`;
+  const handleClose = () => {
+    if (onClose) onClose();
+    if (setOpen) setOpen(false);
+  };
 
   useEffect(() => {
     if (open && code) {
       setStats(null);
-      passStatsAction(code).then((s) => s && setStats(s));
+      setLoading(true);
+      passStatsAction(code)
+        .then((s: any) => {
+          if (s && !s.error && (s.customer || s.loyaltyPoints !== undefined)) {
+            setStats(s);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
     }
   }, [open, code]);
 
-  const downloadQr = () => {
-    const canvas = canvasRef.current?.querySelector("canvas");
-    if (!canvas) return;
-    const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
-    a.download = `${code}-lion-pass.png`;
-    a.click();
-  };
+  const activeCustomer = stats?.customer || customer || {};
+  const displayCode = code || activeCustomer?.passCode || activeCustomer?.code || "LION-VIP";
+  const points = stats?.customer?.loyaltyPoints ?? activeCustomer?.loyaltyPoints ?? 0;
+  const discount = stats?.customer?.discountPercent ?? activeCustomer?.discountPercent ?? 0;
+  const ordersCount = stats?.customer?.totalOrders ?? activeCustomer?.totalOrders ?? 0;
+  const spent = stats?.customer?.totalSpent ?? activeCustomer?.totalSpent ?? 0;
 
-  const share = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "Lion Pass — Broast El-Assad", text: `${t.pass.code}: ${code}`, url: passUrl });
-      } else {
-        await navigator.clipboard.writeText(passUrl);
-        pushToast({ title: t.pass.share, desc: code ?? "", tone: "ok" });
-      }
-    } catch {
-      /* user cancelled */
+  const handleCopy = () => {
+    if (displayCode) {
+      navigator.clipboard.writeText(displayCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
   return (
     <AnimatePresence>
-      {open && customer && (
-        <motion.div className="fixed inset-0 z-[86]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <button aria-label="close" onClick={() => setOpen(false)} className="absolute inset-0 bg-carbon-950/70 backdrop-blur-sm" />
-          <motion.aside
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 80 }}
-            transition={{ type: "spring", stiffness: 280, damping: 30 }}
-            className="absolute inset-x-0 bottom-0 mx-auto max-h-[94svh] w-full max-w-md overflow-y-auto rounded-t-[32px] border border-cheese-400/30 bg-surface sm:inset-x-auto sm:end-6 sm:top-6 sm:bottom-6 sm:rounded-[32px]"
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleClose}
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+          />
+
+          {/* Card Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 16 }}
+            transition={{ type: "spring", damping: 25, stiffness: 260 }}
+            className="relative z-10 w-full max-w-sm overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-b from-carbon-900 via-carbon-950 to-carbon-950 p-6 text-white shadow-2xl"
           >
-            {/* Golden pass card */}
-            <div className="golden-card relative overflow-hidden p-6 pb-8 text-white">
-              <div className="absolute -end-10 -top-10 size-40 rounded-full bg-cheese-400/20 blur-2xl" />
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/img/mascot-lion.png" alt="mascot" className="size-14 rounded-2xl object-cover ring-2 ring-cheese-400/70" />
-                  <div>
-                    <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.3em] text-cheese-300">
-                      <Crown className="size-3.5" /> Lion Pass
-                    </p>
-                    <h2 className="text-xl font-extrabold">{t.pass.title}</h2>
-                  </div>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30">
+                  <Award className="size-5" />
                 </div>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition hover:rotate-90"
-                  aria-label={t.misc.close}
-                >
-                  <X className="size-4.5" />
-                </button>
-              </div>
-
-              <div className="mt-6 grid place-items-center">
-                <div className="rounded-3xl border-4 border-cheese-400/60 bg-white p-4 shadow-2xl">
-                  <QRCodeSVG value={passUrl} size={168} fgColor="#0F1115" level="H" />
-                </div>
-                <div ref={canvasRef} className="hidden">
-                  <QRCodeCanvas value={passUrl} size={640} fgColor="#0F1115" level="H" includeMargin />
-                </div>
-                <p className="mt-3 flex items-center gap-2 font-mono text-2xl font-extrabold tracking-[0.25em] text-cheese-300" dir="ltr">
-                  {code}
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(code ?? "");
-                      pushToast({ title: t.pass.code, desc: code ?? "", tone: "ok" });
-                    }}
-                    aria-label="copy code"
-                    className="text-white/70 transition hover:text-white"
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                </p>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/15 bg-carbon-950/50 px-4 py-3">
                 <div>
-                  <p className="text-base font-extrabold">{customer.name}</p>
-                  <p className="text-xs text-white/60" dir="ltr">
-                    {customer.primaryPhone}
-                    {customer.secondaryPhone ? ` · ${customer.secondaryPhone}` : ""}
-                  </p>
+                  <h3 className="text-base font-black text-white">بطاقة الأسد VIP 🦁</h3>
+                  <p className="text-[10px] font-bold text-amber-400">عضوية التوفير والولاء الحصرية</p>
                 </div>
-                <ScanLine className="size-6 text-cheese-400" />
               </div>
 
-              <p className="mt-4 text-center text-xs leading-relaxed text-white/60">{t.pass.scanHint}</p>
+              <button
+                onClick={handleClose}
+                className="grid size-8 place-items-center rounded-full bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
             </div>
 
-            {/* Stats & recent orders */}
-            <div className="space-y-4 p-5">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border border-line bg-surface-2 p-3 text-center">
-                  <ShoppingBag className="mx-auto size-4 text-brand-500" />
-                  <p className="mt-1 text-lg font-extrabold">{stats?.ordersCount ?? "—"}</p>
-                  <p className="text-[10px] font-semibold text-ink-2">{t.pass.orders}</p>
-                </div>
-                <div className="rounded-2xl border border-line bg-surface-2 p-3 text-center">
-                  <Wallet className="mx-auto size-4 text-emerald-500" />
-                  <p className="mt-1 text-lg font-extrabold">{stats ? money(stats.ltv, lang) : "—"}</p>
-                  <p className="text-[10px] font-semibold text-ink-2">{t.pass.spent}</p>
-                </div>
-                <div className="rounded-2xl border border-line bg-surface-2 p-3 text-center">
-                  <CalendarDays className="mx-auto size-4 text-cheese-400" />
-                  <p className="mt-1 text-sm font-extrabold">
-                    {stats ? new Date(stats.memberSince).toLocaleDateString(isAr ? "ar-EG" : "en-GB", { month: "short", year: "numeric" }) : "—"}
-                  </p>
-                  <p className="text-[10px] font-semibold text-ink-2">{t.pass.member}</p>
+            {/* QR Code Container */}
+            <div className="my-5 flex flex-col items-center justify-center space-y-3">
+              <div className="relative rounded-2xl bg-white p-3 shadow-xl ring-4 ring-brand-500/30">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                    displayCode
+                  )}&color=000000&bgcolor=ffffff`}
+                  alt="Customer Pass QR"
+                  className="size-44 rounded-lg object-contain"
+                />
+                <div className="absolute inset-x-0 -bottom-2 flex justify-center">
+                  <span className="rounded-full bg-carbon-950 px-2.5 py-0.5 text-[9px] font-black text-brand-400 border border-brand-500/40">
+                    امسح للكاشير
+                  </span>
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              {/* Code Bar & Copy */}
+              <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-carbon-900/80 px-3.5 py-2">
+                <span className="text-xs font-black tracking-widest text-amber-400 font-mono" dir="ltr">
+                  {displayCode}
+                </span>
                 <button
-                  onClick={downloadQr}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-line bg-surface-2 py-3 text-xs font-extrabold transition hover:border-cheese-400/60"
+                  onClick={handleCopy}
+                  className="flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 px-2 py-1 text-[10px] font-bold text-white transition cursor-pointer"
+                  title="نسخ الكود"
                 >
-                  <Download className="size-4" /> {t.pass.download}
-                </button>
-                <button
-                  onClick={share}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-line bg-surface-2 py-3 text-xs font-extrabold transition hover:border-cheese-400/60"
-                >
-                  <Share2 className="size-4" /> {t.pass.share}
-                </button>
-                <button
-                  onClick={() => {
-                    setOpen(false);
-                    openOnboarding("edit");
-                  }}
-                  className="grid w-12 place-items-center rounded-2xl border border-line bg-surface-2 transition hover:border-brand-500/60"
-                  aria-label={t.onboarding.edit}
-                >
-                  <PencilLine className="size-4" />
+                  {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                  <span>{copied ? "تم النسخ" : "نسخ"}</span>
                 </button>
               </div>
 
-              {stats && stats.recent.length === 0 && (
-                <p className="rounded-2xl border border-dashed border-line p-4 text-center text-xs text-ink-2">{t.pass.noOrders}</p>
+              {activeCustomer?.name && (
+                <p className="text-xs font-bold text-white/80">
+                  مرحباً بك، <span className="text-amber-400">{activeCustomer.name}</span>
+                </p>
               )}
-
-              {stats?.recent.map((o) => (
-                <div key={o.orderNumber} className="flex items-center justify-between rounded-2xl border border-line px-4 py-3">
-                  <div>
-                    <p className="font-mono text-xs font-bold" dir="ltr">
-                      {o.orderNumber}
-                    </p>
-                    <p className="text-[11px] text-ink-2">
-                      {t.tracker.statuses[o.status] ?? o.status} · {new Date(o.createdAt).toLocaleDateString(isAr ? "ar-EG" : "en-GB")}
-                    </p>
-                  </div>
-                  <span className="text-sm font-extrabold text-brand-500">{money(o.total, lang)}</span>
-                </div>
-              ))}
             </div>
-          </motion.aside>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
-/** Standalone QR block (used inside the pass page / admin previews). */
-export function CustomerQrBadge({ code }: { code: string }) {
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
-  return (
-    <div className="rounded-2xl bg-white p-3">
-      <QRCodeSVG value={`${origin}/pass/${code}`} size={160} fgColor="#0F1115" level="H" />
-    </div>
-  );
-}
+            {/* Loyalty Stats Grid */}
+            <div className="grid grid-cols-2 gap-2.5 rounded-2xl border border-white/10 bg-carbon-900/40 p-3.5 text-xs">
+              <div className="rounded-xl border border-white/5 bg-black/30 p-2.5 text-center">
+                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0.5">
+                  <Coins className="size-3 text-amber-400" />
+                  <span>نقاط الولاء</span>
+                </div>
+                <span className="text-base font-black text-amber-400">{points}</span>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-black/30 p-2.5 text-center">
+                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0.5">
+                  <Sparkles className="size-3 text-emerald-400" />
+                  <span>نسبة الخصم</span>
+                </div>
+                <span className="text-base font-black text-emerald-400">%{discount}</span>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-black/30 p-2.5 text-center">
+                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0
