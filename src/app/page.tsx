@@ -9,7 +9,6 @@ import BestSellers from "@/components/BestSellers";
 import MenuPreview from "@/components/MenuPreview";
 import ZonesSection from "@/components/ZonesSection";
 import LocationBlock from "@/components/LocationBlock";
-import ChefCta from "@/components/ChefCta";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 import ClientBoot from "@/components/ClientBoot";
@@ -48,46 +47,10 @@ export default async function HomePage() {
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
-  const heroSlides = [
-    {
-      id: "slide-1",
-      title: frontend?.heroTitleAr || frontend?.hero_title_ar || "أقوى بروست مقرمش وطازج في دسوق",
-      subtitle: frontend?.heroSubtitleAr || frontend?.hero_subtitle_ar || "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
-      image: frontend?.heroImage1 || frontend?.hero_image_1 || "/img/hero-1.png",
-      imageUrl: frontend?.heroImage1 || frontend?.hero_image_1 || "/img/hero-1.png",
-      tag: "الوحش الأصلي",
-      badge: "NEW!",
-      ctaText: "اطلب الآن",
-      ctaLink: "/menu",
-    },
-    {
-      id: "slide-2",
-      title: "العزومة جاهزة",
-      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات، اطلبها ووصلها السكة.",
-      image: frontend?.heroImage2 || frontend?.hero_image_2 || "/img/hero-2.png",
-      imageUrl: frontend?.heroImage2 || frontend?.hero_image_2 || "/img/hero-2.png",
-      tag: "وجبة عائلية",
-      badge: "الأكثر طلباً",
-      ctaText: "اطلب العزومة",
-      ctaLink: "/menu",
-    },
-    {
-      id: "slide-3",
-      title: "أكبر قطعة بروست في دسوق",
-      subtitle: "قرمشة وتتبيلة ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير.",
-      image: frontend?.heroImage3 || frontend?.hero_image_3 || "/img/hero-3.png",
-      imageUrl: frontend?.heroImage3 || frontend?.hero_image_3 || "/img/hero-3.png",
-      tag: "عروض VIP",
-      badge: "توفير",
-      ctaText: "شوف العروض",
-      ctaLink: "/menu",
-    },
-  ];
-
-  // التحقق من حالة ظهور الإعلان المؤقت (Promo Bulletin)
   const isPromoVisible =
     promo &&
-    (promo.enabled !== false && promo.visible !== false) &&
+    promo.enabled !== false &&
+    promo.visible !== false &&
     Boolean(promo.textAr || promo.title);
 
   return (
@@ -108,12 +71,12 @@ export default async function HomePage() {
       <Header frontend={frontend} settings={frontend} promo={promo} />
 
       {/* 2. السلايدر الرئيسي */}
-      <HeroSlider frontend={frontend} slides={heroSlides} items={heroSlides} data={heroSlides} />
+      <HeroSlider frontend={frontend} />
 
       {/* 3. شريط الأخبار المتحرك */}
       <MarqueeStrip text={marqueeText} items={[marqueeText, marqueeText]} />
 
-      {/* 4. لوحة الإعلانات الترويجية والعروض المؤقتة (تظهر وتختفي ديناميكياً من غرفة التحكم) */}
+      {/* 4. لوحة الإعلانات الترويجية والعروض المؤقتة */}
       {isPromoVisible && (
         <section className="mx-auto max-w-7xl px-4 pt-6 pb-2 md:px-8" dir="rtl">
           <div className="relative overflow-hidden rounded-3xl border border-amber-500/50 bg-gradient-to-r from-carbon-950 via-amber-950/40 to-carbon-950 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
@@ -156,7 +119,9 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* 6. بانر العروض والمميزات VIP */}
+      {/* ========================================================================= */}
+      {/* 6. المكان 1: بانر العروض والمميزات VIP (أكبر قطعة بروست في دسوق) */}
+      {/* ========================================================================= */}
       <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 text-white" dir="rtl">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-amber-600 to-brand-500 p-8 md:p-12 shadow-2xl">
           <div className="absolute -left-10 -top-10 size-60 rounded-full bg-white/10 blur-3xl pointer-events-none" />
@@ -164,7 +129,7 @@ export default async function HomePage() {
 
           <div className="relative z-10 max-w-2xl space-y-4">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-4 py-1.5 text-xs font-black text-amber-300 backdrop-blur-md border border-white/15 shadow-sm">
-              🍗 {frontend?.promoBadgeAr || "عروض ومميزات بروست الأسد VIP"}
+              {frontend?.promoBadgeAr || "عروض ومميزات بروست الأسد VIP 🍗"}
             </span>
 
             <h2 className="text-2xl sm:text-3xl md:text-5xl font-black leading-tight drop-shadow-md">
@@ -178,10 +143,10 @@ export default async function HomePage() {
 
             <div className="pt-2">
               <Link
-                href="/menu"
+                href={frontend?.promoBtnLink || "/menu"}
                 className="inline-flex items-center gap-2 rounded-2xl bg-white px-8 py-3.5 text-sm font-black text-carbon-950 shadow-xl transition hover:bg-amber-100 hover:scale-105 active:scale-95"
               >
-                <span>اطلب الآن 🍗</span>
+                <span>{frontend?.promoBtnTextAr || "اطلب الآن 🍗"}</span>
               </Link>
             </div>
           </div>
@@ -213,18 +178,17 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 8. سكشن مناطق وأسعار التوصيل (يقرأ مباشرة من قاعدة البيانات) */}
+      {/* 8. سكشن مناطق وأسعار التوصيل الميدانية */}
       <section id="zones">
         <ZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
 
-      {/* 9. سكشن عنوان الفرع ورابط Google Maps */}
-      <LocationBlock frontend={frontend} />
+      {/* ========================================================================= */}
+      {/* 9. المكان 2 و 3 مدمجان: سكشن الفرع واللوكيشن + بانر الطلب والواتساب (برتقالي موحد) */}
+      {/* ========================================================================= */}
+      <LocationBlock frontend={frontend} settings={frontend} />
 
-      {/* 10. بانر الطلب السريع */}
-      <ChefCta frontend={frontend} settings={frontend} />
-
-      {/* 11. الفوتر */}
+      {/* 10. الفوتر وروابط التواصل */}
       <Footer frontend={frontend} settings={frontend} />
 
       {/* سلة المشتريات */}
