@@ -6,7 +6,6 @@ import {
   deleteCategoryAction,
   upsertMenuItemAction,
   deleteMenuItemAction,
-  adminScanMenuAction,
   adminSaveScannedRowsAction,
 } from "@/app/admin-actions";
 import {
@@ -21,8 +20,6 @@ import {
   Layers,
   UtensilsCrossed,
   ScanLine,
-  ChevronDown,
-  ChevronUp,
   Loader2,
   X,
 } from "lucide-react";
@@ -31,7 +28,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
   const categoriesList: any[] = Array.isArray(data?.categories) ? data.categories : [];
   const itemsList: any[] = Array.isArray(data?.menuItems || data?.items) ? (data?.menuItems || data?.items) : [];
 
-  // تصنيف الأصناف تحت كل قسم
   const [selectedCatId, setSelectedCatId] = useState<string>(categoriesList[0]?.id || "");
   const [showScanner, setShowScanner] = useState(false);
 
@@ -55,14 +51,13 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
   });
   const [savingItem, setSavingItem] = useState(false);
 
-  // حالة الماسح الذكي المدمج
+  // حالة الماسح المباشر (مثل DG Menus عبر API)
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scannedRows, setScannedRows] = useState<any[]>([]);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
 
-  // إضافة قسم جديد
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatNameAr.trim()) return;
@@ -79,14 +74,12 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     }
   };
 
-  // حذف قسم
   const handleDeleteCategory = async (catId: string) => {
     if (!confirm("هل أنت متأكد من حذف هذا القسم وجميع أصنافه؟")) return;
     await deleteCategoryAction(catId);
     if (refresh) await refresh();
   };
 
-  // فتح فورم الصنف الجديد
   const handleOpenNewItem = (catId?: string) => {
     setEditingItemId(null);
     setItemForm({
@@ -103,7 +96,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     setItemFormOpen(true);
   };
 
-  // تعديل صنف موجود
   const handleEditItem = (item: any) => {
     setEditingItemId(item.id);
     let options = { hasSpicyOption: true, hasDoubleOption: true, doubleExtraPrice: 35 };
@@ -125,7 +117,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     setItemFormOpen(true);
   };
 
-  // حفظ الصنف
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemForm.nameAr.trim()) return;
@@ -156,35 +147,33 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     }
   };
 
-  // تشغيل الماسح الذكي
+  // إرسال الصورة عبر FormData إلى API Route المستقل (نفس أسلوب DG Menus المضمون 100%)
   const handleScanMenu = async () => {
     if (!scanFile) return;
     setScanning(true);
     setScanMsg(null);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const res = await adminScanMenuAction({
-          fileName: scanFile.name,
-          imageBase64: base64,
-          mimeType: scanFile.type || "image/jpeg",
-        });
+      const formData = new FormData();
+      formData.append("file", scanFile);
 
-        if (res.success && res.data && res.data.length > 0) {
-          setScannedRows(res.data);
-        } else {
-          setScanMsg(res.error || "تعذر قراءة الصورة، يرجى تجربة صورة أوضح أو إدخال الأصناف يدوياً.");
-        }
-        setScanning(false);
-      };
-      reader.readAsDataURL(scanFile);
-    } catch {
+      const res = await fetch("/api/scan-menu", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.ok && data.data && data.data.length > 0) {
+        setScannedRows(data.data);
+      } else {
+        setScanMsg(data.error || "تعذر قراءة محتوى المنيو، تأكد من وضوح الصورة وزوايا الخط.");
+      }
+    } catch (err: any) {
+      setScanMsg(err?.message || "حدث خطأ في الاتصال بالـ API.");
+    } finally {
       setScanning(false);
     }
   };
 
-  // اعتماد حفظ الأصناف الممسوحة
   const handleSaveScanned = async () => {
     if (scannedRows.length === 0) return;
     setScanning(true);
@@ -226,7 +215,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
             }`}
           >
             <ScanLine className="size-4 text-amber-400" />
-            <span>{showScanner ? "إغلاق ماسح المنيو AI" : "ماسح المنيو الذكي (AI Scanner)"}</span>
+            <span>{showScanner ? "إغلاق ماسح المنيو" : "استيراد المنيو بالذكاء الاصطناعي"}</span>
           </button>
 
           <button
@@ -239,15 +228,15 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       </div>
 
-      {/* نافذة ماسح المنيو الذكي (إذا تم تفعيلها) */}
+      {/* نافذة ماسح المنيو الذكي المستقلة */}
       {showScanner && (
         <div className="rounded-3xl border border-amber-500/40 bg-carbon-950 p-6 md:p-8 space-y-6 shadow-2xl">
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
             <div className="flex items-center gap-2.5">
               <Sparkles className="size-5 text-amber-400 animate-pulse" />
-              <h3 className="text-base font-black text-white">رفع وتحليل صورة المنيو الورقي تلقائياً</h3>
+              <h3 className="text-base font-black text-white">استيراد المنيو بصورة (نظام الذكاء الاصطناعي المباشر)</h3>
             </div>
-            <button onClick={() => setShowScanner(false)} className="text-white/40 hover:text-white">
+            <button onClick={() => setShowScanner(false)} className="text-white/40 hover:text-white cursor-pointer">
               <X className="size-5" />
             </button>
           </div>
@@ -270,24 +259,24 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
                 />
                 <label htmlFor="scanner-upload" className="cursor-pointer flex flex-col items-center justify-center gap-2">
                   <Upload className="size-10 text-brand-500" />
-                  <span className="text-sm font-bold text-white">اضغط لاختيار صورة المنيو أو الكاميرا</span>
-                  <span className="text-[11px] text-white/40">يدعم JPG, PNG, WEBP</span>
+                  <span className="text-sm font-bold text-white">اختر صورة المنيو لتحليلها بالذكاء الاصطناعي</span>
+                  <span className="text-[11px] text-white/40">تتم المعالجة عبر سيرفر الذكاء الاصطناعي مباشرة بدون قيود</span>
                 </label>
               </div>
 
               {scanPreview && (
                 <div className="space-y-3">
-                  <div className="max-h-64 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center bg-black/50">
+                  <div className="max-h-72 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center bg-black/50">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={scanPreview} alt="Menu Preview" className="max-h-64 object-contain" />
+                    <img src={scanPreview} alt="Menu Preview" className="max-h-72 object-contain" />
                   </div>
                   <button
                     onClick={handleScanMenu}
                     disabled={scanning}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-brand-500 py-3 text-sm font-black text-white shadow-xl disabled:opacity-50 cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-brand-500 py-3.5 text-sm font-black text-white shadow-xl disabled:opacity-50 cursor-pointer"
                   >
                     {scanning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                    <span>{scanning ? "جاري قراءة واستخراج الأصناف بالذكاء الاصطناعي..." : "بدء تحليل واستخراج الأصناف الآن"}</span>
+                    <span>{scanning ? "جاري قراءة واستخراج الأصناف والأسعار..." : "استخراج الأصناف والأسعار الآن"}</span>
                   </button>
                 </div>
               )}
@@ -303,7 +292,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
                 <button
                   onClick={handleSaveScanned}
                   disabled={scanning}
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-black text-white cursor-pointer shadow-lg"
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-black text-white cursor-pointer shadow-lg"
                 >
                   <Check className="size-4" />
                   <span>اعتماد وإضافة لكل أقسام المنيو</span>
@@ -337,7 +326,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       )}
 
-      {/* قسم إدارة الأقسام الرئيسية (Categories Bar) */}
+      {/* شريط الأقسام الرئيسية */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex items-center gap-2">
@@ -345,7 +334,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
             <h3 className="text-base font-black text-white">الأقسام الرئيسية للمنيو</h3>
           </div>
 
-          {/* إضافة قسم جديد */}
           <form onSubmit={handleAddCategory} className="flex gap-2">
             <input
               type="text"
@@ -366,7 +354,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
           </form>
         </div>
 
-        {/* أزرار التنقل بين الأقسام */}
         <div className="flex flex-wrap gap-2.5 pt-2">
           {categoriesList.map((cat) => {
             const isSelected = String(cat.id) === String(selectedCatId);
@@ -423,7 +410,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
           </button>
         </div>
 
-        {/* عرض كروت الأصناف في شبكة */}
         {currentCategoryItems.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {currentCategoryItems.map((item) => {
@@ -465,7 +451,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
                       </div>
                     </div>
 
-                    {/* عرض الخيارات المفعلة للصنف */}
                     <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/5">
                       {options.hasSpicyOption && (
                         <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 text-red-400 border border-red-500/20 px-2 py-0.5 text-[10px] font-bold">
@@ -527,7 +512,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         )}
       </div>
 
-      {/* نافذة منبثقة (Modal) لإضافة أو تعديل وجبة بكافة تفاصيلها وخياراتها */}
+      {/* النافذة المنبثقة لإضافة وتعديل صنف */}
       {itemFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" dir="rtl">
           <div className="w-full max-w-xl rounded-3xl border border-white/15 bg-carbon-900 p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -535,7 +520,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
               <h3 className="text-lg font-black text-white">
                 {editingItemId ? "تعديل الصنف والخيارات" : "إضافة صنف جديد للمنيو"}
               </h3>
-              <button onClick={() => setItemFormOpen(false)} className="text-white/40 hover:text-white">
+              <button onClick={() => setItemFormOpen(false)} className="text-white/40 hover:text-white cursor-pointer">
                 <X className="size-5" />
               </button>
             </div>
@@ -618,7 +603,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
                 </div>
               </div>
 
-              {/* قسم خيارات العميل عند الاختيار (سنجل / دابل - حار / بارد) */}
               <div className="rounded-2xl border border-brand-500/30 bg-carbon-950 p-4 space-y-4">
                 <span className="text-xs font-black text-amber-400 block border-b border-white/10 pb-2">
                   خيارات طلب الصنف للعميل (Options):
