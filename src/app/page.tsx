@@ -14,9 +14,11 @@ import CartDrawer from "@/components/CartDrawer";
 import ClientBoot from "@/components/ClientBoot";
 import { Sparkles, Megaphone } from "lucide-react";
 
-// =========================================================================
-// تأمين جذري لكافة المكونات ضد أخطاء فحص الأنواع في TypeScript نهائياً
-// =========================================================================
+// إلغاء الكاش تماماً وإجبار السيرفر على جلب البيانات الحية في كل زيارة
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 const SafeClientBoot = ClientBoot as any;
 const SafeHeader = Header as any;
 const SafeHeroSlider = HeroSlider as any;
@@ -27,9 +29,6 @@ const SafeZonesSection = ZonesSection as any;
 const SafeLocationBlock = LocationBlock as any;
 const SafeFooter = Footer as any;
 const SafeCartDrawer = CartDrawer as any;
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function HomePage() {
   const [frontend, rawPromo, rawCatsWithItems, rawZones, rawItems] = await Promise.all([
@@ -70,19 +69,15 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-carbon-950 text-zinc-900 dark:text-white selection:bg-brand-500 overflow-x-hidden transition-colors duration-300">
-      {/* 0. تهيئة المتجر */}
       <SafeClientBoot />
 
-      {/* 1. الهيدر */}
       <SafeHeader frontend={frontend} settings={frontend} promo={promo} />
 
-      {/* 2. السلايدر الرئيسي */}
       <SafeHeroSlider frontend={frontend} />
 
-      {/* 3. شريط الأخبار المتحرك (متوافق مع marqueeAr و text بدون أي خطأ) */}
       <SafeMarqueeStrip marqueeAr={marqueeText} marqueeEn={marqueeText} text={marqueeText} items={[marqueeText, marqueeText]} />
 
-      {/* 4. لوحة الإعلانات الترويجية والعروض المؤقتة */}
+      {/* لوحة الإعلانات الترويجية */}
       {isPromoVisible && (
         <section className="mx-auto max-w-7xl px-4 pt-6 pb-2 md:px-8" dir="rtl">
           <div className="relative overflow-hidden rounded-3xl border border-amber-500/50 bg-gradient-to-r from-carbon-950 via-amber-950/40 to-carbon-950 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
@@ -118,14 +113,14 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* 5. سكشن الأكثر مبيعاً */}
+      {/* سكشن الأكثر مبيعاً */}
       {bestItems.length > 0 && (
         <section id="best">
           <SafeBestSellers categories={catsWithItems} items={bestItems} data={bestItems} />
         </section>
       )}
 
-      {/* 6. المكان 1: بانر العروض والمميزات VIP (أكبر قطعة بروست في دسوق) */}
+      {/* بانر العروض والمميزات VIP */}
       <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 text-white" dir="rtl">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-amber-600 to-brand-500 p-8 md:p-12 shadow-2xl">
           <div className="absolute -left-10 -top-10 size-60 rounded-full bg-white/10 blur-3xl pointer-events-none" />
@@ -157,7 +152,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 7. سكشن المنيو */}
+      {/* سكشن المنيو */}
       <section id="menu">
         {catsWithItems.length > 0 ? (
           <SafeMenuPreview categories={catsWithItems} />
@@ -182,15 +177,15 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 8. سكشن مناطق وأسعار التوصيل الميدانية */}
+      {/* سكشن مناطق التوصيل الميدانية */}
       <section id="zones">
         <SafeZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
 
-      {/* 9. سكشن الفرع واللوكيشن + بانر الطلب والواتساب (برتقالي موحد) */}
+      {/* سكشن الفرع واللوكيشن المدمج البرتقالي */}
       <SafeLocationBlock frontend={frontend} settings={frontend} />
 
-      {/* 10. الفوتر وروابط التواصل */}
+      {/* الفوتر */}
       <SafeFooter frontend={frontend} settings={frontend} />
 
       {/* سلة المشتريات */}
