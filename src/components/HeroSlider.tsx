@@ -1,249 +1,158 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Flame,
-  Leaf,
-  ShoppingBag,
-  Star,
-  UtensilsCrossed,
-} from "lucide-react";
-import { IMG } from "@/lib/img";
-import { useDict, useIsAr } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRight, ChevronLeft, Flame, UtensilsCrossed, Clock, Star, ShieldCheck } from "lucide-react";
 
-const DEFAULT_HERO_IMGS = [IMG.heroClassic, IMG.heroSpicy, IMG.heroCombo];
-
-export default function HeroSlider({ frontend }: { frontend?: any }) {
-  const t = useDict();
-  const isAr = useIsAr();
-  const reduce = useReducedMotion();
-  const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-
-  // سحب الشرائح الأساسية وتعديلها بالبيانات والصور القادمة من لوحة التحكم (الداتا بيز)
-  const rawSlides = t.hero.slides;
-  const slides = [...rawSlides];
-
-  if (frontend && slides.length > 0) {
-    slides[0] = {
-      ...slides[0],
-      title: isAr
-        ? frontend.heroTitleAr || frontend.hero_title_ar || slides[0].title
-        : frontend.heroTitleEn || frontend.hero_title_en || slides[0].title,
-      sub: isAr
-        ? frontend.heroSubtitleAr ||
-          frontend.heroSubAr ||
-          frontend.hero_subtitle_ar ||
-          slides[0].sub
-        : frontend.heroSubEn || frontend.hero_subtitle_en || slides[0].sub,
-    };
-  }
-
-  // دمج صور السلايدر المرفوعة من لوحة التحكم مع الصور الافتراضية
-  const slideImages = [
-    frontend?.heroImage1 || frontend?.hero_image_1 || DEFAULT_HERO_IMGS[0],
-    frontend?.heroImage2 || frontend?.hero_image_2 || DEFAULT_HERO_IMGS[1],
-    frontend?.heroImage3 || frontend?.hero_image_3 || DEFAULT_HERO_IMGS[2],
+export default function HeroSlider({ frontend, slides }: { frontend?: any; slides?: any[] }) {
+  const defaultSlides = [
+    {
+      id: "slide-1",
+      badge: "إصدار النار 🔥",
+      title: "الحار اللي يولّع",
+      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
+      image: frontend?.heroImage1 || "/img/hero-1.png",
+      cta1Text: "تحدي النار 🍗",
+      cta1Link: "/menu",
+      cta2Text: "شوف المنيو",
+      cta2Link: "/menu",
+    },
+    {
+      id: "slide-2",
+      badge: "وليمة العيلة",
+      title: "العزومة جاهزة",
+      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات. اطلبها ووصلها السكة.",
+      image: frontend?.heroImage2 || "/img/hero-2.png",
+      cta1Text: "اطلب الوليمة",
+      cta1Link: "/menu",
+      cta2Text: "شوف المنيو",
+      cta2Link: "/menu",
+    },
+    {
+      id: "slide-3",
+      badge: "أقوى قرمشة",
+      title: "أكبر قطعة بروست في دسوق",
+      subtitle: "قرمشة وتتبيلة سرية ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير.",
+      image: frontend?.heroImage3 || "/img/hero-3.png",
+      cta1Text: "شوف العروض",
+      cta1Link: "/menu",
+      cta2Text: "المنيو كامل",
+      cta2Link: "/menu",
+    },
   ];
 
-  // إضافة البانرات الإعلانية الإضافية (إن وجدت في لوحة التحكم) كشرائح في السلايدر
-  const extraBanners = [
-    frontend?.adBanner1 || frontend?.ad_banner_1,
-    frontend?.adBanner2 || frontend?.ad_banner_2,
-  ].filter(Boolean);
+  const currentSlides =
+    frontend?.heroSlides && Array.isArray(frontend.heroSlides) && frontend.heroSlides.length > 0
+      ? frontend.heroSlides
+      : slides && slides.length > 0
+      ? slides
+      : defaultSlides;
 
-  for (let i = 0; i < extraBanners.length; i++) {
-    slideImages.push(extraBanners[i]);
-    slides.push({
-      ...slides[0],
-      kicker: isAr ? "عرض خاص 🔥" : "SPECIAL OFFER 🔥",
-    });
-  }
-
-  const count = slides.length;
-  const go = useCallback((i: number) => setIndex((i + count) % count), [count]);
+  const [current, setCurrent] = useState(0);
 
   useEffect(() => {
-    if (paused) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % count), 6500);
-    return () => clearInterval(id);
-  }, [paused, count]);
+    const timer = setInterval(() => {
+      setCurrent((prev) => (prev + 1) % currentSlides.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [currentSlides.length]);
 
-  const prev = () => go(index - 1);
-  const next = () => go(index + 1);
-
-  const currentSlide = slides[index % slides.length] || slides[0];
-  const currentImg = slideImages[index % slideImages.length] || DEFAULT_HERO_IMGS[0];
+  const slide = currentSlides[current] || currentSlides[0];
 
   return (
-    <section
-      className="grain relative flex min-h-[96svh] items-end overflow-hidden bg-carbon-950 text-white"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      <AnimatePresence mode="sync">
+    <section className="relative h-[85vh] min-h-[580px] max-h-[780px] w-full overflow-hidden bg-carbon-950 text-white" dir="rtl">
+      <AnimatePresence mode="wait">
         <motion.div
-          key={index}
-          className="absolute inset-0"
-          initial={{ opacity: 0, scale: reduce ? 1 : 1.08 }}
-          animate={{ opacity: 1, scale: 1 }}
+          key={current}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.7 }}
+          className="absolute inset-0"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentImg}
-            alt={currentSlide?.title || "Broast El-Assad"}
-            onError={(e) => {
-              const target = e.currentTarget;
-              const fallback = DEFAULT_HERO_IMGS[index % DEFAULT_HERO_IMGS.length];
-              if (target.src !== fallback) target.src = fallback;
-            }}
-            className="h-full w-full object-cover"
-          />
+          {/* صورة خلفية الشريحة */}
+          {slide.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={slide.image} alt={slide.title} className="size-full object-cover object-center brightness-[0.45]" />
+          ) : (
+            <div className="size-full bg-gradient-to-r from-red-950 via-carbon-950 to-amber-950" />
+          )}
+
+          {/* طبقة تظليل متدرجة لحماية النصوص */}
+          <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-carbon-950/80 via-transparent to-transparent" />
         </motion.div>
       </AnimatePresence>
-      <div className="hero-vignette absolute inset-0" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-24 select-none overflow-hidden text-center">
-        <span className="text-outline-faint whitespace-nowrap text-[19vw] font-extrabold leading-none tracking-tight opacity-70 md:text-[11rem]">
-          {isAr ? "كرسبي" : "CRISPY"}
-        </span>
+      {/* محتوى الشريحة التفاعلي */}
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-center px-4 md:px-8">
+        <div className="max-w-2xl space-y-5">
+          {slide.badge && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/20 px-4 py-1.5 text-xs font-black text-amber-300 backdrop-blur-md">
+              <Flame className="size-3.5 text-brand-500" />
+              <span>{slide.badge}</span>
+            </span>
+          )}
+
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-black leading-tight tracking-tight drop-shadow-xl text-white">
+            {slide.title}
+          </h1>
+
+          <p className="text-sm sm:text-base md:text-lg font-semibold text-white/80 leading-relaxed drop-shadow-md">
+            {slide.subtitle}
+          </p>
+
+          {/* أزرار الإجراء السريع (Buttons) */}
+          <div className="flex flex-wrap items-center gap-4 pt-3">
+            <Link
+              href={slide.cta1Link || "/menu"}
+              className="rounded-2xl bg-gradient-to-r from-brand-500 to-amber-500 px-8 py-4 text-sm font-black text-white shadow-xl glow-brand transition hover:scale-105 active:scale-95"
+            >
+              {slide.cta1Text || "اطلب الآن 🍗"}
+            </Link>
+
+            <Link
+              href={slide.cta2Link || "/menu"}
+              className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black text-white backdrop-blur-md transition hover:bg-white/20"
+            >
+              <UtensilsCrossed className="size-4" />
+              <span>{slide.cta2Text || "شوف المنيو"}</span>
+            </Link>
+          </div>
+
+          {/* شريط الإحصائيات الصغير */}
+          <div className="flex flex-wrap items-center gap-6 pt-4 text-xs font-bold text-white/70">
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-4 text-brand-400" />
+              <span>يوصلك في ٣٠-٤٥ دقيقة</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Star className="size-4 text-amber-400 fill-amber-400" />
+              <span>٤.٩ من +٢٬٤٠٠ تقييم</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-emerald-400" />
+              <span>دجاج طازج يومياً</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-16 pt-40 md:px-8 md:pb-20">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={index}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            variants={{
-              hidden: {},
-              show: { transition: { staggerChildren: 0.09 } },
-              exit: { opacity: 0, y: -24, transition: { duration: 0.35 } },
-            }}
-            className="max-w-2xl"
-          >
-            <motion.span
-              variants={{
-                hidden: { opacity: 0, y: 26 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-              }}
-              className="flame-badge inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest shadow-lg"
-            >
-              <Flame className="size-3.5" />
-              {currentSlide.kicker}
-            </motion.span>
-
-            <motion.h1
-              variants={{
-                hidden: { opacity: 0, y: 34 },
-                show: {
-                  opacity: 1,
-                  y: 0,
-                  transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
-                },
-              }}
-              className="mt-5 text-5xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl md:text-7xl"
-            >
-              {currentSlide.title}
-            </motion.h1>
-
-            <motion.p
-              variants={{
-                hidden: { opacity: 0, y: 26 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-              }}
-              className="mt-5 max-w-lg text-base leading-relaxed text-white/80 md:text-lg"
-            >
-              {currentSlide.sub}
-            </motion.p>
-
-            <motion.div
-              variants={{
-                hidden: { opacity: 0, y: 26 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-              }}
-              className="mt-8 flex flex-wrap items-center gap-3"
-            >
-              <Link
-                href="/menu"
-                className="glow-brand group flex items-center gap-2.5 rounded-full bg-brand-500 px-7 py-4 text-base font-extrabold text-white transition hover:scale-[1.03] active:scale-[0.98]"
-              >
-                <ShoppingBag className="size-5 transition group-hover:-rotate-12" />
-                {currentSlide.cta}
-              </Link>
-              <Link
-                href="/menu"
-                className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-7 py-4 text-base font-bold text-white backdrop-blur transition hover:border-white/60 hover:bg-white/20"
-              >
-                <UtensilsCrossed className="size-5" />
-                {t.hero.viewMenu}
-              </Link>
-            </motion.div>
-
-            <motion.div
-              variants={{
-                hidden: { opacity: 0 },
-                show: { opacity: 1, transition: { duration: 0.8 } },
-              }}
-              className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold text-white/75"
-            >
-              <span className="flex items-center gap-1.5">
-                <Clock3 className="size-4 text-cheese-300" /> {t.hero.deliveryTime}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Star className="size-4 fill-cheese-300 text-cheese-300" /> {t.hero.rating}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Leaf className="size-4 text-emerald-400" /> {t.hero.fresh}
-              </span>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      <div className="absolute bottom-8 z-10 flex items-center gap-4 end-4 md:end-8">
-        <div className="flex gap-2">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => go(i)}
-              aria-label={`slide ${i + 1}`}
-              className="group relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25"
-            >
-              <span
-                className={cn(
-                  "absolute inset-y-0 start-0 rounded-full bg-gradient-to-r from-cheese-300 to-brand-500 transition-all duration-500",
-                  i === index ? "w-full" : "w-0",
-                )}
-              />
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          {[prev, next].map((fn, i) => (
-            <button
-              key={i}
-              onClick={fn}
-              aria-label={i === 0 ? "previous" : "next"}
-              className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/10 backdrop-blur transition hover:border-brand-500 hover:bg-brand-500"
-            >
-              {(i === 0) === isAr ? (
-                <ChevronRight className="size-5" />
-              ) : (
-                <ChevronLeft className="size-5" />
-              )}
-            </button>
-          ))}
-        </div>
+      {/* أزرار وأسهم التنقل بين الشرائح */}
+      <div className="absolute bottom-6 left-6 z-20 flex items-center gap-2">
+        <button
+          onClick={() => setCurrent((prev) => (prev - 1 + currentSlides.length) % currentSlides.length)}
+          className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/70 text-white backdrop-blur-md hover:bg-white/20 transition cursor-pointer"
+        >
+          <ChevronRight className="size-5" />
+        </button>
+        <button
+          onClick={() => setCurrent((prev) => (prev + 1) % currentSlides.length)}
+          className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/70 text-white backdrop-blur-md hover:bg-white/20 transition cursor-pointer"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
       </div>
     </section>
   );
