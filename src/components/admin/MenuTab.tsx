@@ -1,284 +1,690 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Check, Flame, ImageOff, Loader2, PencilLine, Plus, Search, Star, Trash2, X } from "lucide-react";
-import type { TabProps } from "@/components/admin/AdminShell";
-import type { AdminItemInput } from "@/app/admin-actions";
-import { adminDeleteCategoryAction, adminDeleteItemAction, adminSaveCategoryAction, adminSaveItemAction } from "@/app/admin-actions";
-import type { AdminItem } from "@/lib/admin-types";
-import type { ItemSize } from "@/db/schema";
+import { useState } from "react";
+import {
+  upsertCategoryAction,
+  deleteCategoryAction,
+  upsertMenuItemAction,
+  deleteMenuItemAction,
+  adminScanMenuAction,
+  adminSaveScannedRowsAction,
+} from "@/app/admin-actions";
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Save,
+  Sparkles,
+  Upload,
+  Check,
+  Flame,
+  Layers,
+  UtensilsCrossed,
+  ScanLine,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  X,
+} from "lucide-react";
 
-const input =
-  "w-full rounded-xl border border-white/10 bg-carbon-950 px-3.5 py-2.5 text-sm font-semibold outline-none placeholder:text-white/30 focus:border-brand-500";
+export default function MenuTab({ data, refresh }: { token?: string; data?: any; refresh?: () => void }) {
+  const categoriesList: any[] = Array.isArray(data?.categories) ? data.categories : [];
+  const itemsList: any[] = Array.isArray(data?.menuItems || data?.items) ? (data?.menuItems || data?.items) : [];
 
-function emptyItem(categoryId: string): AdminItemInput {
-  return {
-    categoryId,
+  // تصنيف الأصناف تحت كل قسم
+  const [selectedCatId, setSelectedCatId] = useState<string>(categoriesList[0]?.id || "");
+  const [showScanner, setShowScanner] = useState(false);
+
+  // حالة إضافة قسم جديد
+  const [newCatNameAr, setNewCatNameAr] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
+
+  // حالة إضافة / تعديل صنف
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [itemForm, setItemForm] = useState({
+    categoryId: "",
     nameAr: "",
-    nameEn: "",
+    price: 90,
     descriptionAr: "",
-    descriptionEn: "",
-    price: 0,
-    sizes: [],
-    spicyOption: false,
-    isBestSeller: false,
-    isAvailable: true,
-    image: "",
-  };
-}
+    badge: "",
+    imageUrl: "",
+    hasSpicyOption: true,
+    hasDoubleOption: true,
+    doubleExtraPrice: 35,
+  });
+  const [savingItem, setSavingItem] = useState(false);
 
-export default function MenuTab({ token, data, refresh }: TabProps) {
-  const [q, setQ] = useState("");
-  const [editing, setEditing] = useState<AdminItemInput | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [newCat, setNewCat] = useState({ nameAr: "", nameEn: "" });
+  // حالة الماسح الذكي المدمج
+  const [scanFile, setScanFile] = useState<File | null>(null);
+  const [scanPreview, setScanPreview] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scannedRows, setScannedRows] = useState<any[]>([]);
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
 
-  const catName = (id: string) => data.categories.find((c) => c.id === id)?.nameEn ?? "—";
-
-  const rows = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return data.items.filter((i) => !query || [i.nameAr, i.nameEn].some((s) => s.toLowerCase().includes(query)));
-  }, [data.items, q]);
-
-  const saveItem = async () => {
-    if (!editing || busy) return;
-    setBusy(true);
+  // إضافة قسم جديد
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatNameAr.trim()) return;
+    setAddingCat(true);
     try {
-      await adminSaveItemAction(token, { ...editing, price: Number(editing.price) || 0 });
-      setEditing(null);
-      await refresh();
+      const res = await upsertCategoryAction({ nameAr: newCatNameAr.trim() });
+      if (res && res.success) {
+        setNewCatNameAr("");
+        if (refresh) await refresh();
+        if (res.id) setSelectedCatId(res.id);
+      }
     } finally {
-      setBusy(false);
+      setAddingCat(false);
     }
   };
 
-  const toggleFlag = async (item: AdminItem, flag: "isBestSeller" | "isAvailable" | "spicyOption") => {
-    await adminSaveItemAction(token, { ...item, [flag]: !item[flag] });
-    await refresh();
+  // حذف قسم
+  const handleDeleteCategory = async (catId: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا القسم وجميع أصنافه؟")) return;
+    await deleteCategoryAction(catId);
+    if (refresh) await refresh();
   };
 
-  const removeItem = async (id: string) => {
-    if (!confirm("Delete this item permanently?")) return;
-    await adminDeleteItemAction(token, id);
-    await refresh();
+  // فتح فورم الصنف الجديد
+  const handleOpenNewItem = (catId?: string) => {
+    setEditingItemId(null);
+    setItemForm({
+      categoryId: catId || selectedCatId || categoriesList[0]?.id || "",
+      nameAr: "",
+      price: 90,
+      descriptionAr: "",
+      badge: "الأكثر طلباً",
+      imageUrl: "",
+      hasSpicyOption: true,
+      hasDoubleOption: true,
+      doubleExtraPrice: 35,
+    });
+    setItemFormOpen(true);
   };
 
-  const addCategory = async () => {
-    if (!newCat.nameAr.trim() || !newCat.nameEn.trim()) return;
-    await adminSaveCategoryAction(token, { nameAr: newCat.nameAr.trim(), nameEn: newCat.nameEn.trim() });
-    setNewCat({ nameAr: "", nameEn: "" });
-    await refresh();
+  // تعديل صنف موجود
+  const handleEditItem = (item: any) => {
+    setEditingItemId(item.id);
+    let options = { hasSpicyOption: true, hasDoubleOption: true, doubleExtraPrice: 35 };
+    try {
+      if (item.descriptionEn && item.descriptionEn.startsWith("{")) {
+        options = { ...options, ...JSON.parse(item.descriptionEn) };
+      }
+    } catch {}
+
+    setItemForm({
+      categoryId: item.categoryId || selectedCatId,
+      nameAr: item.nameAr || item.name || "",
+      price: Number(item.price || 0),
+      descriptionAr: item.descriptionAr || item.description || "",
+      badge: item.badge || "",
+      imageUrl: item.imageUrl || item.image || "",
+      ...options,
+    });
+    setItemFormOpen(true);
   };
 
-  const removeCategory = async (id: string) => {
-    if (!confirm("Deactivate category? Its items stay but the category hides.")) return;
-    await adminDeleteCategoryAction(token, id);
-    await refresh();
+  // حفظ الصنف
+  const handleSaveItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemForm.nameAr.trim()) return;
+    setSavingItem(true);
+    try {
+      const optionsPayload = {
+        hasSpicyOption: itemForm.hasSpicyOption,
+        hasDoubleOption: itemForm.hasDoubleOption,
+        doubleExtraPrice: itemForm.doubleExtraPrice,
+      };
+
+      await upsertMenuItemAction({
+        id: editingItemId || `item-${Date.now()}`,
+        categoryId: itemForm.categoryId || selectedCatId,
+        nameAr: itemForm.nameAr,
+        nameEn: itemForm.nameAr,
+        price: itemForm.price,
+        descriptionAr: itemForm.descriptionAr,
+        options: optionsPayload,
+        badge: itemForm.badge,
+        imageUrl: itemForm.imageUrl,
+      });
+
+      setItemFormOpen(false);
+      if (refresh) await refresh();
+    } finally {
+      setSavingItem(false);
+    }
   };
 
-  const setSize = (idx: number, patch: Partial<ItemSize>) => {
-    if (!editing) return;
-    const sizes = [...(editing.sizes ?? [])];
-    sizes[idx] = { ...sizes[idx], ...patch };
-    setEditing({ ...editing, sizes });
+  // تشغيل الماسح الذكي
+  const handleScanMenu = async () => {
+    if (!scanFile) return;
+    setScanning(true);
+    setScanMsg(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await adminScanMenuAction({
+          fileName: scanFile.name,
+          imageBase64: base64,
+          mimeType: scanFile.type || "image/jpeg",
+        });
+
+        if (res.success && res.data && res.data.length > 0) {
+          setScannedRows(res.data);
+        } else {
+          setScanMsg(res.error || "تعذر قراءة الصورة، يرجى تجربة صورة أوضح أو إدخال الأصناف يدوياً.");
+        }
+        setScanning(false);
+      };
+      reader.readAsDataURL(scanFile);
+    } catch {
+      setScanning(false);
+    }
   };
+
+  // اعتماد حفظ الأصناف الممسوحة
+  const handleSaveScanned = async () => {
+    if (scannedRows.length === 0) return;
+    setScanning(true);
+    try {
+      await adminSaveScannedRowsAction(scannedRows);
+      setScannedRows([]);
+      setScanFile(null);
+      setScanPreview(null);
+      setShowScanner(false);
+      if (refresh) await refresh();
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const currentCategoryItems = itemsList.filter(
+    (i) => String(i.categoryId) === String(selectedCatId)
+  );
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-extrabold">المنيو · Menu Management</h1>
-        <button
-          onClick={() => setEditing(emptyItem(data.categories[0]?.id ?? ""))}
-          className="glow-brand flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-xs font-extrabold text-white transition hover:scale-105"
-        >
-          <Plus className="size-4" /> صنف جديد · New Item
-        </button>
+    <div className="space-y-8" dir="rtl">
+      {/* الشريط العلوي المشترك */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2.5">
+            <UtensilsCrossed className="size-6 text-brand-500" />
+            إدارة المنيو وماسح الذكاء الاصطناعي
+          </h2>
+          <p className="text-xs text-white/60 mt-1">
+            أضف وعدل الأقسام والأصناف يدوياً مع خيارات (سنجل/دابل وحار/بارد)، أو ارفع صورة المنيو ليقرأها الذكاء الاصطناعي فوراً.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowScanner(!showScanner)}
+            className={`flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-black transition cursor-pointer border ${
+              showScanner ? "bg-amber-500/20 text-amber-300 border-amber-500/40" : "bg-white/10 hover:bg-white/15 text-white border-white/15"
+            }`}
+          >
+            <ScanLine className="size-4 text-amber-400" />
+            <span>{showScanner ? "إغلاق ماسح المنيو AI" : "ماسح المنيو الذكي (AI Scanner)"}</span>
+          </button>
+
+          <button
+            onClick={() => handleOpenNewItem()}
+            className="flex items-center gap-2 rounded-2xl bg-brand-500 hover:bg-brand-600 px-6 py-3 text-xs font-black text-white shadow-xl glow-brand transition cursor-pointer"
+          >
+            <Plus className="size-4" />
+            <span>إضافة وجبة جديدة</span>
+          </button>
+        </div>
       </div>
 
-      {/* Category manager */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900 p-4">
-        <p className="mb-3 text-xs font-extrabold uppercase tracking-widest text-white/40">Categories</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {data.categories.map((c) => (
-            <span key={c.id} className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-bold">
-              {c.nameAr} <span className="text-white/40">/ {c.nameEn}</span>
-              <button onClick={() => removeCategory(c.id)} className="text-white/30 transition hover:text-red-400" aria-label="deactivate">
-                <X className="size-3.5" />
-              </button>
-            </span>
-          ))}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <input value={newCat.nameAr} onChange={(e) => setNewCat({ ...newCat, nameAr: e.target.value })} placeholder="اسم عربي" className="w-28 rounded-full border border-white/10 bg-carbon-950 px-3 py-1.5 text-xs outline-none focus:border-brand-500" />
-            <input value={newCat.nameEn} onChange={(e) => setNewCat({ ...newCat, nameEn: e.target.value })} placeholder="English name" className="w-28 rounded-full border border-white/10 bg-carbon-950 px-3 py-1.5 text-xs outline-none focus:border-brand-500" />
-            <button onClick={addCategory} className="grid size-7 place-items-center rounded-full bg-brand-500 text-white transition hover:scale-110" aria-label="add category">
-              <Plus className="size-4" />
+      {/* نافذة ماسح المنيو الذكي (إذا تم تفعيلها) */}
+      {showScanner && (
+        <div className="rounded-3xl border border-amber-500/40 bg-carbon-950 p-6 md:p-8 space-y-6 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="size-5 text-amber-400 animate-pulse" />
+              <h3 className="text-base font-black text-white">رفع وتحليل صورة المنيو الورقي تلقائياً</h3>
+            </div>
+            <button onClick={() => setShowScanner(false)} className="text-white/40 hover:text-white">
+              <X className="size-5" />
             </button>
           </div>
-        </div>
-      </div>
 
-      <div className="relative">
-        <Search className="absolute start-4 top-1/2 size-4 -translate-y-1/2 text-white/40" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث في الأصناف..." className="w-full rounded-2xl border border-white/10 bg-carbon-900 py-3 ps-11 pe-4 text-sm font-semibold outline-none placeholder:text-white/30 focus:border-brand-500" />
-      </div>
-
-      {/* Items table */}
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-carbon-900">
-        <div className="divide-y divide-white/5">
-          {rows.map((it) => (
-            <div key={it.id} className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
-              <span className="grid size-10 place-items-center overflow-hidden rounded-xl bg-white/5">
-                {it.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image} alt="" className="size-full object-cover" />
-                ) : (
-                  <ImageOff className="size-4 text-white/25" />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-extrabold">{it.nameAr} <span className="font-semibold text-white/40">/ {it.nameEn}</span></p>
-                <p className="text-[10px] text-white/40">{catName(it.categoryId)} · {it.sizes.length > 0 ? `${it.sizes.length} sizes` : "single"}</p>
+          {scannedRows.length === 0 ? (
+            <div className="space-y-4">
+              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center hover:border-brand-500 transition bg-carbon-900/50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="scanner-upload"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setScanFile(f);
+                      setScanPreview(URL.createObjectURL(f));
+                    }
+                  }}
+                />
+                <label htmlFor="scanner-upload" className="cursor-pointer flex flex-col items-center justify-center gap-2">
+                  <Upload className="size-10 text-brand-500" />
+                  <span className="text-sm font-bold text-white">اضغط لاختيار صورة المنيو أو الكاميرا</span>
+                  <span className="text-[11px] text-white/40">يدعم JPG, PNG, WEBP</span>
+                </label>
               </div>
-              <span className="font-mono text-sm font-extrabold text-brand-400" dir="ltr">{it.price} EGP</span>
-              <button
-                onClick={() => toggleFlag(it, "isBestSeller")}
-                title="Best seller"
-                className={`grid size-8 place-items-center rounded-full border transition ${it.isBestSeller ? "flame-badge border-transparent text-white" : "border-white/10 text-white/30 hover:text-cheese-300"}`}
-              >
-                <Star className="size-4" fill={it.isBestSeller ? "currentColor" : "none"} />
-              </button>
-              <button
-                onClick={() => toggleFlag(it, "spicyOption")}
-                title="Has spicy variant"
-                className={`grid size-8 place-items-center rounded-full border transition ${it.spicyOption ? "border-brand-500 bg-brand-500/15 text-brand-400" : "border-white/10 text-white/30"}`}
-              >
-                <Flame className="size-4" />
-              </button>
-              <button
-                onClick={() => toggleFlag(it, "isAvailable")}
-                title="Available"
-                className={`rounded-full border px-2.5 py-1 text-[10px] font-extrabold transition ${it.isAvailable ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-red-500/40 bg-red-500/10 text-red-400"}`}
-              >
-                {it.isAvailable ? "متاح" : "موقوف"}
-              </button>
-              <button onClick={() => setEditing({ ...it })} className="grid size-8 place-items-center rounded-full border border-white/10 text-white/50 transition hover:border-brand-500 hover:text-brand-400" aria-label="edit">
-                <PencilLine className="size-4" />
-              </button>
-              <button onClick={() => removeItem(it.id)} className="grid size-8 place-items-center rounded-full border border-white/10 text-white/50 transition hover:border-red-500 hover:text-red-400" aria-label="delete">
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))}
-          {rows.length === 0 && <p className="px-4 py-12 text-center text-sm text-white/40">No items match.</p>}
-        </div>
-      </div>
 
-      {/* Editor modal */}
-      <AnimatePresence>
-        {editing && (
-          <motion.div className="fixed inset-0 z-[60] grid place-items-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <button aria-label="close" onClick={() => setEditing(null)} className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
-            <motion.div
-              initial={{ y: 50, scale: 0.96 }}
-              animate={{ y: 0, scale: 1 }}
-              exit={{ y: 40, scale: 0.97 }}
-              className="relative max-h-[90svh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-white/10 bg-carbon-900 p-6 shadow-2xl"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-extrabold">{editing.id ? "تعديل الصنف · Edit Item" : "صنف جديد · New Item"}</h2>
-                <button onClick={() => setEditing(null)} className="grid size-8 place-items-center rounded-full bg-white/5 text-white/60" aria-label="close">
-                  <X className="size-4" />
+              {scanPreview && (
+                <div className="space-y-3">
+                  <div className="max-h-64 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center bg-black/50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={scanPreview} alt="Menu Preview" className="max-h-64 object-contain" />
+                  </div>
+                  <button
+                    onClick={handleScanMenu}
+                    disabled={scanning}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-brand-500 py-3 text-sm font-black text-white shadow-xl disabled:opacity-50 cursor-pointer"
+                  >
+                    {scanning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                    <span>{scanning ? "جاري قراءة واستخراج الأصناف بالذكاء الاصطناعي..." : "بدء تحليل واستخراج الأصناف الآن"}</span>
+                  </button>
+                </div>
+              )}
+
+              {scanMsg && (
+                <p className="text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20">{scanMsg}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-400">تم استخراج ({scannedRows.length}) صنف بنجاح! راجعهم واضغط اعتماد:</span>
+                <button
+                  onClick={handleSaveScanned}
+                  disabled={scanning}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-black text-white cursor-pointer shadow-lg"
+                >
+                  <Check className="size-4" />
+                  <span>اعتماد وإضافة لكل أقسام المنيو</span>
                 </button>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input className={input} placeholder="الاسم بالعربي" value={editing.nameAr} onChange={(e) => setEditing({ ...editing, nameAr: e.target.value })} />
-                <input className={input} placeholder="Name (English)" value={editing.nameEn} onChange={(e) => setEditing({ ...editing, nameEn: e.target.value })} />
-                <textarea className={input} rows={2} placeholder="الوصف بالعربي" value={editing.descriptionAr ?? ""} onChange={(e) => setEditing({ ...editing, descriptionAr: e.target.value })} />
-                <textarea className={input} rows={2} placeholder="Description (English)" value={editing.descriptionEn ?? ""} onChange={(e) => setEditing({ ...editing, descriptionEn: e.target.value })} />
-                <div>
-                  <label className="mb-1 block text-[10px] font-bold text-white/40">Base price (EGP)</label>
-                  <input className={input} type="number" min={0} step={5} value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[10px] font-bold text-white/40">Category</label>
-                  <select className={input} value={editing.categoryId} onChange={(e) => setEditing({ ...editing, categoryId: e.target.value })}>
-                    {data.categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.nameAr} / {c.nameEn}</option>
+              <div className="max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-carbon-900">
+                <table className="w-full text-right text-xs">
+                  <thead className="border-b border-white/10 text-white/50 p-2 font-bold">
+                    <tr>
+                      <th className="p-3">القسم</th>
+                      <th className="p-3">اسم الوجبة</th>
+                      <th className="p-3">الوصف</th>
+                      <th className="p-3">السعر</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {scannedRows.map((r, idx) => (
+                      <tr key={idx}>
+                        <td className="p-2 font-bold text-amber-400">{r.categoryNameAr}</td>
+                        <td className="p-2 font-bold text-white">{r.itemNameAr}</td>
+                        <td className="p-2 text-white/60 text-[11px]">{r.descriptionAr}</td>
+                        <td className="p-2 font-black text-white">{r.price} ج.م</td>
+                      </tr>
                     ))}
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-[10px] font-bold text-white/40">Image URL (auto-fallback if empty)</label>
-                  <input className={input} dir="ltr" placeholder="https://..." value={editing.image ?? ""} onChange={(e) => setEditing({ ...editing, image: e.target.value })} />
-                </div>
+                  </tbody>
+                </table>
               </div>
+            </div>
+          )}
+        </div>
+      )}
 
-              {/* Size variants editor */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-carbon-950 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-extrabold uppercase tracking-widest text-white/40">Size Variants</p>
-                  <button
-                    onClick={() => setEditing({ ...editing, sizes: [...(editing.sizes ?? []), { id: `v${Date.now()}`, ar: "", en: "", price: editing.price }] })}
-                    className="flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white/70 transition hover:bg-brand-500/20 hover:text-brand-300"
-                  >
-                    <Plus className="size-3.5" /> Add size
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {(editing.sizes ?? []).map((s, i) => (
-                    <div key={s.id} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2">
-                      <input className={input} placeholder="الحجم عربي" value={s.ar} onChange={(e) => setSize(i, { ar: e.target.value })} />
-                      <input className={input} placeholder="Size EN" value={s.en} onChange={(e) => setSize(i, { en: e.target.value })} />
-                      <input className={`${input} w-24`} type="number" min={0} value={s.price} onChange={(e) => setSize(i, { price: Number(e.target.value) })} />
+      {/* قسم إدارة الأقسام الرئيسية (Categories Bar) */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 space-y-4 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2">
+            <Layers className="size-5 text-brand-500" />
+            <h3 className="text-base font-black text-white">الأقسام الرئيسية للمنيو</h3>
+          </div>
+
+          {/* إضافة قسم جديد */}
+          <form onSubmit={handleAddCategory} className="flex gap-2">
+            <input
+              type="text"
+              required
+              value={newCatNameAr}
+              onChange={(e) => setNewCatNameAr(e.target.value)}
+              placeholder="اسم قسم جديد (مثال: وجبات التوفير)"
+              className="rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2 text-xs font-bold text-white outline-none focus:border-brand-500 w-56"
+            />
+            <button
+              type="submit"
+              disabled={addingCat}
+              className="flex items-center gap-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 px-4 py-2 text-xs font-black text-white cursor-pointer transition disabled:opacity-50"
+            >
+              <Plus className="size-3.5" />
+              <span>إضافة قسم</span>
+            </button>
+          </form>
+        </div>
+
+        {/* أزرار التنقل بين الأقسام */}
+        <div className="flex flex-wrap gap-2.5 pt-2">
+          {categoriesList.map((cat) => {
+            const isSelected = String(cat.id) === String(selectedCatId);
+            const count = itemsList.filter((i) => String(i.categoryId) === String(cat.id)).length;
+
+            return (
+              <div
+                key={cat.id}
+                onClick={() => setSelectedCatId(cat.id)}
+                className={`group flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black transition cursor-pointer border ${
+                  isSelected
+                    ? "bg-brand-500 text-white border-brand-500 shadow-lg glow-brand"
+                    : "bg-carbon-950 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+                }`}
+              >
+                <span>{cat.nameAr}</span>
+                <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px]">{count}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteCategory(cat.id);
+                  }}
+                  className="size-4 grid place-items-center rounded-full hover:bg-red-500/30 text-white/40 hover:text-red-400 transition ml-1"
+                  title="حذف هذا القسم"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* قائمة الأصناف تحت القسم المحدد */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl space-y-6">
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div>
+            <h3 className="text-lg font-black text-white">
+              أصناف قسم:{" "}
+              <span className="text-amber-400">
+                {categoriesList.find((c) => String(c.id) === String(selectedCatId))?.nameAr || "اختر قسماً"}
+              </span>
+            </h3>
+            <p className="text-xs text-white/50 mt-0.5">({currentCategoryItems.length}) وجبات مسجلة في هذا القسم</p>
+          </div>
+
+          <button
+            onClick={() => handleOpenNewItem(selectedCatId)}
+            className="flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white px-4 py-2 text-xs font-black cursor-pointer transition border border-white/15"
+          >
+            <Plus className="size-3.5 text-brand-500" />
+            <span>إضافة صنف هنا</span>
+          </button>
+        </div>
+
+        {/* عرض كروت الأصناف في شبكة */}
+        {currentCategoryItems.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {currentCategoryItems.map((item) => {
+              let options = { hasSpicyOption: false, hasDoubleOption: false, doubleExtraPrice: 0 };
+              try {
+                if (item.descriptionEn && item.descriptionEn.startsWith("{")) {
+                  options = JSON.parse(item.descriptionEn);
+                }
+              } catch {}
+
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-white/10 bg-carbon-950 p-5 space-y-4 flex flex-col justify-between shadow-lg"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="size-16 rounded-xl overflow-hidden bg-black/50 border border-white/10 shrink-0 flex items-center justify-center">
+                        {item.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.imageUrl} alt={item.nameAr} className="size-full object-cover" />
+                        ) : (
+                          <span className="text-2xl select-none">🍗</span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-sm text-white truncate">{item.nameAr}</h4>
+                          {item.badge && (
+                            <span className="rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30 px-2 py-0.5 text-[9px] font-black">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-white/50 mt-1 line-clamp-2 leading-relaxed">
+                          {item.descriptionAr || "لا توجد مكونات مكتوبة"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* عرض الخيارات المفعلة للصنف */}
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/5">
+                      {options.hasSpicyOption && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 text-red-400 border border-red-500/20 px-2 py-0.5 text-[10px] font-bold">
+                          <Flame className="size-2.5" /> متاح (حار / بارد)
+                        </span>
+                      )}
+                      {options.hasDoubleOption && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold">
+                          سنجل / دابل (+{options.doubleExtraPrice || 35} ج.م)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                    <div>
+                      <span className="text-base font-black text-amber-400">{item.price}</span>
+                      <span className="text-[11px] text-white/60 mr-1">ج.م</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setEditing({ ...editing, sizes: (editing.sizes ?? []).filter((_, j) => j !== i) })}
-                        className="grid size-9 place-items-center rounded-xl text-white/40 transition hover:text-red-400"
-                        aria-label="remove size"
+                        onClick={() => handleEditItem(item)}
+                        className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                        title="تعديل"
                       >
-                        <X className="size-4" />
+                        <Edit2 className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm(`حذف ${item.nameAr}؟`)) {
+                            await deleteMenuItemAction(item.id);
+                            if (refresh) await refresh();
+                          }
+                        }}
+                        className="grid size-8 place-items-center rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition cursor-pointer"
+                        title="حذف"
+                      >
+                        <Trash2 className="size-3.5" />
                       </button>
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-carbon-950 p-10 text-center space-y-3">
+            <span className="text-4xl select-none">🍗</span>
+            <p className="text-sm font-bold text-white">لا توجد أصناف في هذا القسم حالياً</p>
+            <button
+              onClick={() => handleOpenNewItem(selectedCatId)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2 text-xs font-black text-white"
+            >
+              <Plus className="size-3.5" />
+              <span>إضافة صنف يدوي الآن</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* نافذة منبثقة (Modal) لإضافة أو تعديل وجبة بكافة تفاصيلها وخياراتها */}
+      {itemFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" dir="rtl">
+          <div className="w-full max-w-xl rounded-3xl border border-white/15 bg-carbon-900 p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <h3 className="text-lg font-black text-white">
+                {editingItemId ? "تعديل الصنف والخيارات" : "إضافة صنف جديد للمنيو"}
+              </h3>
+              <button onClick={() => setItemFormOpen(false)} className="text-white/40 hover:text-white">
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveItem} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-white/70 mb-1">القسم التابع له:</label>
+                <select
+                  value={itemForm.categoryId}
+                  onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
+                  className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
+                >
+                  {categoriesList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nameAr}
+                    </option>
                   ))}
-                  {(editing.sizes ?? []).length === 0 && <p className="text-[11px] text-white/30">No variants — sold at base price only.</p>}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-white/70 mb-1">اسم الصنف أو الوجبة (عربي):</label>
+                  <input
+                    type="text"
+                    required
+                    value={itemForm.nameAr}
+                    onChange={(e) => setItemForm({ ...itemForm, nameAr: e.target.value })}
+                    placeholder="مثال: وجبة بروست الأسد سوبر"
+                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/70 mb-1">السعر الأساسي (ج.م):</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="0.5"
+                    value={itemForm.price}
+                    onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-black text-amber-400 outline-none focus:border-brand-500 text-left"
+                    dir="ltr"
+                  />
                 </div>
               </div>
 
-              {/* Flags */}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(
-                  [
-                    ["spicyOption", "Original/Spicy variant"],
-                    ["isBestSeller", "Best Seller badge"],
-                    ["isAvailable", "Available on menu"],
-                  ] as const
-                ).map(([flag, label]) => (
-                  <button
-                    key={flag}
-                    onClick={() => setEditing({ ...editing, [flag]: !editing[flag] })}
-                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition ${
-                      editing[flag] ? "flame-badge border-transparent text-white" : "border-white/15 text-white/50"
-                    }`}
-                  >
-                    <Check className={`size-3.5 ${editing[flag] ? "opacity-100" : "opacity-0"}`} />
-                    {label}
-                  </button>
-                ))}
+              <div>
+                <label className="block text-xs font-bold text-white/70 mb-1">المكونات وتفاصيل الوجبة (الوصف):</label>
+                <textarea
+                  rows={2}
+                  value={itemForm.descriptionAr}
+                  onChange={(e) => setItemForm({ ...itemForm, descriptionAr: e.target.value })}
+                  placeholder="مثال: 4 قطع بروست كرسبي + بطاطس + كول سلو + ثومية + عيش"
+                  className="w-full rounded-xl border border-white/15 bg-carbon-950 p-3 text-xs font-semibold text-white outline-none focus:border-brand-500"
+                />
               </div>
 
-              <button
-                onClick={saveItem}
-                disabled={busy || !editing.nameAr.trim() || !editing.nameEn.trim()}
-                className="glow-brand mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-sm font-extrabold text-white transition hover:scale-[1.01] disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="size-4.5 animate-spin" /> : <Check className="size-4.5" />}
-                حفظ · Save Item
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-white/70 mb-1">شارة مميزة (Badge):</label>
+                  <input
+                    type="text"
+                    value={itemForm.badge}
+                    onChange={(e) => setItemForm({ ...itemForm, badge: e.target.value })}
+                    placeholder="مثال: الأكثر طلباً أو NEW!"
+                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/70 mb-1">رابط أو صورة الوجبة:</label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={itemForm.imageUrl}
+                    onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })}
+                    placeholder="ضع رابط صورة مباشر أو اتركها فارغة"
+                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* قسم خيارات العميل عند الاختيار (سنجل / دابل - حار / بارد) */}
+              <div className="rounded-2xl border border-brand-500/30 bg-carbon-950 p-4 space-y-4">
+                <span className="text-xs font-black text-amber-400 block border-b border-white/10 pb-2">
+                  خيارات طلب الصنف للعميل (Options):
+                </span>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={itemForm.hasSpicyOption}
+                      onChange={(e) => setItemForm({ ...itemForm, hasSpicyOption: e.target.checked })}
+                      className="size-4 accent-brand-500 rounded"
+                    />
+                    <span className="text-xs font-bold text-white">إتاحة خيار (حار 🌶️ / بارد عادي) للعميل</span>
+                  </label>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={itemForm.hasDoubleOption}
+                        onChange={(e) => setItemForm({ ...itemForm, hasDoubleOption: e.target.checked })}
+                        className="size-4 accent-brand-500 rounded"
+                      />
+                      <span className="text-xs font-bold text-white">إتاحة خيار الأحجام (سنجل فردي / دابل مضاعف)</span>
+                    </label>
+
+                    {itemForm.hasDoubleOption && (
+                      <div className="mr-6 flex items-center gap-2">
+                        <span className="text-[11px] text-white/60">سعر إضافة الدابل على السعر الأساسي:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={itemForm.doubleExtraPrice}
+                          onChange={(e) => setItemForm({ ...itemForm, doubleExtraPrice: parseFloat(e.target.value) || 0 })}
+                          className="w-24 rounded-lg border border-white/15 bg-carbon-900 px-2.5 py-1 text-xs font-black text-amber-400 outline-none text-left"
+                          dir="ltr"
+                        />
+                        <span className="text-[11px] text-white/60">ج.م</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setItemFormOpen(false)}
+                  className="rounded-xl border border-white/10 px-5 py-2.5 text-xs font-bold text-white/60 hover:text-white"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingItem}
+                  className="flex items-center gap-2 rounded-xl bg-brand-500 hover:bg-brand-600 px-7 py-2.5 text-xs font-black text-white shadow-lg disabled:opacity-50 cursor-pointer"
+                >
+                  {savingItem ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  <span>{savingItem ? "جاري الحفظ..." : "حفظ الصنف"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
