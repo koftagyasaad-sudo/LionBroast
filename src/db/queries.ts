@@ -1,471 +1,103 @@
-import { db } from "./index";
-import {
-  categories,
-  menuItems,
-  deliveryZones,
-  settings,
-  customers,
-  orders,
-  orderLines,
-} from "./schema";
-import { eq, desc, inArray, or } from "drizzle-orm";
-import type {
-  CategoryDTO,
-  MenuItemDTO,
-  ZoneDTO,
-  Promo,
-  FrontendSettings,
-  CustomerPassData,
-} from "@/lib/types";
-import { ensureSeedDatabase } from "./seed";
+import { db } from "@/db";
+import { categories, menuItems, settings, deliveryZones } from "@/db/schema";
+import { eq, asc } from "drizzle-orm";
 
-export type { FrontendSettings };
-export type CustomerRow = typeof customers.$inferSelect;
-export type OrderRow = typeof orders.$inferSelect;
-export type CategoryRow = typeof categories.$inferSelect;
-export type MenuItemRow = typeof menuItems.$inferSelect;
-export type DeliveryZoneRow = typeof deliveryZones.$inferSelect;
-
-const DEFAULT_SETTINGS: FrontendSettings & Record<string, any> = {
-  brandNameAr: "بروست الأسد",
-  brandNameEn: "Lion Broast",
-  logoUrl: "/img/icon-512.png",
-  heroTitleAr: "أقوى بروست مقرمش وطازج في دسوق",
-  heroSubtitleAr: "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
-  marqueeTextAr:
-    "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-  marqueeAr:
-    "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-  marqueeEn: "🔥 Fast and hot delivery all across Desouk | Order now 🔥",
-  footerTextAr:
-    "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
-  addressAr: "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي",
-  workingHoursAr: "يومياً من 12 ظهراً حتى 2 صباحاً",
-  hotline: "01068390982",
-  whatsapp: "201068390982",
-  deliveryFee: 15,
-  taxPercent: 0,
-  heroImage1: "",
-  heroImage2: "",
-  heroImage3: "",
-  adBanner1: "",
-  adBanner2: "",
-};
-
-const DEFAULT_PROMO: Promo = {
-  enabled: true,
-  title: "خصم 15% على أول طلب بـ كود: LION15",
-  code: "LION15",
-  textAr: "خصم 15% على أول طلب بـ كود: LION15",
-  textEn: "15% OFF on first order code: LION15",
-};
-
-async function safeEnsureSeed() {
-  try {
-    await ensureSeedDatabase();
-  } catch (err) {
-    console.error("Warning: ensureSeedDatabase failed:", err);
-  }
-}
-
-export function mapCategoryToDTO(cat: CategoryRow): CategoryDTO {
-  return {
-    id: cat.id,
-    nameAr: cat.nameAr,
-    nameEn: cat.nameEn || undefined,
-    sortOrder: cat.sortOrder || 0,
-    image: "",
-    isActive: true,
-  };
-}
-
-export function mapMenuItemToDTO(item: MenuItemRow): MenuItemDTO {
-  return {
-    id: item.id,
-    categoryId: item.categoryId,
-    nameAr: item.nameAr,
-    nameEn: item.nameEn || undefined,
-    descriptionAr: item.descriptionAr || undefined,
-    descriptionEn: item.descriptionEn || undefined,
-    price: Number(item.price || 0),
-    image: item.imageUrl || undefined,
-    isAvailable: item.isAvailable === 1,
-    sortOrder: item.sortOrder || 0,
-    spicyOption: Boolean(item.badge?.includes("spicy")),
-    isBestSeller: Boolean(item.badge?.includes("bestseller")),
-    sizes: undefined,
-  };
-}
-
-export function mapZoneToDTO(zone: DeliveryZoneRow): ZoneDTO {
-  return {
-    id: zone.id,
-    nameAr: zone.nameAr,
-    nameEn: zone.nameEn || undefined,
-    price: Number(zone.fee || 0),
-    fee: Number(zone.fee || 0),
-    estimatedMinutes: zone.estimatedMinutes || 30,
-    isActive: true,
-  };
-}
-
-export async function getSettingByKey(key: string): Promise<{ key: string; val: string } | null> {
-  await safeEnsureSeed();
-  try {
-    const res = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-    return res[0] ? { key: res[0].key, val: res[0].value } : null;
-  } catch (err) {
-    console.error("Error fetching setting:", key, err);
-    return null;
-  }
-}
-
-export async function getFrontendSettings(): Promise<FrontendSettings & Record<string, any>> {
-  await safeEnsureSeed();
+// 1. جلب إعدادات الواجهة لحظياً وبشكل حي 100% من قاعدة البيانات
+export async function getFrontendSettings() {
   try {
     const rows = await db.select().from(settings);
-    const map = new Map<string, string>();
+    const map: Record<string, any> = {};
+
     for (let i = 0; i < rows.length; i++) {
-      map.set(rows[i].key, rows[i].value);
-    }
-
-    const pick = (key: string, fallback: string): string => map.get(key) || fallback;
-    const marqueeVal = pick("marquee_text_ar", DEFAULT_SETTINGS.marqueeTextAr);
-
-    return {
-      brandNameAr: pick("brand_name_ar", DEFAULT_SETTINGS.brandNameAr),
-      brandNameEn: pick("brand_name_en", DEFAULT_SETTINGS.brandNameEn),
-      logoUrl: pick("logo_url", DEFAULT_SETTINGS.logoUrl),
-      heroTitleAr: pick("hero_title_ar", DEFAULT_SETTINGS.heroTitleAr),
-      heroSubtitleAr: pick("hero_subtitle_ar", DEFAULT_SETTINGS.heroSubtitleAr),
-      marqueeTextAr: marqueeVal,
-      marqueeAr: marqueeVal,
-      marqueeEn: map.get("marquee_text_en") || marqueeVal,
-      footerTextAr: pick("footer_text_ar", DEFAULT_SETTINGS.footerTextAr),
-      addressAr: pick("address_ar", DEFAULT_SETTINGS.addressAr),
-      workingHoursAr: pick("working_hours_ar", DEFAULT_SETTINGS.workingHoursAr),
-      hotline: pick("hotline", DEFAULT_SETTINGS.hotline),
-      whatsapp: pick("whatsapp", DEFAULT_SETTINGS.whatsapp),
-      deliveryFee: Number(map.get("delivery_fee") ?? DEFAULT_SETTINGS.deliveryFee),
-      taxPercent: Number(map.get("tax_percent") ?? DEFAULT_SETTINGS.taxPercent),
-      heroImage1: pick("hero_image_1", pick("heroImage1", "")),
-      heroImage2: pick("hero_image_2", pick("heroImage2", "")),
-      heroImage3: pick("hero_image_3", pick("heroImage3", "")),
-      adBanner1: pick("ad_banner_1", pick("adBanner1", "")),
-      adBanner2: pick("ad_banner_2", pick("adBanner2", "")),
-    };
-  } catch (err) {
-    console.error("Error in getFrontendSettings:", err);
-    return DEFAULT_SETTINGS;
-  }
-}
-
-export async function getPromo(): Promise<Promo> {
-  await safeEnsureSeed();
-  try {
-    const bannerSetting = await getSettingByKey("promo_banner");
-    if (bannerSetting && bannerSetting.val) {
-      const parsed = JSON.parse(bannerSetting.val);
-      return {
-        enabled: Boolean(parsed.enabled ?? true),
-        title: String(parsed.title || DEFAULT_PROMO.title),
-        code: String(parsed.code || DEFAULT_PROMO.code),
-        textAr: String(parsed.textAr || parsed.title || DEFAULT_PROMO.textAr),
-        textEn: String(parsed.textEn || parsed.title || DEFAULT_PROMO.textEn),
-      };
-    }
-  } catch (err) {
-    console.error("Error reading promo setting:", err);
-  }
-  return DEFAULT_PROMO;
-}
-
-export async function getCategoriesWithItems(): Promise<CategoryDTO[]> {
-  await safeEnsureSeed();
-  try {
-    const cats = await db.select().from(categories).orderBy(categories.sortOrder);
-    const result: CategoryDTO[] = [];
-    for (let i = 0; i < cats.length; i++) {
-      result.push(mapCategoryToDTO(cats[i]));
-    }
-    return result;
-  } catch (err) {
-    console.error("Error in getCategoriesWithItems:", err);
-    return [];
-  }
-}
-
-export async function getDeliveryZones(): Promise<ZoneDTO[]> {
-  await safeEnsureSeed();
-  try {
-    const zonesList = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
-    const result: ZoneDTO[] = [];
-    for (let i = 0; i < zonesList.length; i++) {
-      result.push(mapZoneToDTO(zonesList[i]));
-    }
-    return result;
-  } catch (err) {
-    console.error("Error in getDeliveryZones:", err);
-    return [];
-  }
-}
-
-export async function getMenuData(): Promise<{
-  categories: CategoryDTO[];
-  items: MenuItemDTO[];
-  zones: ZoneDTO[];
-}> {
-  await safeEnsureSeed();
-  try {
-    const [cats, rawItems, rawZones] = await Promise.all([
-      db.select().from(categories).orderBy(categories.sortOrder),
-      db.select().from(menuItems).orderBy(menuItems.sortOrder),
-      db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder),
-    ]);
-
-    const categoriesDTO: CategoryDTO[] = [];
-    for (let i = 0; i < cats.length; i++) {
-      categoriesDTO.push(mapCategoryToDTO(cats[i]));
-    }
-
-    const itemsDTO: MenuItemDTO[] = [];
-    for (let i = 0; i < rawItems.length; i++) {
-      itemsDTO.push(mapMenuItemToDTO(rawItems[i]));
-    }
-
-    const zonesDTO: ZoneDTO[] = [];
-    for (let i = 0; i < rawZones.length; i++) {
-      zonesDTO.push(mapZoneToDTO(rawZones[i]));
+      const { key, value } = rows[i];
+      try {
+        if (value && (value.startsWith("{") || value.startsWith("["))) {
+          map[key] = JSON.parse(value);
+        } else {
+          map[key] = value;
+        }
+      } catch {
+        map[key] = value;
+      }
     }
 
     return {
-      categories: categoriesDTO,
-      items: itemsDTO,
-      zones: zonesDTO,
+      brandNameAr: map.brand_name_ar || map.brandNameAr || "بروست الأسد",
+      brandNameEn: map.brand_name_en || map.brandNameEn || "Broast El-Assad",
+      logoUrl: map.logo_url || map.logoUrl || "/img/icon-512.png",
+      heroSlides: map.hero_slides || map.heroSlides || null,
+      heroImage1: map.hero_image_1 || map.heroImage1 || "/img/hero-1.png",
+      heroImage2: map.hero_image_2 || map.heroImage2 || "/img/hero-2.png",
+      heroImage3: map.hero_image_3 || map.heroImage3 || "/img/hero-3.png",
+      marqueeTextAr: map.marquee_text_ar || map.marqueeTextAr || "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+      addressAr: map.address_ar || map.addressAr || "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية",
+      workingHoursAr: map.working_hours_ar || map.workingHoursAr || "يومياً من 10 صباحا حتى 4 فجرا",
+      hotline: map.hotline || "0248813666",
+      whatsapp: map.whatsapp || "201034419424",
+      branchMapsUrl: map.branch_maps_url || map.branchMapsUrl || "https://maps.google.com/?q=دسوق+شارع+الجيش",
+      locationTitleAr: map.location_title_ar || map.locationTitleAr || "شرفنا في فرع بروست الأسد 🦁",
+      locationSubtitleAr: map.location_subtitle_ar || map.locationSubtitleAr || "نقدم لك أعلى جودة وأسرع خدمة تيك واي ودليفري في دسوق والمناطق المجاورة.",
+      promoBadgeAr: map.promo_badge_ar || map.promoBadgeAr || "عروض ومميزات بروست الأسد VIP 🍗",
+      promoTitleAr: map.promo_title_ar || map.promoTitleAr || "أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗",
+      promoSubtitleAr: map.promo_subtitle_ar || map.promoSubtitleAr || "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير العائلية والفردية...",
+      promoBtnTextAr: map.promo_btn_text_ar || map.promoBtnTextAr || "اطلب الآن 🍗",
+      promoBtnLink: map.promo_btn_link || map.promoBtnLink || "/menu",
+      ctaTitleAr: map.cta_title_ar || map.ctaTitleAr || "جوعان؟ الأسد مستنيك.",
+      ctaSubtitleAr: map.cta_subtitle_ar || map.ctaSubtitleAr || "اطلب على واتساب في ٣٠ ثانية – أو كلم الخط الساخن والفرن يولّع على طول.",
+      footerAboutAr: map.footer_about_ar || map.footerAboutAr || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.",
+      footerCopyrightAr: map.footer_copyright_ar || map.footerCopyrightAr || "© 2026 بروست الأسد . جميع الحقوق محفوظة.",
+      footerSloganAr: map.footer_slogan_ar || map.footerSloganAr || "توصيل سريع داخل دسوق • طعم أسدي أصلي",
+      ...map,
     };
   } catch (err) {
-    console.error("Error in getMenuData:", err);
-    return {
-      categories: [],
-      items: [],
-      zones: [],
-    };
-  }
-}
-
-export async function getCustomerByPhone(phone: string): Promise<CustomerRow | null> {
-  await safeEnsureSeed();
-  try {
-    const res = await db
-      .select()
-      .from(customers)
-      .where(or(eq(customers.phone, phone), eq(customers.primaryPhone, phone)))
-      .limit(1);
-    return res[0] ?? null;
-  } catch (err) {
-    console.error("Error in getCustomerByPhone:", err);
+    console.error("getFrontendSettings error:", err);
     return null;
   }
 }
 
-export async function getCustomerByCode(code: string): Promise<CustomerRow | null> {
-  await safeEnsureSeed();
+// 2. جلب المنيو والتصنيفات حياً ومباشراً من الداتابيز
+export async function getCategoriesWithItems() {
   try {
-    const res = await db.select().from(customers).where(eq(customers.code, code)).limit(1);
-    return res[0] ?? null;
+    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+
+    return cats.map((cat) => ({
+      ...cat,
+      items: items.filter((item) => String(item.categoryId) === String(cat.id)),
+    }));
   } catch (err) {
-    console.error("Error in getCustomerByCode:", err);
-    return null;
+    console.error("getCategoriesWithItems error:", err);
+    return [];
   }
 }
 
-export async function createCustomer(data: {
-  name: string;
-  phone: string;
-  code?: string;
-  fullName?: string;
-  primaryPhone?: string;
-}): Promise<CustomerRow> {
-  await safeEnsureSeed();
-  const nameVal = (data.name || data.fullName || "عميل بروست").trim();
-  const phoneVal = (data.phone || data.primaryPhone || "").trim();
-  const passCode = data.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-
-  const inserted = await db
-    .insert(customers)
-    .values({
-      code: passCode,
-      name: nameVal,
-      fullName: nameVal,
-      phone: phoneVal,
-      primaryPhone: phoneVal,
-    })
-    .returning();
-  return inserted[0];
-}
-
-export async function getPassData(code: string): Promise<CustomerPassData | null> {
-  await safeEnsureSeed();
+// 3. جلب الإعلان الترويجي حياً ولحظياً
+export async function getPromo() {
   try {
-    const customer = await getCustomerByCode(code);
-    if (!customer) return null;
-
-    const phone = customer.phone || customer.primaryPhone || "";
-    const ordersList: OrderRow[] = phone
-      ? await db
-          .select()
-          .from(orders)
-          .where(eq(orders.customerPhone, phone))
-          .orderBy(desc(orders.createdAt))
-      : [];
-
-    let ltv = 0;
-    for (let i = 0; i < ordersList.length; i++) {
-      ltv += Number(ordersList[i].totalAmount || 0);
+    const rows = await db.select().from(settings);
+    const map: Record<string, string> = {};
+    for (let i = 0; i < rows.length; i++) {
+      map[rows[i].key] = rows[i].value;
     }
 
-    const ordersCount = ordersList.length;
-
-    let zone: ZoneDTO | null = null;
-    const latestZoneId = ordersList[0]?.zoneId;
-    if (latestZoneId) {
-      const z = await db
-        .select()
-        .from(deliveryZones)
-        .where(eq(deliveryZones.id, latestZoneId))
-        .limit(1);
-      if (z[0]) zone = mapZoneToDTO(z[0]);
+    if (map["promo"]) {
+      try {
+        return JSON.parse(map["promo"]);
+      } catch {}
     }
 
-    const memberSince = customer.createdAt ?? new Date();
-
-    const formattedOrdersList = [];
-    for (let i = 0; i < ordersList.length; i++) {
-      const o = ordersList[i];
-      formattedOrdersList.push({
-        id: String(o.id),
-        orderNumber: o.orderNumber,
-        totalAmount: Number(o.totalAmount || 0),
-        status: o.status,
-        createdAt: o.createdAt ?? new Date(),
-      });
-    }
+    const enabled = map["promo_enabled"] !== "false" && map["bulletin_enabled"] !== "false";
+    const textAr = map["promo_text_ar"] || map["bulletin_text_ar"] || "";
 
     return {
-      customer: {
-        id: String(customer.id),
-        name: customer.name || customer.fullName || "",
-        phone: customer.phone || customer.primaryPhone || "",
-        passCode: customer.code,
-        customerCode: customer.code,
-        totalOrders: customer.totalOrders || ordersCount,
-        totalSpent: Number(customer.totalSpent || ltv),
-        loyaltyPoints: customer.loyaltyPoints || Math.floor(ltv / 10),
-        discountPercent: customer.discountPercent || (ordersCount >= 5 ? 5 : 0),
-        createdAt: memberSince,
-      } as CustomerPassData["customer"],
-      ordersList: formattedOrdersList,
-      ordersCount,
-      ltv,
-      zone,
+      enabled,
+      visible: enabled,
+      textAr,
+      title: textAr,
+      code: map["promo_code"] || "LION15",
     };
   } catch (err) {
-    console.error("Error in getPassData:", err);
+    console.error("getPromo error:", err);
     return null;
   }
-}
-
-export async function getDeliveryZoneById(id: string): Promise<ZoneDTO | null> {
-  await safeEnsureSeed();
-  try {
-    const res = await db
-      .select()
-      .from(deliveryZones)
-      .where(eq(deliveryZones.id, id))
-      .limit(1);
-    return res[0] ? mapZoneToDTO(res[0]) : null;
-  } catch (err) {
-    console.error("Error in getDeliveryZoneById:", err);
-    return null;
-  }
-}
-
-export async function getAllOrders(): Promise<OrderRow[]> {
-  await safeEnsureSeed();
-  try {
-    return await db.select().from(orders).orderBy(desc(orders.createdAt));
-  } catch (err) {
-    console.error("Error in getAllOrders:", err);
-    return [];
-  }
-}
-
-export async function getOrdersByNumbers(orderNumbers: string[]): Promise<OrderRow[]> {
-  await safeEnsureSeed();
-  try {
-    if (!orderNumbers || orderNumbers.length === 0) return [];
-    return await db
-      .select()
-      .from(orders)
-      .where(inArray(orders.orderNumber, orderNumbers))
-      .orderBy(desc(orders.createdAt));
-  } catch (err) {
-    console.error("Error in getOrdersByNumbers:", err);
-    return [];
-  }
-}
-
-export interface CreateOrderInputItem {
-  itemId?: string;
-  nameAr: string;
-  price: number;
-  quantity: number;
-}
-
-export async function createOrder(payload: {
-  orderNumber: string;
-  customerPhone: string;
-  customerName: string;
-  address: string;
-  zoneId?: string | null;
-  subtotal: number;
-  deliveryFee: number;
-  totalAmount: number;
-  notes?: string;
-  items: CreateOrderInputItem[];
-}): Promise<OrderRow> {
-  await safeEnsureSeed();
-
-  const [newOrder] = await db
-    .insert(orders)
-    .values({
-      orderNumber: payload.orderNumber,
-      customerPhone: payload.customerPhone,
-      customerName: payload.customerName,
-      address: payload.address,
-      zoneId: payload.zoneId || null,
-      subtotal: payload.subtotal,
-      deliveryFee: payload.deliveryFee,
-      totalAmount: payload.totalAmount,
-      status: "pending",
-      notes: payload.notes || "",
-    })
-    .returning();
-
-  if (payload.items.length > 0) {
-    const lineValues = [];
-    for (let i = 0; i < payload.items.length; i++) {
-      const item = payload.items[i];
-      lineValues.push({
-        orderId: newOrder.id,
-        itemId: item.itemId || null,
-        nameAr: item.nameAr,
-        price: item.price,
-        quantity: item.quantity,
-      });
-    }
-    await db.insert(orderLines).values(lineValues);
-  }
-
-  return newOrder;
 }
