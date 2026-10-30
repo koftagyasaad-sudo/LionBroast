@@ -35,7 +35,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. جلب بيانات لوحة التحكم (محصنة ضد أي انهيار)
+// 1. جلب بيانات لوحة التحكم (حل مشكلة settings.map نهائياً)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -69,9 +69,10 @@ export async function adminGetAllAction(token?: string) {
       getPromo().catch(() => null),
     ]);
 
-    const settingsMap: Record<string, string> = {};
+    // مصفوفة هجينة: تعمل كـ Array لـ OpsTab (.map) وتعمل كـ Object للوصول بالمفتاح
+    const hybridSettings: any = [...settingsRows];
     for (let i = 0; i < settingsRows.length; i++) {
-      settingsMap[settingsRows[i].key] = settingsRows[i].value;
+      hybridSettings[settingsRows[i].key] = settingsRows[i].value;
     }
 
     let totalRevenue = 0;
@@ -129,12 +130,14 @@ export async function adminGetAllAction(token?: string) {
 
     const mergedFrontend = {
       ...(frontend || {}),
-      ...settingsMap,
-      heroImage1: settingsMap["hero_image_1"] || "",
-      heroImage2: settingsMap["hero_image_2"] || "",
-      heroImage3: settingsMap["hero_image_3"] || "",
-      adBanner1: settingsMap["ad_banner_1"] || "",
-      adBanner2: settingsMap["ad_banner_2"] || "",
+      ...hybridSettings,
+      logoUrl: hybridSettings["logo_url"] || hybridSettings["logoUrl"] || "/img/icon-512.png",
+      heroImage1: hybridSettings["hero_image_1"] || "",
+      heroImage2: hybridSettings["hero_image_2"] || "",
+      heroImage3: hybridSettings["hero_image_3"] || "",
+      adBanner1: hybridSettings["ad_banner_1"] || "",
+      adBanner2: hybridSettings["ad_banner_2"] || "",
+      branchMapsUrl: hybridSettings["branch_maps_url"] || "https://maps.google.com/?q=دسوق+شارع+الجيش",
     };
 
     return {
@@ -152,7 +155,8 @@ export async function adminGetAllAction(token?: string) {
       deliveryZones: zones.map((z) => ({ ...z, fee: Number(z.fee || 0) })),
       orders: enrichedOrders,
       customers: enrichedCustomers,
-      settings: settingsMap,
+      settings: hybridSettings,
+      settingsList: settingsRows,
       frontend: mergedFrontend,
       promo: promo || {
         enabled: true,
@@ -181,7 +185,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. محرك مسح المنيو مع الاستكشاف التلقائي للموديلات (Auto Model Discovery)
+// 2. ماسح المنيو الذكي مع تنظيف وفحص مفتاح API
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -189,27 +193,31 @@ export async function adminScanMenuAction(payload: {
   mimeType?: string;
 }) {
   try {
-    const apiKey =
-      process.env.GEMINI_API_KEY?.trim() ||
-      process.env.GOOGLE_API_KEY?.trim() ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
+    let apiKey = (
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+      ""
+    ).trim().replace(/^["']|["']$/g, "");
 
     if (!apiKey) {
       return {
         success: false,
         ok: false,
-        error:
-          "مفتاح الذكاء الاصطناعي غير متوفر في متغيرات البيئة! يرجى إضافة GEMINI_API_KEY في إعدادات Vercel.",
+        error: "لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات البيئة بـ Vercel. يرجى إضافته أولاً.",
+      };
+    }
+
+    if (!apiKey.startsWith("AIzaSy")) {
+      return {
+        success: false,
+        ok: false,
+        error: `مفتاح API غير صالح (يبدأ بـ "${apiKey.substring(0, 6)}..."). تأكد من نسخ المفتاح الصحيح من Google AI Studio الذي يبدأ بـ AIzaSy...`,
       };
     }
 
     if (!payload?.imageBase64) {
-      return {
-        success: false,
-        ok: false,
-        error: "لم يتم استلام ملف الصورة بشكل صحيح.",
-      };
+      return { success: false, ok: false, error: "لم يتم استلام ملف الصورة بشكل صحيح." };
     }
 
     let cleanBase64 = payload.imageBase64;
@@ -254,42 +262,13 @@ export async function adminScanMenuAction(payload: {
       },
     };
 
-    // استكشاف الموديلات المتاحة تلقائياً لمفتاح الـ API لتجنب خطأ 404 نهائياً
-    const candidateEndpoints: string[] = [];
-
-    try {
-      const listRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-      );
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        const models = listData?.models || [];
-        for (const m of models) {
-          if (m?.supportedGenerationMethods?.includes("generateContent")) {
-            candidateEndpoints.push(
-              `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`
-            );
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("Could not list models dynamically, falling back to static list", e);
-    }
-
-    // إضافة نقاط النهاية القياسية والحديثة كاحتياط
-    candidateEndpoints.push(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-    );
-
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
     let rawText = "";
     let lastError = "";
 
-    for (const url of candidateEndpoints) {
+    for (const model of models) {
       try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -301,8 +280,7 @@ export async function adminScanMenuAction(payload: {
           rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
           if (rawText) break;
         } else {
-          const errText = await res.text();
-          lastError = errText;
+          lastError = await res.text();
         }
       } catch (err: any) {
         lastError = err?.message || "Connection error";
@@ -313,7 +291,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: `تعذر الاتصال بموديل الذكاء الاصطناعي: ${lastError}`,
+        error: `تعذر التحليل عبر الذكاء الاصطناعي: ${lastError}`,
       };
     }
 
@@ -325,14 +303,6 @@ export async function adminScanMenuAction(payload: {
     }
 
     const items = JSON.parse(cleanJson);
-    if (!Array.isArray(items) || items.length === 0) {
-      return {
-        success: false,
-        ok: false,
-        error: "لم يتمكن الذكاء الاصطناعي من قراءة أي أصناف من هذه الصورة. يرجى تجربة صورة أوضح أو بزاوية مستقيمة.",
-      };
-    }
-
     const rows: ScannedRow[] = items.map((it: any) => ({
       categoryNameAr: String(it.categoryNameAr || it.categoryAr || "أصناف المنيو").trim(),
       categoryNameEn: String(it.categoryNameEn || it.categoryEn || "Menu Items").trim(),
@@ -354,7 +324,7 @@ export async function adminScanMenuAction(payload: {
     return {
       success: false,
       ok: false,
-      error: `حدث خطأ تقني أثناء تحليل المنيو: ${err?.message || "تأكد من وضوح الصورة"}`,
+      error: `حدث خطأ تقني: ${err?.message || "يرجى المحاولة مرة أخرى"}`,
     };
   }
 }
@@ -365,9 +335,7 @@ export async function adminScanMenuAction(payload: {
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
     const list = Array.isArray(rows) ? rows : [];
-    if (list.length === 0) {
-      return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
-    }
+    if (list.length === 0) return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
 
     const existingCats = await db.select().from(categories).catch(() => []);
     const catMap = new Map<string, string>();
@@ -423,16 +391,12 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
     return { success: true, ok: true };
   } catch (err: any) {
     console.error("adminSaveScannedRowsAction error:", err);
-    return {
-      success: false,
-      ok: false,
-      error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات.",
-    };
+    return { success: false, ok: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات." };
   }
 }
 
 // =========================================================================
-// 4. حفظ وتحديث إعدادات الواجهة والصور (محصنة 100% ضد أي فقدان)
+// 4. حفظ الإعدادات، اللوجو، خرائط جوجل، والبانرات
 // =========================================================================
 export async function updateSettingsAction(payload: Record<string, any>) {
   try {
@@ -454,6 +418,11 @@ export async function updateSettingsAction(payload: Record<string, any>) {
       heroImage3: "hero_image_3",
       adBanner1: "ad_banner_1",
       adBanner2: "ad_banner_2",
+      branchMapsUrl: "branch_maps_url",
+      promoTitleAr: "promo_title_ar",
+      promoSubtitleAr: "promo_subtitle_ar",
+      ctaTitleAr: "cta_title_ar",
+      ctaSubtitleAr: "cta_subtitle_ar",
     };
 
     const normalized: Record<string, string> = {};
@@ -486,7 +455,7 @@ export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
 // =========================================================================
-// 5. العمليات التحريرية العادية (Categories / Menu / Zones / Orders)
+// 5. العمليات التشغيلية (Categories / Items / Zones / Orders / Customers)
 // =========================================================================
 export async function upsertCategoryAction(data: any) {
   try {
