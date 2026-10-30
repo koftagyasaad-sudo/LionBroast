@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 60; // مهلة كافية لمعالجة الصور الكبيرة
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -21,57 +21,87 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "مفتاح GEMINI_API_KEY غير موجود في إعدادات البيئة بـ Vercel." },
+        { ok: false, error: "مفتاح GEMINI_API_KEY غير متوفر في متغيرات بيئة Vercel." },
         { status: 500 }
       );
     }
 
-    // تحويل الملف المرفوع مباشرة إلى Base64 بدون ضغط مسبق أو تعقيد
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const base64Data = buffer.toString("base64");
     const mimeType = file.type || "image/jpeg";
 
-    const promptText = `أنت خبير محترف ومسؤول مسح قوائم طعام المطاعم في نظام كاشير وإدارة سحابية.
-قم بتحليل صورة منيو مطعم بروست الأسد بدقة متناهية واستخرج جميع الأصناف والأقسام والأسعار والمكونات.
-أعد النتيجة حصراً بصيغة JSON Array نقية ومباشرة بدون وسوم ماركداون وبدون أي شروحات خارجية:
+    const promptText = `أنت نظام ذكاء اصطناعي متخصص في مسح وقراءة قوائم طعام المطاعم واستخراج البيانات لبرامج الكاشير (مثل DG Menus).
+قم بتحليل صورة منيو مطعم بروست الأسد واستخرج جميع الأصناف والأقسام والأسعار والمكونات بدقة 100%.
+هام جداً: أعد المخرجات حصراً في شكل مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي شروحات جانبية:
 [
   {
-    "categoryNameAr": "اسم القسم بالعربي (مثلاً: وجبات البروست، السندوتشات، الإضافات)",
-    "itemNameAr": "اسم الوجبة بالعربي كاملاً",
-    "descriptionAr": "مكونات الوجبة أو الشرح المكتوب إن وجد",
-    "price": 120
+    "categoryNameAr": "اسم القسم بالعربي (مثلاً: وجبات فردية، مكس الأسد، عائلات مكس، وجبات عائلية ورك)",
+    "itemNameAr": "اسم الوجبة كاملاً (مثلاً: وجبة ورك التوفير 8 قطع)",
+    "descriptionAr": "مكونات الوجبة أو التفاصيل إن وجدت",
+    "price": 180
   }
 ]`;
 
-    // تجربة الموديلات الرسمية المستقرة
-    const candidateModels = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
+    // 1. الاستعلام الذكي لمعرفة الموديلات النشطة والمتاحة على مفتاحك حالياً (لحذف خطأ 404 نهائياً)
+    let selectedModel = "gemini-2.5-flash";
+    try {
+      const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const available: any[] = listData?.models || [];
+        const contentModels = available.filter((m) =>
+          m.supportedGenerationMethods?.includes("generateContent")
+        );
+
+        const best =
+          contentModels.find((m) => m.name?.includes("2.5-flash")) ||
+          contentModels.find((m) => m.name?.includes("2.0-flash")) ||
+          contentModels.find((m) => m.name?.includes("flash")) ||
+          contentModels[0];
+
+        if (best && best.name) {
+          selectedModel = best.name.replace(/^models\//, "");
+        }
+      }
+    } catch {
+      // الاعتماد على الموديل الافتراضي في حال تعذر القائمة
+    }
+
+    const candidateModels = [
+      selectedModel,
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-flash-latest",
+    ];
+
     let rawText = "";
     let lastError = "";
 
     for (const model of candidateModels) {
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: promptText },
-                    { inlineData: { mimeType, data: base64Data } },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.1,
-                responseMimeType: "application/json",
+        const cleanName = model.replace(/^models\//, "");
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`;
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: promptText },
+                  { inlineData: { mimeType, data: base64Data } },
+                ],
               },
-            }),
-          }
-        );
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: "application/json",
+            },
+          }),
+        });
 
         if (res.ok) {
           const jsonRes = await res.json();
