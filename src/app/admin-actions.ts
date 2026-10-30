@@ -237,7 +237,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. تحديث إعدادات الواجهة الشاملة (حفظ الـ 3 سكاشن والفوتر والسلايدر)
+// 2. تحديث إعدادات الواجهة الشاملة
 // =========================================================================
 export async function updateSettingsAction(arg1: any, arg2?: any) {
   try {
@@ -557,73 +557,6 @@ export async function savePromoAction(arg1: any, arg2?: any) {
 
 export const adminSavePromoAction = savePromoAction;
 export const publishPromoAction = savePromoAction;
-
-export async function adminScanMenuAction(payload: {
-  fileName?: string;
-  imageBase64: string;
-  mimeType?: string;
-}) {
-  try {
-    let apiKey = (
-      process.env.GEMINI_API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      ""
-    ).trim().replace(/^["']|["']$/g, "");
-
-    if (!apiKey) return { success: false, ok: false, error: "مفتاح GEMINI_API_KEY غير متوفر في Vercel." };
-    if (!payload?.imageBase64) return { success: false, ok: false, error: "الصورة غير صالحة." };
-
-    let cleanBase64 = payload.imageBase64;
-    if (cleanBase64.includes(",")) cleanBase64 = cleanBase64.split(",")[1];
-
-    const promptText = `أنت خبير في قراءة قوائم طعام المطاعم بدقة. استخرج من صورة المنيو الأصناف والأسعار والأقسام بصيغة JSON Array نقية ومباشرة بدون ماركداون:
-[
-  {
-    "categoryNameAr": "اسم القسم بالعربي",
-    "categoryNameEn": "Category",
-    "itemNameAr": "اسم الوجبة بالعربي",
-    "itemNameEn": "Item",
-    "descriptionAr": "مكونات الوجبة",
-    "price": 100
-  }
-]`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }] }],
-        generationConfig: { temperature: 0.1, responseMimeType: "application/json" },
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      return { success: false, ok: false, error: `خطأ من سيرفر الذكاء الاصطناعي: ${errText}` };
-    }
-
-    const resJson = await res.json();
-    let rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) rawText = jsonMatch[0];
-
-    const items = JSON.parse(rawText);
-    const rows: ScannedRow[] = items.map((it: any) => ({
-      categoryNameAr: String(it.categoryNameAr || it.categoryAr || "أصناف المنيو").trim(),
-      categoryNameEn: String(it.categoryNameEn || it.categoryEn || "Menu Items").trim(),
-      itemNameAr: String(it.itemNameAr || it.nameAr || it.name || "صنف جديد").trim(),
-      itemNameEn: String(it.itemNameEn || it.nameEn || "").trim(),
-      descriptionAr: String(it.descriptionAr || it.description || "").trim(),
-      price: Number(it.price || 0),
-    }));
-
-    return { success: true, ok: true, data: rows, rows };
-  } catch (err: any) {
-    return { success: false, ok: false, error: err?.message || "حدث خطأ أثناء معالجة الصورة." };
-  }
-}
 
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
