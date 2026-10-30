@@ -48,7 +48,7 @@ export default async function HomePage() {
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
-  // فحص حالة ظهور الإعلان المؤقت مع تجاوز قيود TypeScript بأمان
+  // فحص حالة ظهور الإعلان المؤقت بأمان تام
   const isPromoVisible =
     Boolean(promo) &&
     promo?.enabled !== false &&
@@ -57,17 +57,8 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-carbon-950 text-zinc-900 dark:text-white selection:bg-brand-500 overflow-x-hidden transition-colors duration-300">
-      {/* 0. تهيئة المتجر */}
-      <ClientBoot
-        categories={catsWithItems}
-        items={bestItems}
-        menuItems={bestItems}
-        zones={zonesList}
-        deliveryZones={zonesList}
-        settings={frontend}
-        frontend={frontend}
-        promo={promo}
-      />
+      {/* 0. تهيئة المتجر (استدعاء سليم مطابق لتعريف المكون بدون تمرير Props) */}
+      <ClientBoot />
 
       {/* 1. الهيدر */}
       <Header frontend={frontend} settings={frontend} promo={promo} />
