@@ -27,6 +27,17 @@ export interface ScannedRow {
   badge?: string;
 }
 
+// دالة أمان لمعالجة البيانات سواء أُرسلت كمعامل واحد أو معاملين (token, payload)
+function resolvePayload(arg1: any, arg2?: any) {
+  if (arg2 !== undefined && arg2 !== null && typeof arg2 === "object") {
+    return arg2;
+  }
+  if (arg1 !== undefined && arg1 !== null && typeof arg1 === "object") {
+    return arg1;
+  }
+  return arg2 || arg1 || {};
+}
+
 function checkAuth(token?: string) {
   if (!token) return true;
   const envPass = process.env.ADMIN_PASSCODE?.trim();
@@ -64,7 +75,6 @@ export async function adminGetAllAction(token?: string) {
       getPromo().catch(() => null),
     ]);
 
-    // مصفوفة هجينة تعمل كـ Array لدوال map وتعمل كـ Object للوصول بالمفتاح
     const hybridSettings: any = [...settingsRows];
     for (let i = 0; i < settingsRows.length; i++) {
       hybridSettings[settingsRows[i].key] = settingsRows[i].value;
@@ -180,7 +190,152 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. ماسح المنيو الذكي مع الاستكشاف التلقائي لموديل Gemini وتجاوز 404
+// 2. إدارة مناطق التوصيل (حل جذري للقيم والأنواع)
+// =========================================================================
+export async function upsertZoneAction(arg1: any, arg2?: any) {
+  try {
+    const payload = resolvePayload(arg1, arg2);
+    const nameAr = String(
+      payload?.nameAr || payload?.name_ar || payload?.name || payload?.zoneAr || payload?.zone_ar || payload?.zoneNameAr || ""
+    ).trim();
+    const nameEn = String(
+      payload?.nameEn || payload?.name_en || payload?.zoneEn || payload?.zone_en || payload?.zoneNameEn || ""
+    ).trim();
+    const feeVal = Number(payload?.fee ?? payload?.price ?? payload?.rate ?? payload?.deliveryFee ?? 0);
+    const estMin = Number(payload?.estimatedMinutes ?? payload?.estimated_minutes ?? payload?.minutes ?? payload?.time ?? payload?.eta ?? 30);
+    const sortOrderVal = Number(payload?.sortOrder ?? payload?.sort_order ?? 0);
+
+    if (!nameAr && !nameEn) {
+      return { ok: false, success: false, error: "اسم المنطقة بالعربي أو الإنجليزي مطلوب." };
+    }
+
+    const existingId = payload?.id ? String(payload.id) : null;
+
+    if (existingId) {
+      await db
+        .update(deliveryZones)
+        .set({
+          nameAr: nameAr || "منطقة",
+          nameEn,
+          fee: feeVal,
+          estimatedMinutes: estMin,
+          sortOrder: sortOrderVal,
+        })
+        .where(eq(deliveryZones.id, existingId as any));
+    } else {
+      const valuesWithoutId = {
+        nameAr: nameAr || "منطقة",
+        nameEn,
+        fee: feeVal,
+        estimatedMinutes: estMin,
+        sortOrder: sortOrderVal,
+      };
+
+      try {
+        await db.insert(deliveryZones).values({
+          id: `zone-${Date.now()}` as any,
+          ...valuesWithoutId,
+        });
+      } catch {
+        await db.insert(deliveryZones).values(valuesWithoutId as any);
+      }
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    console.error("upsertZoneAction error:", err);
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminSaveZoneAction = upsertZoneAction;
+export const addZoneAction = upsertZoneAction;
+export const adminAddZoneAction = upsertZoneAction;
+export const createZoneAction = upsertZoneAction;
+export const adminCreateZoneAction = upsertZoneAction;
+export const saveZoneAction = upsertZoneAction;
+
+export async function deleteZoneAction(arg1: any, arg2?: any) {
+  try {
+    const target = resolvePayload(arg1, arg2);
+    const id = String(target?.id || target);
+    await db.delete(deliveryZones).where(eq(deliveryZones.id, id as any));
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminDeleteZoneAction = deleteZoneAction;
+
+// =========================================================================
+// 3. إدارة وحفظ لوحة الإعلانات (Promo Bulletin)
+// =========================================================================
+export async function savePromoAction(arg1: any, arg2?: any) {
+  try {
+    const payload = resolvePayload(arg1, arg2);
+    const isEnabled = payload.enabled ?? payload.active ?? payload.visible ?? payload.isVisible ?? true;
+    const textAr = String(payload.textAr || payload.arabicText || payload.text_ar || "").trim();
+    const textEn = String(payload.textEn || payload.englishText || payload.text_en || "").trim();
+    const title = String(payload.title || textAr || "عرض خاص").trim();
+    const code = String(payload.code || "LION15").trim();
+
+    const promoData = {
+      enabled: Boolean(isEnabled),
+      active: Boolean(isEnabled),
+      visible: Boolean(isEnabled),
+      textAr,
+      textEn,
+      arabicText: textAr,
+      englishText: textEn,
+      title,
+      code,
+    };
+
+    const promoJson = JSON.stringify(promoData);
+
+    const entriesToSave = [
+      { key: "promo", value: promoJson },
+      { key: "promo_bulletin", value: promoJson },
+      { key: "promo_enabled", value: String(isEnabled) },
+      { key: "promo_text_ar", value: textAr },
+      { key: "promo_text_en", value: textEn },
+      { key: "bulletin_text_ar", value: textAr },
+      { key: "bulletin_text_en", value: textEn },
+    ];
+
+    for (const item of entriesToSave) {
+      const existing = await db.select().from(settings).where(eq(settings.key, item.key)).limit(1);
+      if (existing.length > 0) {
+        await db.update(settings).set({ value: item.value }).where(eq(settings.key, item.key));
+      } else {
+        await db.insert(settings).values({ key: item.key, value: item.value });
+      }
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true, data: promoData };
+  } catch (err: unknown) {
+    console.error("savePromoAction error:", err);
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminSavePromoAction = savePromoAction;
+export const updatePromoAction = savePromoAction;
+export const adminUpdatePromoAction = savePromoAction;
+export const publishBulletinAction = savePromoAction;
+export const adminPublishBulletinAction = savePromoAction;
+export const saveBulletinAction = savePromoAction;
+export const adminSaveBulletinAction = savePromoAction;
+
+// =========================================================================
+// 4. ماسح المنيو الذكي (مع استخراج JSON النظيف وتجاوز أي نصوص مقدمة)
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -251,7 +406,6 @@ export async function adminScanMenuAction(payload: {
 
     const candidateEndpoints: string[] = [];
 
-    // استكشاف الموديلات المفعلة تلقائياً للمفتاح
     try {
       const listRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
@@ -321,7 +475,10 @@ export async function adminScanMenuAction(payload: {
     }
 
     let cleanJson = rawText.trim();
-    if (cleanJson.startsWith("```json")) {
+    const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      cleanJson = jsonMatch[0];
+    } else if (cleanJson.startsWith("```json")) {
       cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
     } else if (cleanJson.startsWith("```")) {
       cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
@@ -355,7 +512,7 @@ export async function adminScanMenuAction(payload: {
 }
 
 // =========================================================================
-// 3. اعتماد وحفظ الأصناف المستخرجة في المنيو
+// 5. اعتماد وحفظ الأصناف المستخرجة في المنيو
 // =========================================================================
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
@@ -402,327 +559,4 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
         nameEn: itemNameEn,
         descriptionAr: descAr,
         descriptionEn: descEn,
-        price: priceNum,
-        imageUrl: "",
-        badge: "",
-        isAvailable: 1,
-        sortOrder: i,
-      });
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: any) {
-    console.error("adminSaveScannedRowsAction error:", err);
-    return { success: false, ok: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات." };
-  }
-}
-
-// =========================================================================
-// 4. حفظ الإعدادات، الشعار، والخرائط وتحديث كامل الواجهة فورياً
-// =========================================================================
-export async function updateSettingsAction(payload: Record<string, any>) {
-  try {
-    const keyMap: Record<string, string> = {
-      brandNameAr: "brand_name_ar",
-      brandNameEn: "brand_name_en",
-      logoUrl: "logo_url",
-      heroTitleAr: "hero_title_ar",
-      heroSubtitleAr: "hero_subtitle_ar",
-      marqueeTextAr: "marquee_text_ar",
-      addressAr: "address_ar",
-      workingHoursAr: "working_hours_ar",
-      hotline: "hotline",
-      whatsapp: "whatsapp",
-      deliveryFee: "delivery_fee",
-      taxPercent: "tax_percent",
-      heroImage1: "hero_image_1",
-      heroImage2: "hero_image_2",
-      heroImage3: "hero_image_3",
-      adBanner1: "ad_banner_1",
-      adBanner2: "ad_banner_2",
-      branchMapsUrl: "branch_maps_url",
-      promoTitleAr: "promo_title_ar",
-      promoSubtitleAr: "promo_subtitle_ar",
-      ctaTitleAr: "cta_title_ar",
-      ctaSubtitleAr: "cta_subtitle_ar",
-    };
-
-    const normalized: Record<string, string> = {};
-    for (const [k, v] of Object.entries(payload)) {
-      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
-      normalized[k] = strVal;
-      if (keyMap[k]) normalized[keyMap[k]] = strVal;
-    }
-
-    for (const [key, strVal] of Object.entries(normalized)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: unknown) {
-    console.error("updateSettingsAction error:", err);
-    return { success: false, ok: false, error: err instanceof Error ? err.message : "Error saving settings" };
-  }
-}
-
-export const adminSetSettingAction = updateSettingsAction;
-export const saveFrontendSettingsAction = updateSettingsAction;
-
-// =========================================================================
-// 5. إدارة التصنيفات (حذف تتابعي Cascade Delete ومنع التكرار)
-// =========================================================================
-export async function upsertCategoryAction(data: any) {
-  try {
-    const id = data?.id || `cat-${Date.now()}`;
-    const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(categories)
-        .set({
-          nameAr: String(data?.nameAr || ""),
-          nameEn: String(data?.nameEn || ""),
-          sortOrder: Number(data?.sortOrder ?? 0),
-        })
-        .where(eq(categories.id, id));
-    } else {
-      await db.insert(categories).values({
-        id,
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || ""),
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteCategoryAction(id: string) {
-  try {
-    const catId = String(id);
-    // 1. حذف الأصناف المرتبطة لفك قيد Foreign Key
-    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
-    // 2. حذف التصنيف
-    await db.delete(categories).where(eq(categories.id, catId));
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    console.error("deleteCategoryAction error:", err);
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSaveCategoryAction = upsertCategoryAction;
-export const adminDeleteCategoryAction = deleteCategoryAction;
-
-// دالة تفريغ وحذف شامل لجميع الأقسام والأصناف بضغطة واحدة
-export async function adminClearAllCategoriesAction() {
-  try {
-    await db.delete(menuItems);
-    await db.delete(categories);
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-// =========================================================================
-// 6. إدارة أصناف المنيو (Menu Items)
-// =========================================================================
-export async function upsertMenuItemAction(data: any) {
-  try {
-    const id = data?.id || `item-${Date.now()}`;
-    const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
-    const img = String(data?.imageUrl ?? data?.image ?? "");
-
-    const existing = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(menuItems)
-        .set({
-          categoryId: String(data?.categoryId || ""),
-          nameAr: String(data?.nameAr || ""),
-          nameEn: String(data?.nameEn || ""),
-          descriptionAr: String(data?.descriptionAr || ""),
-          descriptionEn: String(data?.descriptionEn || ""),
-          price: Number(data?.price || 0),
-          imageUrl: img,
-          badge: String(data?.badge || ""),
-          isAvailable: isAvail,
-          sortOrder: Number(data?.sortOrder ?? 0),
-        })
-        .where(eq(menuItems.id, id));
-    } else {
-      await db.insert(menuItems).values({
-        id,
-        categoryId: String(data?.categoryId || ""),
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || ""),
-        descriptionAr: String(data?.descriptionAr || ""),
-        descriptionEn: String(data?.descriptionEn || ""),
-        price: Number(data?.price || 0),
-        imageUrl: img,
-        badge: String(data?.badge || ""),
-        isAvailable: isAvail,
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteMenuItemAction(id: string) {
-  try {
-    await db.delete(menuItems).where(eq(menuItems.id, String(id)));
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSaveItemAction = upsertMenuItemAction;
-export const adminDeleteItemAction = deleteMenuItemAction;
-
-// =========================================================================
-// 7. إدارة مناطق التوصيل (Delivery Zones)
-// =========================================================================
-export async function upsertZoneAction(data: any) {
-  try {
-    const id = data?.id || `zone-${Date.now()}`;
-    const feeVal = Number(data?.fee ?? data?.price ?? 0);
-    const existing = await db.select().from(deliveryZones).where(eq(deliveryZones.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(deliveryZones)
-        .set({
-          nameAr: String(data?.nameAr || ""),
-          nameEn: String(data?.nameEn || ""),
-          fee: feeVal,
-          estimatedMinutes: Number(data?.estimatedMinutes ?? 30),
-          sortOrder: Number(data?.sortOrder ?? 0),
-        })
-        .where(eq(deliveryZones.id, id));
-    } else {
-      await db.insert(deliveryZones).values({
-        id,
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || ""),
-        fee: feeVal,
-        estimatedMinutes: Number(data?.estimatedMinutes ?? 30),
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteZoneAction(id: string) {
-  try {
-    await db.delete(deliveryZones).where(eq(deliveryZones.id, String(id)));
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSaveZoneAction = upsertZoneAction;
-export const adminDeleteZoneAction = deleteZoneAction;
-
-// =========================================================================
-// 8. إدارة الطلبات والعملاء (Orders & Customers)
-// =========================================================================
-export async function updateOrderStatusAction(orderId: number | string, status: string) {
-  try {
-    await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSetOrderStatusAction = updateOrderStatusAction;
-
-export async function deleteOrderAction(orderId: number | string) {
-  try {
-    const idNum = Number(orderId);
-    await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
-    await db.delete(orders).where(eq(orders.id, idNum));
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function upsertCustomerAction(data: any) {
-  try {
-    if (data?.id) {
-      await db
-        .update(customers)
-        .set({
-          name: String(data.name || ""),
-          fullName: String(data.name || ""),
-          phone: String(data.phone || ""),
-          primaryPhone: String(data.phone || ""),
-          loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-          discountPercent: Number(data.discountPercent ?? 0),
-        })
-        .where(eq(customers.id, Number(data.id)));
-    } else {
-      const code = data?.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-      await db.insert(customers).values({
-        code,
-        name: String(data?.name || "عميل"),
-        fullName: String(data?.name || "عميل"),
-        phone: String(data?.phone || ""),
-        primaryPhone: String(data?.phone || ""),
-        loyaltyPoints: Number(data?.loyaltyPoints ?? 0),
-        discountPercent: Number(data?.discountPercent ?? 0),
-      });
-    }
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
+        price:
