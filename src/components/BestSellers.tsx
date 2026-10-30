@@ -1,50 +1,135 @@
 "use client";
 
-import { useRef } from "react";
-import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
-import type { MenuItemDTO } from "@/lib/types";
-import { useDict, useIsAr } from "@/lib/hooks";
-import MenuItemCard from "@/components/MenuItemCard";
-import SectionHead from "@/components/SectionHead";
+import Link from "next/link";
+import { Flame, Plus, ShoppingBag, Sparkles } from "lucide-react";
+import { useApp } from "@/store/app-store";
 
-export default function BestSellers({ items }: { items: MenuItemDTO[] }) {
-  const t = useDict();
-  const isAr = useIsAr();
-  const railRef = useRef<HTMLDivElement>(null);
+interface BestSellersProps {
+  categories?: any[];
+  items?: any[];
+  data?: any[];
+}
 
-  const scroll = (dir: number) => {
-    railRef.current?.scrollBy({ left: dir * (isAr ? -300 : 300), behavior: "smooth" });
+export default function BestSellers({ categories = [], items = [], data = [] }: BestSellersProps) {
+  const addToCart = useApp((s) => s.addToCart);
+  const setCartOpen = useApp((s) => s.setCartOpen);
+
+  // جمع كافة الأصناف بأمان تام بدون استخدام .find على كائنات غير معرفة
+  const safeCats = Array.isArray(categories) ? categories : [];
+  const safeItems = Array.isArray(items) && items.length > 0
+    ? items
+    : Array.isArray(data) && data.length > 0
+    ? data
+    : safeCats.flatMap((c) => (Array.isArray(c?.items) ? c.items : []));
+
+  // ترشيح الأصناف الأكثر طلباً أو أخذ أول 4 أصناف متاحة
+  const displayItems = safeItems.slice(0, 4);
+
+  if (displayItems.length === 0) {
+    return null;
+  }
+
+  const handleAdd = (item: any) => {
+    addToCart({
+      id: String(item.id),
+      nameAr: item.nameAr || item.name || "وجبة بروست",
+      nameEn: item.nameEn || item.nameAr || "Broast Meal",
+      price: Number(item.price || 0),
+      imageUrl: item.imageUrl || item.image || "",
+    });
+    setCartOpen(true);
   };
 
-  if (!items.length) return null;
-
   return (
-    <section id="best" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-20 md:px-8">
-      <div className="flex items-end justify-between gap-4">
-        <SectionHead
-          icon={<Flame className="size-4" />}
-          kicker={t.sections.bestKicker}
-          title={t.sections.bestTitle}
-          sub={t.sections.bestSub}
-        />
-        <div className="hidden gap-2 md:flex">
-          {[1, -1].map((d) => (
-            <button
-              key={d}
-              onClick={() => scroll(d)}
-              aria-label="scroll"
-              className="grid size-11 place-items-center rounded-full border border-line bg-surface transition hover:border-brand-500 hover:bg-brand-500 hover:text-white"
-            >
-              {(d === 1) === isAr ? <ChevronLeft className="size-5" /> : <ChevronRight className="size-5" />}
-            </button>
-          ))}
-        </div>
-      </div>
+    <section className="py-14 bg-carbon-950 text-white" dir="rtl">
+      <div className="mx-auto max-w-7xl px-4 md:px-8">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/30 bg-brand-500/10 px-3.5 py-1 text-xs font-black text-brand-400">
+              <Flame className="size-3.5 text-brand-500 animate-pulse" />
+              <span>الأكثر طلباً ومبيعاً في دسوق</span>
+            </div>
+            <h2 className="text-2xl md:text-4xl font-black mt-2 tracking-tight">
+              اختيارات الأسود المفضلة 🦁
+            </h2>
+          </div>
 
-      <div ref={railRef} className="no-scrollbar -mx-4 mt-8 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
-        {items.map((it) => (
-          <MenuItemCard key={it.id} item={it} rail />
-        ))}
+          <Link
+            href="/menu"
+            className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition"
+          >
+            <span>عرض كل المنيو</span>
+            <span>←</span>
+          </Link>
+        </div>
+
+        {/* Items Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {displayItems.map((item, idx) => {
+            const name = item.nameAr || item.name || "وجبة بروست";
+            const desc = item.descriptionAr || item.description || "";
+            const price = Number(item.price || 0);
+            const img = item.imageUrl || item.image || "";
+
+            return (
+              <div
+                key={item.id || idx}
+                className="group relative rounded-3xl border border-white/10 bg-carbon-900/50 p-5 flex flex-col justify-between transition hover:border-brand-500/50 hover:bg-carbon-900/80 shadow-xl backdrop-blur-md"
+              >
+                <div>
+                  {/* Image / Mascot */}
+                  <div className="relative h-44 w-full rounded-2xl overflow-hidden bg-carbon-950 border border-white/5 flex items-center justify-center">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={img}
+                        alt={name}
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <span className="text-6xl select-none">🍗</span>
+                    )}
+
+                    {item.badge && (
+                      <span className="absolute top-3 right-3 rounded-full bg-brand-500 px-3 py-1 text-[10px] font-black text-white shadow-md">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title & Description */}
+                  <div className="mt-4">
+                    <h3 className="text-lg font-black text-white group-hover:text-amber-400 transition">
+                      {name}
+                    </h3>
+                    {desc && (
+                      <p className="mt-1 text-xs text-white/60 line-clamp-2 leading-relaxed">
+                        {desc}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Price & Action Button */}
+                <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-xl font-black text-amber-400">{price}</span>
+                    <span className="text-xs font-bold text-white/60 mr-1">ج.م</span>
+                  </div>
+
+                  <button
+                    onClick={() => handleAdd(item)}
+                    className="flex items-center gap-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 active:scale-95 px-4 py-2 text-xs font-black text-white transition shadow-lg cursor-pointer"
+                  >
+                    <Plus className="size-3.5" />
+                    <span>أضف للطلب</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
