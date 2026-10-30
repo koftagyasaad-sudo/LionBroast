@@ -17,9 +17,12 @@ import {
   Plus,
   Sliders,
   FileText,
+  Phone,
+  Sparkles,
 } from "lucide-react";
 
-function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<string> {
+// ضاغط صور فوري يخفض الأبعاد وجودة الملف ليكون الحجم أقل من 80KB ويُحفظ فوراً
+function compressImage(file: File, maxWidth = 900, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -29,18 +32,22 @@ function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<stri
       img.onload = () => {
         let width = img.width;
         let height = img.height;
+
         if (width > maxWidth) {
           height = Math.round((height * maxWidth) / width);
           width = maxWidth;
         }
+
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
+
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           resolve(event.target?.result as string);
           return;
         }
+
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
@@ -53,7 +60,6 @@ function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<stri
 export default function FrontendTab(props: any) {
   const initialData = props?.data?.frontend || props?.data?.settings || {};
 
-  // تحميل شرائح السلايدر من قاعدة البيانات أو استخدام الافتراضية
   let initialSlides = [
     {
       id: "slide-1",
@@ -91,11 +97,13 @@ export default function FrontendTab(props: any) {
   ];
 
   try {
-    if (initialData.heroSlides && Array.isArray(initialData.heroSlides)) {
+    if (initialData.heroSlides && Array.isArray(initialData.heroSlides) && initialData.heroSlides.length > 0) {
       initialSlides = initialData.heroSlides;
     } else if (initialData.hero_slides) {
       const parsed = JSON.parse(initialData.hero_slides);
-      if (Array.isArray(parsed) && parsed.length > 0) initialSlides = parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        initialSlides = parsed;
+      }
     }
   } catch {}
 
@@ -104,26 +112,54 @@ export default function FrontendTab(props: any) {
   const [form, setForm] = useState({
     brandNameAr: initialData.brandNameAr || initialData.brand_name_ar || "بروست الأسد",
     logoUrl: initialData.logoUrl || initialData.logo_url || "/img/icon-512.png",
-    marqueeTextAr: initialData.marqueeTextAr || initialData.marquee_text_ar || "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-    addressAr: initialData.addressAr || initialData.address_ar || "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية",
-    workingHoursAr: initialData.workingHoursAr || initialData.working_hours_ar || "يومياً من 10 صباحا حتى 4 فجرا",
+    marqueeTextAr:
+      initialData.marqueeTextAr ||
+      initialData.marquee_text_ar ||
+      "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
+    addressAr:
+      initialData.addressAr ||
+      initialData.address_ar ||
+      "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية",
+    workingHoursAr:
+      initialData.workingHoursAr || initialData.working_hours_ar || "يومياً من 10 صباحا حتى 4 فجرا",
     hotline: initialData.hotline || "0248813666",
     whatsapp: initialData.whatsapp || "201034419424",
-    branchMapsUrl: initialData.branchMapsUrl || initialData.branch_maps_url || "https://maps.app.goo.gl/tyfeGxKLMaMZ8vdJ6",
-    promoTitleAr: initialData.promoTitleAr || initialData.promo_title_ar || "أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗",
-    promoSubtitleAr: initialData.promoSubtitleAr || initialData.promo_subtitle_ar || "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير العائلية والفردية، توصيل سريع وسخن لحد باب بيتك في دسوق وجميع القرى المجاورة.",
+    branchMapsUrl:
+      initialData.branchMapsUrl ||
+      initialData.branch_maps_url ||
+      "https://maps.google.com/?q=دسوق+شارع+الجيش",
+    promoTitleAr:
+      initialData.promoTitleAr ||
+      initialData.promo_title_ar ||
+      "أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗",
+    promoSubtitleAr:
+      initialData.promoSubtitleAr ||
+      initialData.promo_subtitle_ar ||
+      "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير العائلية والفردية، توصيل سريع وسخن لحد باب بيتك في دسوق وجميع القرى المجاورة.",
     ctaTitleAr: initialData.ctaTitleAr || initialData.cta_title_ar || "جوعان؟ الأسد مستنيك.",
-    ctaSubtitleAr: initialData.ctaSubtitleAr || initialData.cta_subtitle_ar || "اطلب على واتساب لسرعه التواصل و الطلبات – أو كلمنا علي الخط الساخن 0248813666",
-    footerAboutAr: initialData.footerAboutAr || initialData.footer_about_ar || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر. جميع الوجبات تُحضر يومياً طازجة 100% بأعلى معايير الجودة.",
-    footerCopyrightAr: initialData.footerCopyrightAr || initialData.footer_copyright_ar || "© 2026 بروست الأسد . جميع الحقوق محفوظة.",
-    footerSloganAr: initialData.footerSloganAr || initialData.footer_slogan_ar || "توصيل سريع داخل دسوق • طعم أسدي أصلي",
+    ctaSubtitleAr:
+      initialData.ctaSubtitleAr ||
+      initialData.cta_subtitle_ar ||
+      "اطلب على واتساب لسرعه التواصل و الطلبات – أو كلمنا علي الخط الساخن 0248813666",
+    footerAboutAr:
+      initialData.footerAboutAr ||
+      initialData.footer_about_ar ||
+      "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر. جميع الوجبات تُحضر يومياً طازجة 100% بأعلى معايير الجودة.",
+    footerCopyrightAr:
+      initialData.footerCopyrightAr ||
+      initialData.footer_copyright_ar ||
+      "© 2026 بروست الأسد . جميع الحقوق محفوظة.",
+    footerSloganAr:
+      initialData.footerSloganAr ||
+      initialData.footer_slogan_ar ||
+      "توصيل سريع داخل دسوق • طعم أسدي أصلي",
   });
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // تحديث شريحة في السلايدر
   const handleSlideChange = (index: number, field: string, value: any) => {
     setSlides((prev) => {
       const updated = [...prev];
@@ -132,18 +168,20 @@ export default function FrontendTab(props: any) {
     });
   };
 
-  // رفع صورة لشريحة
   const handleSlideImageUpload = async (index: number, file?: File | null) => {
     if (!file) return;
+    setUploadingIdx(index);
+    setErrorMsg(null);
     try {
       const base64 = await compressImage(file);
       handleSlideChange(index, "image", base64);
     } catch {
-      setErrorMsg("فشل معالجة الصورة");
+      setErrorMsg("فشل معالجة وضغط الصورة، يرجى اختيار ملف صالح.");
+    } finally {
+      setUploadingIdx(null);
     }
   };
 
-  // إضافة شريحة جديدة
   const handleAddSlide = () => {
     setSlides((prev) => [
       ...prev,
@@ -161,7 +199,6 @@ export default function FrontendTab(props: any) {
     ]);
   };
 
-  // حذف شريحة
   const handleDeleteSlide = (index: number) => {
     if (slides.length <= 1) {
       alert("يجب أن يحتوي السلايدر على شريحة واحدة على الأقل.");
@@ -190,10 +227,10 @@ export default function FrontendTab(props: any) {
         if (props?.refresh) await props.refresh();
         setTimeout(() => setSaved(false), 3000);
       } else {
-        setErrorMsg(res?.error || "فشل حفظ التعديلات.");
+        setErrorMsg(res?.error || "فشل حفظ التعديلات في قاعدة البيانات.");
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || "فشل الاتصال أثناء الحفظ.");
+      setErrorMsg(err?.message || "فشل الاتصال بالسيرفر أثناء الحفظ.");
     } finally {
       setSaving(false);
     }
@@ -204,7 +241,7 @@ export default function FrontendTab(props: any) {
 
   return (
     <div dir="rtl" className="space-y-8 text-white">
-      {/* Top action bar */}
+      {/* الشريط العلوي وزر الحفظ */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-extrabold">
@@ -218,11 +255,17 @@ export default function FrontendTab(props: any) {
 
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || uploadingIdx !== null}
           className="glow-brand flex items-center gap-2 rounded-2xl bg-brand-500 px-7 py-3 text-sm font-black text-white transition hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer shadow-xl"
         >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : saved ? <Check className="size-4" /> : <Save className="size-4" />}
-          <span>{saving ? "جاري الحفظ..." : saved ? "تم حفظ الواجهة بنجاح ✓" : "حفظ كل التعديلات الآن"}</span>
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : saved ? (
+            <Check className="size-4" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          <span>{saving ? "جاري الحفظ في الداتابيز..." : saved ? "تم حفظ الواجهة بنجاح ✓" : "حفظ كل التعديلات الآن"}</span>
         </button>
       </div>
 
@@ -233,7 +276,7 @@ export default function FrontendTab(props: any) {
         </div>
       )}
 
-      {/* 1. قسم إدارة السلايدر العلوي يدوياً (Hero Slider Manager) */}
+      {/* 1. قسم إدارة السلايدر العلوي يدوياً (Hero Slider) */}
       <div className="rounded-3xl border border-brand-500/40 bg-carbon-900/60 p-6 md:p-8 space-y-6 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
@@ -267,7 +310,7 @@ export default function FrontendTab(props: any) {
                 <button
                   type="button"
                   onClick={() => handleDeleteSlide(idx)}
-                  className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300"
+                  className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 cursor-pointer"
                 >
                   <Trash2 className="size-3.5" />
                   <span>حذف الشريحة</span>
@@ -292,15 +335,20 @@ export default function FrontendTab(props: any) {
                       dir="ltr"
                       value={slide.image || ""}
                       onChange={(e) => handleSlideChange(idx, "image", e.target.value)}
-                      placeholder="رابط مباشر"
+                      placeholder="رابط مباشر أو ارفع ملف"
                       className={inputClass}
                     />
                     <label className="flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-[11px] font-bold hover:bg-white/20 transition">
-                      <Upload className="size-3.5 text-brand-500" />
-                      <span>رفع</span>
+                      {uploadingIdx === idx ? (
+                        <Loader2 className="size-3.5 animate-spin text-brand-500" />
+                      ) : (
+                        <Upload className="size-3.5 text-brand-500" />
+                      )}
+                      <span>{uploadingIdx === idx ? "جاري..." : "رفع"}</span>
                       <input
                         type="file"
                         accept="image/*"
+                        disabled={uploadingIdx !== null}
                         className="hidden"
                         onChange={(e) => handleSlideImageUpload(idx, e.target.files?.[0])}
                       />
@@ -400,7 +448,7 @@ export default function FrontendTab(props: any) {
                   onChange={async (e) => {
                     const f = e.target.files?.[0];
                     if (f) {
-                      const b64 = await compressImage(f);
+                      const b64 = await compressImage(f, 400, 0.7);
                       setForm({ ...form, logoUrl: b64 });
                     }
                   }}
@@ -442,7 +490,7 @@ export default function FrontendTab(props: any) {
                   className="flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold hover:bg-white/20 transition shrink-0"
                 >
                   <ExternalLink className="size-3.5" />
-                  تجربة
+                  تجربة الرابط
                 </a>
               )}
             </div>
@@ -465,11 +513,84 @@ export default function FrontendTab(props: any) {
                 className={inputClass}
               />
             </div>
+            <div>
+              <label className="mb-1 block text-xs text-white/60">الخط الساخن:</label>
+              <input
+                dir="ltr"
+                value={form.hotline}
+                onChange={(e) => setForm({ ...form, hotline: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-white/60">رقم الواتساب:</label>
+              <input
+                dir="ltr"
+                value={form.whatsapp}
+                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                className={inputClass}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 4. الجزء السفلي خالص (الفوتر - Footer Settings) */}
+      {/* 4. قسم بانر العروض والمميزات VIP */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
+        <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
+          <Sparkles className="size-4 text-brand-500" />
+          بانر العروض والمميزات VIP (أكبر قطعة بروست)
+        </h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/60">العنوان الرئيسي للبانر:</label>
+            <input
+              value={form.promoTitleAr}
+              onChange={(e) => setForm({ ...form, promoTitleAr: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/60">نص الوصف بالبانر:</label>
+            <textarea
+              rows={2}
+              value={form.promoSubtitleAr}
+              onChange={(e) => setForm({ ...form, promoSubtitleAr: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 5. قسم البانر التحفيزي (جوعان؟ الأسد مستنيك) */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
+        <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
+          <Phone className="size-4 text-brand-500" />
+          بانر الطلب السريع (جوعان؟ الأسد مستنيك)
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/60">العنوان الرئيسي:</label>
+            <input
+              value={form.ctaTitleAr}
+              onChange={(e) => setForm({ ...form, ctaTitleAr: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/60">الوصف الفرعي:</label>
+            <input
+              value={form.ctaSubtitleAr}
+              onChange={(e) => setForm({ ...form, ctaSubtitleAr: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 6. بيانات ونصوص الفوتر (الجزء السفلي خالص) */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
         <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
           <FileText className="size-4 text-brand-500" />
