@@ -206,7 +206,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة التصنيفات (حذف تتابعي يفك ارتباط الأصناف نهائياً)
+// 2. إدارة التصنيفات (حذف تتابعي يفك قيد المفتاح الأجنبي)
 // =========================================================================
 export async function deleteCategoryAction(arg1: any, arg2?: any) {
   try {
@@ -215,13 +215,11 @@ export async function deleteCategoryAction(arg1: any, arg2?: any) {
 
     if (!catId) return { ok: false, success: false, error: "معرف القسم مفقود" };
 
-    // 1. حذف كافة الأصناف التابعة لهذا التصنيف أولاً
     await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
     if (!isNaN(Number(catId))) {
       await db.delete(menuItems).where(eq(menuItems.categoryId, Number(catId) as any)).catch(() => {});
     }
 
-    // 2. حذف التصنيف نفسه
     await db.delete(categories).where(eq(categories.id, catId));
     if (!isNaN(Number(catId))) {
       await db.delete(categories).where(eq(categories.id, Number(catId) as any)).catch(() => {});
@@ -284,14 +282,14 @@ export async function adminClearAllCategoriesAction() {
 }
 
 // =========================================================================
-// 3. إدارة مناطق التوصيل (بالعربي فقط + دعم Serial و Text IDs)
+// 3. إدارة مناطق التوصيل (بالعربي فقط ودعم كافة المعرفات)
 // =========================================================================
 export async function upsertZoneAction(arg1: any, arg2?: any) {
   try {
     const { payload: data } = resolveArgs(arg1, arg2);
 
     const nameAr = String(data?.nameAr || data?.name || "").trim();
-    const nameEn = String(data?.nameEn || nameAr).trim(); // يضمن عدم تعارض not-null constraint
+    const nameEn = String(data?.nameEn || nameAr).trim();
     const feeVal = Number(data?.fee ?? data?.price ?? 0);
     const estMin = Number(data?.estimatedMinutes ?? 30);
     const sortOrd = Number(data?.sortOrder ?? 0);
@@ -330,7 +328,6 @@ export async function upsertZoneAction(arg1: any, arg2?: any) {
       return { ok: true, success: true, id: existing.id };
     }
 
-    // إضافة جديدة مع تجربة الترقيم التلقائي (Serial) والنصي تلقائياً
     try {
       const [inserted] = await db
         .insert(deliveryZones)
