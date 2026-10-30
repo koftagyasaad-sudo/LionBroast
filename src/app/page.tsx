@@ -46,7 +46,6 @@ export default async function HomePage() {
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
-  // تجهيز مصفوفة شرائح كاملة ومحصنة تمنع خطأ s is not iterable نهائياً
   const heroSlides = [
     {
       id: "slide-1",
@@ -95,9 +94,9 @@ export default async function HomePage() {
       <MarqueeStrip text={marqueeText} items={[marqueeText, marqueeText]} />
 
       {/* 4. سكشن الأكثر مبيعاً */}
-      {catsWithItems.length > 0 && bestItems.length > 0 && (
+      {bestItems.length > 0 && (
         <section id="best">
-          <BestSellers categories={catsWithItems} items={bestItems} />
+          <BestSellers categories={catsWithItems} items={bestItems} data={bestItems} />
         </section>
       )}
 
@@ -173,7 +172,7 @@ export default async function HomePage() {
       <Footer frontend={frontend} settings={frontend} />
 
       {/* سلة المشتريات العامة */}
-      <CartDrawer />
+      <CartDrawer items={bestItems} menuItems={bestItems} categories={catsWithItems} />
     </main>
   );
 }
