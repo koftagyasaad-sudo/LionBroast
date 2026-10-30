@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/db";
-import { deliveryZones, categories, menuItems } from "@/db/schema";
+import { deliveryZones, menuItems } from "@/db/schema";
 import { getCategoriesWithItems, getFrontendSettings, getPromo } from "@/db/queries";
 import Header from "@/components/Header";
 import HeroSlider from "@/components/HeroSlider";
@@ -84,8 +84,8 @@ export default async function HomePage() {
   ];
 
   return (
-    <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500 overflow-x-hidden">
-      {/* 0. تهيئة وتزويد المتجر بالبيانات الأساسية لمنع أي خطأ reading 'find' */}
+    <main className="min-h-screen bg-zinc-50 dark:bg-carbon-950 text-zinc-900 dark:text-white selection:bg-brand-500 overflow-x-hidden transition-colors duration-300">
+      {/* 0. تهيئة المتجر */}
       <ClientBoot
         categories={catsWithItems}
         items={bestItems}
@@ -97,7 +97,7 @@ export default async function HomePage() {
         promo={promo}
       />
 
-      {/* 1. الهيدر وشريط التنقل العلوي */}
+      {/* 1. الهيدر */}
       <Header frontend={frontend} settings={frontend} promo={promo} />
 
       {/* 2. السلايدر الرئيسي */}
@@ -114,7 +114,7 @@ export default async function HomePage() {
       )}
 
       {/* 5. بانر العروض والمميزات VIP */}
-      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8" dir="rtl">
+      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 text-white" dir="rtl">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-amber-600 to-brand-500 p-8 md:p-12 shadow-2xl">
           <div className="absolute -left-10 -top-10 size-60 rounded-full bg-white/10 blur-3xl pointer-events-none" />
           <div className="absolute -right-10 -bottom-10 size-60 rounded-full bg-black/20 blur-3xl pointer-events-none" />
@@ -145,16 +145,16 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 6. سكشن المنيو وقائمة الطعام */}
+      {/* 6. سكشن المنيو */}
       <section id="menu">
         {catsWithItems.length > 0 ? (
           <MenuPreview categories={catsWithItems} />
         ) : (
           <div className="mx-auto max-w-7xl px-4 py-16 text-center" dir="rtl">
-            <div className="rounded-3xl border border-white/10 bg-carbon-900/50 p-10 max-w-xl mx-auto backdrop-blur-md">
+            <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white/70 dark:bg-carbon-900/50 p-10 max-w-xl mx-auto backdrop-blur-md shadow-sm">
               <span className="text-5xl">🦁</span>
-              <h3 className="mt-4 text-xl font-black text-white">جاري تجهيز وتحديث قائمة الطعام بالمنيو الجديد</h3>
-              <p className="mt-2 text-sm text-white/60">
+              <h3 className="mt-4 text-xl font-black text-zinc-900 dark:text-white">جاري تجهيز وتحديث قائمة الطعام بالمنيو الجديد</h3>
+              <p className="mt-2 text-sm text-zinc-500 dark:text-white/60">
                 يمكنك إضافة وتحديث الأصناف بسهولة عبر ماسح المنيو الذكي أو لوحة التحكم.
               </p>
               <div className="mt-6">
@@ -175,16 +175,16 @@ export default async function HomePage() {
         <ZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
 
-      {/* 8. سكشن عنوان الفرع ورابط Google Maps المباشر */}
+      {/* 8. سكشن عنوان الفرع ورابط Google Maps */}
       <LocationBlock frontend={frontend} />
 
-      {/* 9. بانر الطلب السريع (جوعان؟ الأسد مستنيك) */}
+      {/* 9. بانر الطلب السريع */}
       <ChefCta frontend={frontend} settings={frontend} />
 
-      {/* 10. الفوتر وروابط التواصل */}
+      {/* 10. الفوتر */}
       <Footer frontend={frontend} settings={frontend} />
 
-      {/* سلة المشتريات العامة */}
+      {/* سلة المشتريات */}
       <CartDrawer zones={zonesList} deliveryZones={zonesList} items={bestItems} menuItems={bestItems} categories={catsWithItems} />
     </main>
   );
