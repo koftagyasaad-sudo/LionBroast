@@ -10,7 +10,6 @@ import {
   LogOut,
   Moon,
   RefreshCw,
-  ScanLine,
   Settings2,
   Sun,
   UtensilsCrossed,
@@ -24,19 +23,17 @@ import OverviewTab from "@/components/admin/OverviewTab";
 import OrdersTab from "@/components/admin/OrdersTab";
 import CustomersTab from "@/components/admin/CustomersTab";
 import MenuTab from "@/components/admin/MenuTab";
-import MenuScanner from "@/components/admin/MenuScanner";
 import OpsTab from "@/components/admin/OpsTab";
 import FrontendTab from "@/components/admin/FrontendTab";
 
-type TabKey = "overview" | "orders" | "customers" | "menu" | "scanner" | "frontend" | "ops";
+type TabKey = "overview" | "orders" | "customers" | "menu" | "frontend" | "ops";
 
 const TABS: { key: TabKey; labelAr: string; labelEn: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", labelAr: "نظرة عامة", labelEn: "Overview", icon: LayoutDashboard },
   { key: "orders", labelAr: "الطلبات", labelEn: "Orders", icon: ListOrdered },
   { key: "customers", labelAr: "العملاء CRM", labelEn: "Customers", icon: Users },
-  { key: "menu", labelAr: "المنيو", labelEn: "Menu CRUD", icon: UtensilsCrossed },
-  { key: "scanner", labelAr: "ماسح المنيو AI", labelEn: "AI Scanner", icon: ScanLine },
-  { key: "frontend", labelAr: "إعدادات الواجهة", labelEn: "Site Content", icon: MonitorSmartphone },
+  { key: "menu", labelAr: "إدارة وماسح المنيو", labelEn: "Menu & AI Scanner", icon: UtensilsCrossed },
+  { key: "frontend", labelAr: "إعدادات الواجهة والسلايدر", labelEn: "Site & Hero Slider", icon: MonitorSmartphone },
   { key: "ops", labelAr: "المناطق والإعلانات", labelEn: "Zones & Promo", icon: Settings2 },
 ];
 
@@ -98,14 +95,14 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
           <div className="flex items-center gap-2">
             <button
               onClick={load}
-              className="grid size-9 place-items-center rounded-full border border-white/10 text-white/70 transition hover:border-brand-500 hover:text-brand-400"
+              className="grid size-9 place-items-center rounded-full border border-white/10 text-white/70 transition hover:border-brand-500 hover:text-brand-400 cursor-pointer"
               aria-label="refresh"
             >
               <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
             </button>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="grid size-9 place-items-center rounded-full border border-white/10 text-white/70 transition hover:border-brand-500"
+              className="grid size-9 place-items-center rounded-full border border-white/10 text-white/70 transition hover:border-brand-500 cursor-pointer"
               aria-label="theme"
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -118,7 +115,7 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
             </Link>
             <button
               onClick={onLogout}
-              className="flex h-9 items-center gap-1.5 rounded-full bg-red-500/10 px-3.5 text-xs font-bold text-red-400 transition hover:bg-red-500/20"
+              className="flex h-9 items-center gap-1.5 rounded-full bg-red-500/10 px-3.5 text-xs font-bold text-red-400 transition hover:bg-red-500/20 cursor-pointer"
             >
               <LogOut className="size-3.5" /> خروج
             </button>
@@ -128,12 +125,12 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
 
       <div className="mx-auto flex max-w-[1500px] gap-6 px-4 py-6 md:px-6">
         {/* Sidebar */}
-        <aside className="sticky top-24 hidden h-fit w-56 shrink-0 flex-col gap-1 md:flex">
+        <aside className="sticky top-24 hidden h-fit w-60 shrink-0 flex-col gap-1 md:flex">
           {TABS.map((tItem) => (
             <button
               key={tItem.key}
               onClick={() => setTab(tItem.key)}
-              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-start text-sm font-bold transition ${
+              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-start text-sm font-bold transition cursor-pointer ${
                 tab === tItem.key ? "bg-brand-500 text-white shadow-lg glow-brand" : "text-white/60 hover:bg-white/5 hover:text-white"
               }`}
             >
@@ -164,7 +161,6 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
                 {tab === "orders" && <OrdersTab token={token} data={data} refresh={load} />}
                 {tab === "customers" && <CustomersTab data={data} />}
                 {tab === "menu" && <MenuTab token={token} data={data} refresh={load} />}
-                {tab === "scanner" && <MenuScanner />}
                 {tab === "frontend" && <FrontendTab data={data} refresh={load} />}
                 {tab === "ops" && <OpsTab token={token} data={data} refresh={load} />}
               </motion.div>
