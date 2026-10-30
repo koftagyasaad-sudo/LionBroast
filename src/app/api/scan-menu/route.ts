@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
+// دالة تأخير زمني لإعادة المحاولة عند ضغط سيرفرات جوجل (503)
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -21,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "مفتاح GEMINI_API_KEY غير متوفر في متغيرات بيئة Vercel." },
+        { ok: false, error: "مفتاح GEMINI_API_KEY غير متوفر في إعدادات البيئة بـ Vercel." },
         { status: 500 }
       );
     }
@@ -31,93 +34,79 @@ export async function POST(req: NextRequest) {
     const base64Data = buffer.toString("base64");
     const mimeType = file.type || "image/jpeg";
 
-    const promptText = `أنت نظام ذكاء اصطناعي متخصص في مسح وقراءة قوائم طعام المطاعم واستخراج البيانات لبرامج الكاشير (مثل DG Menus).
-قم بتحليل صورة منيو مطعم بروست الأسد واستخرج جميع الأصناف والأقسام والأسعار والمكونات بدقة 100%.
-هام جداً: أعد المخرجات حصراً في شكل مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي شروحات جانبية:
+    const promptText = `أنت نظام ذكاء اصطناعي متخصص في استخراج بيانات قوائم طعام المطاعم بدقة 100%.
+قم بتحليل صورة المنيو المرفقة واستخرج جميع الأقسام والوجبات والأسعار والمكونات.
+هام جداً: أعد المخرجات في شكل مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون شروحات:
 [
   {
-    "categoryNameAr": "اسم القسم بالعربي (مثلاً: وجبات فردية، مكس الأسد، عائلات مكس، وجبات عائلية ورك)",
-    "itemNameAr": "اسم الوجبة كاملاً (مثلاً: وجبة ورك التوفير 8 قطع)",
-    "descriptionAr": "مكونات الوجبة أو التفاصيل إن وجدت",
-    "price": 180
+    "categoryNameAr": "اسم القسم بالعربي",
+    "itemNameAr": "اسم الوجبة كاملاً",
+    "descriptionAr": "مكونات الوجبة إن وجدت",
+    "price": 120
   }
 ]`;
 
-    // 1. الاستعلام الذكي لمعرفة الموديلات النشطة والمتاحة على مفتاحك حالياً (لحذف خطأ 404 نهائياً)
-    let selectedModel = "gemini-2.5-flash";
-    try {
-      const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        const available: any[] = listData?.models || [];
-        const contentModels = available.filter((m) =>
-          m.supportedGenerationMethods?.includes("generateContent")
-        );
-
-        const best =
-          contentModels.find((m) => m.name?.includes("2.5-flash")) ||
-          contentModels.find((m) => m.name?.includes("2.0-flash")) ||
-          contentModels.find((m) => m.name?.includes("flash")) ||
-          contentModels[0];
-
-        if (best && best.name) {
-          selectedModel = best.name.replace(/^models\//, "");
-        }
-      }
-    } catch {
-      // الاعتماد على الموديل الافتراضي في حال تعذر القائمة
-    }
-
+    // قائمة موديلات سريعة وبديلة لتفادي ضغط السيرفرات
     const candidateModels = [
-      selectedModel,
-      "gemini-2.5-flash",
       "gemini-2.0-flash",
+      "gemini-2.5-flash",
       "gemini-2.0-flash-lite",
-      "gemini-flash-latest",
+      "gemini-1.5-flash",
     ];
 
     let rawText = "";
     let lastError = "";
 
+    // تجربة الموديلات مع محاولات إعادة تلقائية عند ظهور كود 503
     for (const model of candidateModels) {
-      try {
-        const cleanName = model.replace(/^models\//, "");
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`;
-
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: promptText },
-                  { inlineData: { mimeType, data: base64Data } },
-                ],
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: promptText },
+                    { inlineData: { mimeType, data: base64Data } },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.1,
+                responseMimeType: "application/json",
               },
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: "application/json",
-            },
-          }),
-        });
+            }),
+          });
 
-        if (res.ok) {
-          const jsonRes = await res.json();
-          rawText = jsonRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          if (rawText) break;
-        } else {
-          lastError = await res.text();
+          if (res.ok) {
+            const jsonRes = await res.json();
+            rawText = jsonRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            if (rawText) break;
+          } else {
+            const errStatus = res.status;
+            lastError = await res.text();
+            // لو السيرفر عليه ضغط (503)، انتظر ثانية وجرب مجدداً أو انقل للموديل التالي
+            if (errStatus === 503) {
+              await delay(1200);
+              continue;
+            } else {
+              break;
+            }
+          }
+        } catch (err: any) {
+          lastError = err?.message || "Connection error";
         }
-      } catch (err: any) {
-        lastError = err?.message || "Connection error";
       }
+
+      if (rawText) break;
     }
 
     if (!rawText) {
       return NextResponse.json(
-        { ok: false, error: `تعذر قراءة المنيو من السيرفر: ${lastError}` },
+        { ok: false, error: "سيرفر الذكاء الاصطناعي مشغول حالياً، يرجى إعادة الضغط على زر الاستخراج الآن." },
         { status: 500 }
       );
     }
@@ -138,7 +127,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Scan menu API error:", error);
     return NextResponse.json(
-      { ok: false, error: error?.message || "حدث خطأ غير متوقع أثناء معالجة الصورة." },
+      { ok: false, error: "حدث خطأ أثناء معالجة الصورة، يرجى المحاولة مرة أخرى." },
       { status: 500 }
     );
   }
