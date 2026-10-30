@@ -19,9 +19,10 @@ import {
   FileText,
   Phone,
   Sparkles,
+  MessageCircle,
+  PhoneCall,
 } from "lucide-react";
 
-// ضاغط صور فوري يخفض الأبعاد وجودة الملف ليكون الحجم أقل من 80KB ويُحفظ فوراً
 function compressImage(file: File, maxWidth = 900, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -110,24 +111,17 @@ export default function FrontendTab(props: any) {
   const [slides, setSlides] = useState<any[]>(initialSlides);
 
   const [form, setForm] = useState({
+    // هوية المطعم والشعار
     brandNameAr: initialData.brandNameAr || initialData.brand_name_ar || "بروست الأسد",
     logoUrl: initialData.logoUrl || initialData.logo_url || "/img/icon-512.png",
     marqueeTextAr:
       initialData.marqueeTextAr ||
       initialData.marquee_text_ar ||
       "🔥 توصيل سريع وساخن لجميع أنحاء دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥",
-    addressAr:
-      initialData.addressAr ||
-      initialData.address_ar ||
-      "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية",
-    workingHoursAr:
-      initialData.workingHoursAr || initialData.working_hours_ar || "يومياً من 10 صباحا حتى 4 فجرا",
-    hotline: initialData.hotline || "0248813666",
-    whatsapp: initialData.whatsapp || "201034419424",
-    branchMapsUrl:
-      initialData.branchMapsUrl ||
-      initialData.branch_maps_url ||
-      "https://maps.google.com/?q=دسوق+شارع+الجيش",
+
+    // 1. المكان الأول: بانر الـ VIP (أكبر قطعة بروست في دسوق)
+    promoBadgeAr:
+      initialData.promoBadgeAr || initialData.promo_badge_ar || "عروض ومميزات بروست الأسد VIP 🍗",
     promoTitleAr:
       initialData.promoTitleAr ||
       initialData.promo_title_ar ||
@@ -136,11 +130,39 @@ export default function FrontendTab(props: any) {
       initialData.promoSubtitleAr ||
       initialData.promo_subtitle_ar ||
       "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير العائلية والفردية، توصيل سريع وسخن لحد باب بيتك في دسوق وجميع القرى المجاورة.",
+    promoBtnTextAr:
+      initialData.promoBtnTextAr || initialData.promo_btn_text_ar || "اطلب الآن 🍗",
+    promoBtnLink:
+      initialData.promoBtnLink || initialData.promo_btn_link || "/menu",
+
+    // 2. المكان الثاني: سكشن الفرع واللوكيشن وخرائط Google Maps
+    locationTitleAr:
+      initialData.locationTitleAr || initialData.location_title_ar || "شرفنا في فرع بروست الأسد 🦁",
+    locationSubtitleAr:
+      initialData.locationSubtitleAr ||
+      initialData.location_subtitle_ar ||
+      "نقدم لك أعلى جودة وأسرع خدمة تيك واي ودليفري في دسوق والمناطق المجاورة.",
+    addressAr:
+      initialData.addressAr ||
+      initialData.address_ar ||
+      "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية",
+    workingHoursAr:
+      initialData.workingHoursAr || initialData.working_hours_ar || "يومياً من 10 صباحا حتى 4 فجرا",
+    branchMapsUrl:
+      initialData.branchMapsUrl ||
+      initialData.branch_maps_url ||
+      "https://maps.google.com/?q=دسوق+شارع+الجيش",
+
+    // 3. المكان الثالث: بانر الطلب السريع والواتساب (جوعان؟ الأسد مستنيك)
     ctaTitleAr: initialData.ctaTitleAr || initialData.cta_title_ar || "جوعان؟ الأسد مستنيك.",
     ctaSubtitleAr:
       initialData.ctaSubtitleAr ||
       initialData.cta_subtitle_ar ||
-      "اطلب على واتساب لسرعه التواصل و الطلبات – أو كلمنا علي الخط الساخن 0248813666",
+      "اطلب على واتساب في ٣٠ ثانية – أو كلم الخط الساخن والفرن يولّع على طول.",
+    hotline: initialData.hotline || "0248813666",
+    whatsapp: initialData.whatsapp || "201034419424",
+
+    // الفوتر السفلي
     footerAboutAr:
       initialData.footerAboutAr ||
       initialData.footer_about_ar ||
@@ -246,10 +268,10 @@ export default function FrontendTab(props: any) {
         <div>
           <h2 className="flex items-center gap-2 text-xl font-extrabold">
             <Sliders className="size-5 text-brand-500" />
-            إدارة الواجهة، السلايدر والفوتر الشاملة
+            إدارة الواجهة والسكاشن الثلاثة الشاملة
           </h2>
           <p className="mt-1 text-xs text-white/60">
-            تحكم في صور وعناوين وأزرار السلايدر العلوي، ونصوص الفوتر السفلية، واللوجو، وروابط الخرائط.
+            تحكم في بانر الـ VIP، سكشن الفرع واللوكيشن المدمج، بانر الطلب والواتساب، والسلايدر.
           </p>
         </div>
 
@@ -265,7 +287,7 @@ export default function FrontendTab(props: any) {
           ) : (
             <Save className="size-4" />
           )}
-          <span>{saving ? "جاري الحفظ في الداتابيز..." : saved ? "تم حفظ الواجهة بنجاح ✓" : "حفظ كل التعديلات الآن"}</span>
+          <span>{saving ? "جاري الحفظ..." : saved ? "تم حفظ كل التعديلات بنجاح ✓" : "حفظ كل التعديلات الآن"}</span>
         </button>
       </div>
 
@@ -276,16 +298,221 @@ export default function FrontendTab(props: any) {
         </div>
       )}
 
-      {/* 1. قسم إدارة السلايدر العلوي يدوياً (Hero Slider) */}
-      <div className="rounded-3xl border border-brand-500/40 bg-carbon-900/60 p-6 md:p-8 space-y-6 backdrop-blur-xl">
+      {/* ========================================================================= */}
+      {/* 1. المكان الأول: تعديل بانر العروض والمميزات VIP (أكبر قطعة بروست في دسوق) */}
+      {/* ========================================================================= */}
+      <div className="rounded-3xl border border-amber-500/40 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
+        <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+          <Sparkles className="size-5 text-amber-400" />
+          <h3 className="font-extrabold text-base text-amber-400">
+            المكان 1: بانر العروض والمميزات VIP (أكبر قطعة بروست في دسوق)
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">الشارة العلوية (Badge):</label>
+            <input
+              value={form.promoBadgeAr}
+              onChange={(e) => setForm({ ...form, promoBadgeAr: e.target.value })}
+              placeholder="مثال: عروض ومميزات بروست الأسد VIP 🍗"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">العنوان الرئيسي للبانر:</label>
+            <input
+              value={form.promoTitleAr}
+              onChange={(e) => setForm({ ...form, promoTitleAr: e.target.value })}
+              placeholder="مثال: أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs text-white/70 font-bold">النص الفرعي والشرح بالبانر:</label>
+          <textarea
+            rows={2}
+            value={form.promoSubtitleAr}
+            onChange={(e) => setForm({ ...form, promoSubtitleAr: e.target.value })}
+            placeholder="شرح العرض والتوصيل..."
+            className={inputClass}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">نص زر البانر:</label>
+            <input
+              value={form.promoBtnTextAr}
+              onChange={(e) => setForm({ ...form, promoBtnTextAr: e.target.value })}
+              placeholder="مثال: اطلب الآن 🍗"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">رابط الزر:</label>
+            <input
+              dir="ltr"
+              value={form.promoBtnLink}
+              onChange={(e) => setForm({ ...form, promoBtnLink: e.target.value })}
+              placeholder="/menu"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. المكان الثاني: تعديل سكشن الفرع واللوكيشن وخرائط Google Maps */}
+      {/* ========================================================================= */}
+      <div className="rounded-3xl border border-brand-500/40 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
+        <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+          <MapPin className="size-5 text-brand-500" />
+          <h3 className="font-extrabold text-base text-brand-400">
+            المكان 2: بيانات سكشن الفرع واللوكيشن وخرائط Google Maps
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">عنوان السكشن الرئيسي:</label>
+            <input
+              value={form.locationTitleAr}
+              onChange={(e) => setForm({ ...form, locationTitleAr: e.target.value })}
+              placeholder="مثال: شرفنا في فرع بروست الأسد 🦁"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">الوصف الترحيبي للفرع:</label>
+            <input
+              value={form.locationSubtitleAr}
+              onChange={(e) => setForm({ ...form, locationSubtitleAr: e.target.value })}
+              placeholder="نقدم لك أعلى جودة وأسرع خدمة..."
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs text-white/70 font-bold">العنوان التفصيلي للفرع:</label>
+          <input
+            value={form.addressAr}
+            onChange={(e) => setForm({ ...form, addressAr: e.target.value })}
+            placeholder="دسوق - شارع الجيش - بجوار مستشفي النيل..."
+            className={inputClass}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">مواعيد العمل:</label>
+            <input
+              value={form.workingHoursAr}
+              onChange={(e) => setForm({ ...form, workingHoursAr: e.target.value })}
+              placeholder="يومياً من 10 صباحا حتى 4 فجرا"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">رابط الفرع على خرائط جوجل (Maps):</label>
+            <div className="flex gap-2">
+              <input
+                dir="ltr"
+                value={form.branchMapsUrl}
+                onChange={(e) => setForm({ ...form, branchMapsUrl: e.target.value })}
+                className={inputClass}
+              />
+              {form.branchMapsUrl && (
+                <a
+                  href={form.branchMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20 transition shrink-0"
+                >
+                  <ExternalLink className="size-3.5" />
+                  تجربة
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. المكان الثالث: تعديل بانر الطلب السريع والواتساب (جوعان؟ الأسد مستنيك) */}
+      {/* ========================================================================= */}
+      <div className="rounded-3xl border border-emerald-500/40 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
+        <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+          <PhoneCall className="size-5 text-emerald-400" />
+          <h3 className="font-extrabold text-base text-emerald-400">
+            المكان 3: بيانات بانر الطلب السريع والواتساب (جوعان؟ الأسد مستنيك)
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">العنوان التشويقي:</label>
+            <input
+              value={form.ctaTitleAr}
+              onChange={(e) => setForm({ ...form, ctaTitleAr: e.target.value })}
+              placeholder="مثال: جوعان؟ الأسد مستنيك."
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold">نص الحث على الطلب:</label>
+            <input
+              value={form.ctaSubtitleAr}
+              onChange={(e) => setForm({ ...form, ctaSubtitleAr: e.target.value })}
+              placeholder="اطلب على واتساب في ٣٠ ثانية..."
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold flex items-center gap-1">
+              <Phone className="size-3.5 text-brand-400" />
+              رقم الخط الساخن للطلبات:
+            </label>
+            <input
+              dir="ltr"
+              value={form.hotline}
+              onChange={(e) => setForm({ ...form, hotline: e.target.value })}
+              placeholder="0248813666"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-white/70 font-bold flex items-center gap-1">
+              <MessageCircle className="size-3.5 text-emerald-400" />
+              رقم الواتساب السريع:
+            </label>
+            <input
+              dir="ltr"
+              value={form.whatsapp}
+              onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+              placeholder="201034419424"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* قسم السلايدر العلوي */}
+      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-6 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
-            <h3 className="text-lg font-black flex items-center gap-2 text-amber-400">
+            <h3 className="text-base font-black flex items-center gap-2 text-white">
               <ImageIcon className="size-5 text-brand-500" />
               التحكم في شرائح السلايدر العلوي (Hero Slider)
             </h3>
             <p className="text-xs text-white/60 mt-0.5">
-              يمكنك إضافة أو حذف شرائح، تغيير الصورة، العنوان الكبير، النص الفرعي، والزراير.
+              إضافة وحذف شرائح، تغيير الصورة، العنوان الكبير، النص الفرعي، والزراير.
             </p>
           </div>
 
@@ -295,7 +522,7 @@ export default function FrontendTab(props: any) {
             className="flex items-center gap-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 px-4 py-2.5 text-xs font-black text-white shadow-lg transition cursor-pointer"
           >
             <Plus className="size-4" />
-            <span>إضافة شريحة جديدة للسلايدر</span>
+            <span>إضافة شريحة جديدة</span>
           </button>
         </div>
 
@@ -318,7 +545,6 @@ export default function FrontendTab(props: any) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                {/* معاينة ورفع صورة الشريحة */}
                 <div className="space-y-2">
                   <label className="block text-[11px] font-bold text-white/60">صورة العرض:</label>
                   <div className="relative h-32 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 flex items-center justify-center">
@@ -335,7 +561,7 @@ export default function FrontendTab(props: any) {
                       dir="ltr"
                       value={slide.image || ""}
                       onChange={(e) => handleSlideChange(idx, "image", e.target.value)}
-                      placeholder="رابط مباشر أو ارفع ملف"
+                      placeholder="رابط مباشر"
                       className={inputClass}
                     />
                     <label className="flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-[11px] font-bold hover:bg-white/20 transition">
@@ -356,7 +582,6 @@ export default function FrontendTab(props: any) {
                   </div>
                 </div>
 
-                {/* العناوين والنصوص */}
                 <div className="md:col-span-2 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -365,7 +590,7 @@ export default function FrontendTab(props: any) {
                         type="text"
                         value={slide.badge || ""}
                         onChange={(e) => handleSlideChange(idx, "badge", e.target.value)}
-                        placeholder="مثال: إصدار النار 🔥"
+                        placeholder="إصدار النار 🔥"
                         className={inputClass}
                       />
                     </div>
@@ -375,7 +600,7 @@ export default function FrontendTab(props: any) {
                         type="text"
                         value={slide.title || ""}
                         onChange={(e) => handleSlideChange(idx, "title", e.target.value)}
-                        placeholder="مثال: الحار اللي يولّع"
+                        placeholder="الحار اللي يولّع"
                         className={inputClass}
                       />
                     </div>
@@ -387,7 +612,7 @@ export default function FrontendTab(props: any) {
                       rows={2}
                       value={slide.subtitle || ""}
                       onChange={(e) => handleSlideChange(idx, "subtitle", e.target.value)}
-                      placeholder="وصف الوجبة والعرض..."
+                      placeholder="وصف الوجبة..."
                       className={inputClass}
                     />
                   </div>
@@ -399,7 +624,7 @@ export default function FrontendTab(props: any) {
                         type="text"
                         value={slide.cta1Text || ""}
                         onChange={(e) => handleSlideChange(idx, "cta1Text", e.target.value)}
-                        placeholder="مثال: تحدي النار 🍗"
+                        placeholder="تحدي النار 🍗"
                         className={inputClass}
                       />
                     </div>
@@ -409,7 +634,7 @@ export default function FrontendTab(props: any) {
                         type="text"
                         value={slide.cta2Text || ""}
                         onChange={(e) => handleSlideChange(idx, "cta2Text", e.target.value)}
-                        placeholder="مثال: شوف المنيو"
+                        placeholder="شوف المنيو"
                         className={inputClass}
                       />
                     </div>
@@ -421,7 +646,7 @@ export default function FrontendTab(props: any) {
         </div>
       </div>
 
-      {/* 2. قسم الشعار وهوية المتجر */}
+      {/* قسم الشعار وهوية المتجر */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
         <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
           <Building2 className="size-4 text-brand-500" />
@@ -465,132 +690,7 @@ export default function FrontendTab(props: any) {
         </div>
       </div>
 
-      {/* 3. موقع Google Maps وبيانات الفرع */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
-        <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3 text-amber-400">
-          <MapPin className="size-4 text-amber-400" />
-          رابط Google Maps وبيانات الفرع
-        </h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs text-white/60 font-bold">رابط الفرع على خرائط جوجل:</label>
-            <div className="flex gap-2">
-              <input
-                dir="ltr"
-                value={form.branchMapsUrl}
-                onChange={(e) => setForm({ ...form, branchMapsUrl: e.target.value })}
-                className={inputClass}
-              />
-              {form.branchMapsUrl && (
-                <a
-                  href={form.branchMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold hover:bg-white/20 transition shrink-0"
-                >
-                  <ExternalLink className="size-3.5" />
-                  تجربة الرابط
-                </a>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1 block text-xs text-white/60">العنوان بالتفصيل:</label>
-              <input
-                value={form.addressAr}
-                onChange={(e) => setForm({ ...form, addressAr: e.target.value })}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">مواعيد العمل:</label>
-              <input
-                value={form.workingHoursAr}
-                onChange={(e) => setForm({ ...form, workingHoursAr: e.target.value })}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">الخط الساخن:</label>
-              <input
-                dir="ltr"
-                value={form.hotline}
-                onChange={(e) => setForm({ ...form, hotline: e.target.value })}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">رقم الواتساب:</label>
-              <input
-                dir="ltr"
-                value={form.whatsapp}
-                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                className={inputClass}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. قسم بانر العروض والمميزات VIP */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
-        <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
-          <Sparkles className="size-4 text-brand-500" />
-          بانر العروض والمميزات VIP (أكبر قطعة بروست)
-        </h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs text-white/60">العنوان الرئيسي للبانر:</label>
-            <input
-              value={form.promoTitleAr}
-              onChange={(e) => setForm({ ...form, promoTitleAr: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">نص الوصف بالبانر:</label>
-            <textarea
-              rows={2}
-              value={form.promoSubtitleAr}
-              onChange={(e) => setForm({ ...form, promoSubtitleAr: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 5. قسم البانر التحفيزي (جوعان؟ الأسد مستنيك) */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
-        <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
-          <Phone className="size-4 text-brand-500" />
-          بانر الطلب السريع (جوعان؟ الأسد مستنيك)
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-xs text-white/60">العنوان الرئيسي:</label>
-            <input
-              value={form.ctaTitleAr}
-              onChange={(e) => setForm({ ...form, ctaTitleAr: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">الوصف الفرعي:</label>
-            <input
-              value={form.ctaSubtitleAr}
-              onChange={(e) => setForm({ ...form, ctaSubtitleAr: e.target.value })}
-              className={inputClass}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 6. بيانات ونصوص الفوتر (الجزء السفلي خالص) */}
+      {/* بيانات ونصوص الفوتر (الجزء السفلي خالص) */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 space-y-4 backdrop-blur-xl">
         <h3 className="flex items-center gap-2 font-extrabold text-base border-b border-white/10 pb-3">
           <FileText className="size-4 text-brand-500" />
