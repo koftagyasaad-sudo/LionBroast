@@ -11,14 +11,14 @@ import ZonesSection from "@/components/ZonesSection";
 import LocationBlock from "@/components/LocationBlock";
 import ChefCta from "@/components/ChefCta";
 import Footer from "@/components/Footer";
-import FloatingDock from "@/components/FloatingDock";
 import CartDrawer from "@/components/CartDrawer";
 
-// إيقاف الكاش لضمان مزامنة التعديلات من لوحة التحكم فوراً
+// إيقاف التخزين المؤقت الثابت لضمان قراءة التعديلات من لوحة التحكم فوراً
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function HomePage() {
+  // جلب البيانات من السيرفر مع حماية كاملة ضد أي انهيار
   const [frontend, promo, rawCatsWithItems, rawZones, rawItems] = await Promise.all([
     getFrontendSettings().catch(() => null),
     getPromo().catch(() => null),
@@ -27,44 +27,46 @@ export default async function HomePage() {
     db.select().from(menuItems).catch(() => []),
   ]);
 
-  // تأمين مصفوفات آمنة 100% لمنع أي خطأ reading 'length'
+  // تأمين مصفوفات مضمونة ومحصنة 100% لمنع خطأ is not iterable
   const zonesList = Array.isArray(rawZones) ? rawZones : [];
   const itemsList = Array.isArray(rawItems) ? rawItems : [];
 
-  // التأكد من أن كل قسم يحتوي على مصفوفة items سليمة
+  // التأكد من أن كل تصنيف يحتوي على مصفوفة items حقيقية
   const catsWithItems = Array.isArray(rawCatsWithItems)
     ? rawCatsWithItems.map((c: any) => ({
         ...c,
+        id: String(c?.id || ""),
+        nameAr: String(c?.nameAr || ""),
+        nameEn: String(c?.nameEn || ""),
         items: Array.isArray(c?.items) ? c.items : [],
       }))
     : [];
 
-  // تجميع كافة الأصناف النشطة للأكثر مبيعاً
+  // جمع كافة الأصناف النشطة
   const allItems = catsWithItems.flatMap((c: any) => c.items || []);
   const bestItems = allItems.length > 0 ? allItems : itemsList;
 
-  // تجهيز شرائح السلايدر من إعدادات الواجهة
-  const heroSlides = [
-    frontend?.heroImage1 || frontend?.hero_image_1,
-    frontend?.heroImage2 || frontend?.hero_image_2,
-    frontend?.heroImage3 || frontend?.hero_image_3,
-  ].filter(Boolean);
+  // نص شريط الأخبار
+  const marqueeText =
+    frontend?.marqueeTextAr ||
+    frontend?.marquee_text_ar ||
+    "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
   return (
     <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500 overflow-x-hidden">
-      {/* 1. الهيدر وشريط التنقل العلوي */}
-      <Header frontend={frontend} promo={promo} />
+      {/* 1. الهيدر وشريط التنقل العلوي (محمي ومطابق للتصميم) */}
+      <Header frontend={frontend} settings={frontend} promo={promo} />
 
       {/* 2. السلايدر الرئيسي */}
-      <HeroSlider frontend={frontend} slides={heroSlides} images={heroSlides} />
+      <HeroSlider frontend={frontend} />
 
-      {/* 3. شريط الأخبار والعروض المتحرك */}
-      <MarqueeStrip text={frontend?.marqueeTextAr || "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن 🔥"} />
+      {/* 3. شريط الأخبار المتحرك (مزود بـ text و items لتفادي أي خطأ spread) */}
+      <MarqueeStrip text={marqueeText} items={[marqueeText, marqueeText]} />
 
-      {/* 4. سكشن الأكثر مبيعاً (محصن ضد الـ undefined) */}
-      {bestItems.length > 0 && (
+      {/* 4. سكشن الأكثر مبيعاً (لا يُعرض إلا عند وجود أصناف فعلية ومزود بكافة الخصائص المطلوبة) */}
+      {catsWithItems.length > 0 && bestItems.length > 0 && (
         <section id="best">
-          <BestSellers items={bestItems} />
+          <BestSellers categories={catsWithItems} items={bestItems} />
         </section>
       )}
 
@@ -100,7 +102,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 6. سكشن المنيو وقائمة الطعام (مع معالجة الحالة الفارغة بأمان) */}
+      {/* 6. سكشن المنيو وقائمة الطعام (مع معالجة الحالة الفارغة بأمان تام) */}
       <section id="menu">
         {catsWithItems.length > 0 ? (
           <MenuPreview categories={catsWithItems} />
@@ -125,22 +127,21 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 7. سكشن مناطق وأسعار التوصيل */}
+      {/* 7. سكشن مناطق وأسعار التوصيل (مزود بالمصفوفة لجميع الأسماء المحتملة) */}
       <section id="zones">
-        <ZonesSection zones={zonesList} deliveryZones={zonesList} />
+        <ZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
 
-      {/* 8. سكشن عنوان الفرع ورابط Google Maps */}
+      {/* 8. سكشن عنوان الفرع ورابط Google Maps المباشر */}
       <LocationBlock frontend={frontend} />
 
       {/* 9. بانر الطلب السريع (جوعان؟ الأسد مستنيك) */}
-      <ChefCta frontend={frontend} />
+      <ChefCta frontend={frontend} settings={frontend} />
 
       {/* 10. الفوتر وروابط التواصل */}
-      <Footer frontend={frontend} />
+      <Footer frontend={frontend} settings={frontend} />
 
-      {/* العناصر التفاعلية العامة */}
-      <FloatingDock promo={promo} />
+      {/* سلة المشتريات العامة */}
       <CartDrawer />
     </main>
   );
