@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function HomePage() {
-  const [frontend, promo, rawCatsWithItems, rawZones, rawItems] = await Promise.all([
+  const [frontend, rawPromo, rawCatsWithItems, rawZones, rawItems] = await Promise.all([
     getFrontendSettings().catch(() => null),
     getPromo().catch(() => null),
     getCategoriesWithItems().catch(() => []),
@@ -26,6 +26,7 @@ export default async function HomePage() {
     db.select().from(menuItems).catch(() => []),
   ]);
 
+  const promo: any = rawPromo;
   const zonesList = Array.isArray(rawZones) ? rawZones : [];
   const itemsList = Array.isArray(rawItems) ? rawItems : [];
 
@@ -47,11 +48,12 @@ export default async function HomePage() {
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
+  // فحص حالة ظهور الإعلان المؤقت مع تجاوز قيود TypeScript بأمان
   const isPromoVisible =
-    promo &&
-    promo.enabled !== false &&
-    promo.visible !== false &&
-    Boolean(promo.textAr || promo.title);
+    Boolean(promo) &&
+    promo?.enabled !== false &&
+    promo?.visible !== false &&
+    Boolean(promo?.textAr || promo?.title);
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-carbon-950 text-zinc-900 dark:text-white selection:bg-brand-500 overflow-x-hidden transition-colors duration-300">
@@ -184,7 +186,7 @@ export default async function HomePage() {
       </section>
 
       {/* ========================================================================= */}
-      {/* 9. المكان 2 و 3 مدمجان: سكشن الفرع واللوكيشن + بانر الطلب والواتساب (برتقالي موحد) */}
+      {/* 9. سكشن الفرع واللوكيشن + بانر الطلب والواتساب (برتقالي موحد) */}
       {/* ========================================================================= */}
       <LocationBlock frontend={frontend} settings={frontend} />
 
