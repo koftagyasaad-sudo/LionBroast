@@ -16,8 +16,8 @@ import {
   MapPin,
   PhoneCall,
 } from "lucide-react";
-import { cartCount, useApp } from "@/store/app-store";
-import { useDict, useMounted } from "@/lib/hooks";
+import { useApp } from "@/store/app-store";
+import { useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -27,14 +27,13 @@ interface HeaderProps {
 }
 
 export default function Header({ settings, frontend }: HeaderProps) {
-  const t = useDict();
   const mounted = useMounted();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const lang = useApp((s) => s.lang);
   const theme = useApp((s) => s.theme);
-  const cart = useApp((s) => s.cart);
+  const cart = useApp((s) => s.cart) || [];
   const customer = useApp((s) => s.customer);
   const setLang = useApp((s) => s.setLang);
   const setTheme = useApp((s) => s.setTheme);
@@ -44,7 +43,7 @@ export default function Header({ settings, frontend }: HeaderProps) {
 
   const storeData = frontend || settings || {};
   const logoUrl = storeData.logoUrl || storeData.logo_url || "/img/icon-512.png";
-  const brandName = storeData.brandNameAr || storeData.brand_name_ar || t.brand || "بروست الأسد";
+  const brandName = storeData.brandNameAr || storeData.brand_name_ar || "بروست الأسد";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 15);
@@ -53,7 +52,23 @@ export default function Header({ settings, frontend }: HeaderProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const count = mounted ? cartCount(cart) : 0;
+  // تطبيق كلاس الثيم مباشرة على عنصر html
+  const handleToggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    if (typeof document !== "undefined") {
+      if (nextTheme === "dark") {
+        document.documentElement.classList.add("dark");
+        document.documentElement.classList.remove("light");
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.classList.add("light");
+      }
+      localStorage.setItem("lion_theme", nextTheme);
+    }
+  };
+
+  const count = cart.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0);
 
   const links = [
     { href: "/menu", label: "المنيو", icon: UtensilsCrossed },
@@ -72,8 +87,8 @@ export default function Header({ settings, frontend }: HeaderProps) {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-all duration-300",
         scrolled
-          ? "bg-carbon-950/95 backdrop-blur-xl border-b border-white/15 py-2.5 shadow-2xl"
-          : "bg-gradient-to-b from-carbon-950/90 via-carbon-950/60 to-transparent py-4 backdrop-blur-[2px]"
+          ? "bg-zinc-900/95 dark:bg-carbon-950/95 backdrop-blur-xl border-b border-white/15 py-2.5 shadow-2xl"
+          : "bg-gradient-to-b from-black/90 via-black/50 to-transparent py-4 backdrop-blur-[2px]"
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 md:px-8">
@@ -95,8 +110,8 @@ export default function Header({ settings, frontend }: HeaderProps) {
           </span>
         </Link>
 
-        {/* Desktop Navigation with high contrast pill container */}
-        <nav className="hidden items-center gap-1 lg:flex bg-carbon-950/70 border border-white/15 rounded-full px-3 py-1 shadow-xl backdrop-blur-md">
+        {/* Desktop Navigation */}
+        <nav className="hidden items-center gap-1 lg:flex bg-black/60 border border-white/15 rounded-full px-3 py-1 shadow-xl backdrop-blur-md">
           {links.map((l) => (
             <Link
               key={l.href}
@@ -112,22 +127,28 @@ export default function Header({ settings, frontend }: HeaderProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="flex h-10 items-center gap-1.5 rounded-full border border-white/20 bg-carbon-950/80 px-3 text-xs font-bold text-white shadow-md backdrop-blur-md hover:border-brand-500 transition"
+            className="flex h-10 items-center gap-1.5 rounded-full border border-white/20 bg-black/70 px-3 text-xs font-bold text-white shadow-md backdrop-blur-md hover:border-brand-500 transition cursor-pointer"
           >
             <Languages className="size-4 text-brand-400" />
             <span>{lang === "ar" ? "English" : "العربية"}</span>
           </button>
 
+          {/* زر تبديل الثيم (شغال 100%) */}
           <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/80 text-white shadow-md backdrop-blur-md hover:border-brand-500 transition"
+            onClick={handleToggleTheme}
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/70 text-white shadow-md backdrop-blur-md hover:border-brand-500 transition cursor-pointer"
+            title="تبديل المظهر"
           >
-            {mounted && theme === "light" ? <Sun className="size-4.5 text-amber-400" /> : <Moon className="size-4.5 text-blue-400" />}
+            {mounted && theme === "light" ? (
+              <Sun className="size-4.5 text-amber-400" />
+            ) : (
+              <Moon className="size-4.5 text-blue-400" />
+            )}
           </button>
 
           <button
             onClick={openPass}
-            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/60 bg-carbon-950/90 px-3.5 text-xs font-black text-cheese-300 shadow-md backdrop-blur-md hover:bg-cheese-400/20 transition sm:flex"
+            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/60 bg-black/80 px-3.5 text-xs font-black text-cheese-300 shadow-md backdrop-blur-md hover:bg-cheese-400/20 transition sm:flex cursor-pointer"
           >
             <QrCode className="size-4 text-cheese-400" />
             <span>بطاقة الأسد VIP</span>
@@ -135,11 +156,11 @@ export default function Header({ settings, frontend }: HeaderProps) {
 
           <button
             onClick={() => setCartOpen(true)}
-            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105 shadow-xl"
+            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105 shadow-xl cursor-pointer"
           >
             <ShoppingBag className="size-5" />
             {count > 0 && (
-              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-black text-carbon-950 ring-2 ring-bg">
+              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-black text-black ring-2 ring-brand-500">
                 {count}
               </span>
             )}
@@ -147,7 +168,7 @@ export default function Header({ settings, frontend }: HeaderProps) {
 
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/80 text-white lg:hidden"
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/70 text-white lg:hidden cursor-pointer"
           >
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -161,7 +182,7 @@ export default function Header({ settings, frontend }: HeaderProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-carbon-950/98 border-b border-white/15 backdrop-blur-2xl lg:hidden"
+            className="bg-zinc-950/98 border-b border-white/15 backdrop-blur-2xl lg:hidden"
           >
             <div className="space-y-1.5 px-4 py-4">
               {links.map((l) => (
