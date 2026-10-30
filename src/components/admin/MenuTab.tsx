@@ -24,6 +24,53 @@ import {
   X,
 } from "lucide-react";
 
+// ضاغط الصور السريع في المتصفح لتفادي حد 4.5MB في Vercel نهائياً
+function compressImageForScan(file: File): Promise<Blob> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 1400;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            resolve(blob || file);
+          },
+          "image/jpeg",
+          0.78
+        );
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+}
+
 export default function MenuTab({ data, refresh }: { token?: string; data?: any; refresh?: () => void }) {
   const categoriesList: any[] = Array.isArray(data?.categories) ? data.categories : [];
   const itemsList: any[] = Array.isArray(data?.menuItems || data?.items) ? (data?.menuItems || data?.items) : [];
@@ -51,7 +98,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
   });
   const [savingItem, setSavingItem] = useState(false);
 
-  // حالة الماسح المباشر (مثل DG Menus عبر API)
+  // حالة الماسح الذكي
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -147,25 +194,33 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     }
   };
 
-  // إرسال الصورة عبر FormData إلى API Route المستقل (نفس أسلوب DG Menus المضمون 100%)
+  // استدعاء محصن مع ضغط تلقائي وفحص آمن للرد
   const handleScanMenu = async () => {
     if (!scanFile) return;
     setScanning(true);
     setScanMsg(null);
     try {
+      const compressedBlob = await compressImageForScan(scanFile);
       const formData = new FormData();
-      formData.append("file", scanFile);
+      formData.append("file", compressedBlob, "menu.jpg");
 
       const res = await fetch("/api/scan-menu", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-      if (data.ok && data.data && data.data.length > 0) {
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text.slice(0, 150) || "تعذر معالجة الرد من السيرفر.");
+      }
+
+      if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
         setScannedRows(data.data);
       } else {
-        setScanMsg(data.error || "تعذر قراءة محتوى المنيو، تأكد من وضوح الصورة وزوايا الخط.");
+        setScanMsg(data.error || "تعذر قراءة محتوى المنيو، تأكد من وضوح الصورة وزاوية التصوير.");
       }
     } catch (err: any) {
       setScanMsg(err?.message || "حدث خطأ في الاتصال بالـ API.");
@@ -260,7 +315,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
                 <label htmlFor="scanner-upload" className="cursor-pointer flex flex-col items-center justify-center gap-2">
                   <Upload className="size-10 text-brand-500" />
                   <span className="text-sm font-bold text-white">اختر صورة المنيو لتحليلها بالذكاء الاصطناعي</span>
-                  <span className="text-[11px] text-white/40">تتم المعالجة عبر سيرفر الذكاء الاصطناعي مباشرة بدون قيود</span>
+                  <span className="text-[11px] text-white/40">تتم المعالجة عبر سيرفر الذكاء الاصطناعي مباشرة مع ضغط آمن تلقائياً</span>
                 </label>
               </div>
 
