@@ -168,4 +168,30 @@ export default function CustomerQRCode({
               </div>
 
               <div className="rounded-xl border border-white/5 bg-black/30 p-2.5 text-center">
-                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0
+                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0.5">
+                  <ShoppingBag className="size-3 text-brand-400" />
+                  <span>إجمالي الطلبات</span>
+                </div>
+                <span className="text-base font-black text-white">{ordersCount}</span>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-black/30 p-2.5 text-center">
+                <div className="flex items-center justify-center gap-1 text-[10px] text-white/50 font-bold mb-0.5">
+                  <Flame className="size-3 text-red-400" />
+                  <span>إجمالي الحساب</span>
+                </div>
+                <span className="text-base font-black text-white">
+                  {spent} <span className="text-[10px]">ج.م</span>
+                </span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-center text-[10px] font-semibold text-white/40">
+              أظهر هذا الرمز للكاشير أو عند طلب الدليفري للحصول على الخصم المباشر والنقاط.
+            </p>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
