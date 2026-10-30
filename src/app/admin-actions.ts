@@ -206,7 +206,205 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة التصنيفات (حذف تتابعي يفك قيد المفتاح الأجنبي)
+// 2. ماسح المنيو الذكي (استدعاء دقيق لموديلات Gemini الرسمية وحل 404 جذرياً)
+// =========================================================================
+export async function adminScanMenuAction(payload: {
+  fileName?: string;
+  imageBase64: string;
+  mimeType?: string;
+}) {
+  try {
+    let apiKey = (
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+      ""
+    ).trim().replace(/^["']|["']$/g, "");
+
+    if (!apiKey) {
+      return {
+        success: false,
+        ok: false,
+        error: "مفتاح GEMINI_API_KEY غير متوفر في متغيرات بيئة Vercel. يرجى إضافته في Settings ➔ Environment Variables.",
+      };
+    }
+
+    if (!payload?.imageBase64) {
+      return { success: false, ok: false, error: "لم يتم استلام ملف الصورة بشكل صحيح." };
+    }
+
+    let cleanBase64 = payload.imageBase64;
+    if (cleanBase64.includes(",")) {
+      cleanBase64 = cleanBase64.split(",")[1];
+    }
+
+    const mimeType = payload.mimeType || "image/jpeg";
+
+    const promptText = `أنت خبير محترف في تحليل وقراءة قوائم طعام المطاعم واستخراج البيانات الميدانية بدقة 100%.
+قم بتحليل صورة منيو مطعم بروست الأسد (Broast El-Assad) واستخرج جميع الأصناف والوجبات والأسعار والأقسام.
+أعد المخرجات في شكل مصفوفة JSON نقية ومباشرة بدون أي وسوم ماركداون وبدون أي مقدمات أو شروحات إطلاقاً:
+[
+  {
+    "categoryNameAr": "اسم القسم بالعربي",
+    "categoryNameEn": "Category name in English",
+    "itemNameAr": "اسم الوجبة أو الصنف بالعربي كاملاً",
+    "itemNameEn": "Item name in English",
+    "descriptionAr": "مكونات الوجبة إن وجدت",
+    "descriptionEn": "",
+    "price": 120
+  }
+]`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType, data: cleanBase64 } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      },
+    };
+
+    // تجربة الموديلات الرسمية القياسية المضمونة على Google AI Studio
+    const officialModels = [
+      "gemini-1.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-pro",
+    ];
+
+    let rawText = "";
+    let lastError = "";
+
+    for (const model of officialModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (res.ok) {
+          const resJson = await res.json();
+          rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (rawText) break;
+        } else {
+          lastError = await res.text();
+        }
+      } catch (err: any) {
+        lastError = err?.message || "Connection error";
+      }
+    }
+
+    if (!rawText) {
+      return {
+        success: false,
+        ok: false,
+        error: `تعذر الاتصال بموديل الذكاء الاصطناعي: ${lastError}`,
+      };
+    }
+
+    let cleanJson = rawText.trim();
+    const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      cleanJson = jsonMatch[0];
+    } else if (cleanJson.startsWith("```json")) {
+      cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
+    } else if (cleanJson.startsWith("```")) {
+      cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
+    }
+
+    const items = JSON.parse(cleanJson);
+    const rows: ScannedRow[] = items.map((it: any) => ({
+      categoryNameAr: String(it.categoryNameAr || it.categoryAr || "أصناف المنيو").trim(),
+      categoryNameEn: String(it.categoryNameEn || it.categoryEn || "Menu Items").trim(),
+      itemNameAr: String(it.itemNameAr || it.nameAr || it.name || "صنف جديد").trim(),
+      itemNameEn: String(it.itemNameEn || it.nameEn || "").trim(),
+      descriptionAr: String(it.descriptionAr || it.description || "").trim(),
+      descriptionEn: String(it.descriptionEn || "").trim(),
+      price: Number(it.price || 0),
+    }));
+
+    return { success: true, ok: true, data: rows, rows };
+  } catch (err: any) {
+    console.error("adminScanMenuAction error:", err);
+    return { success: false, ok: false, error: `حدث خطأ أثناء معالجة الصورة: ${err?.message || "تأكد من وضوح الصورة"}` };
+  }
+}
+
+// =========================================================================
+// 3. اعتماد وحفظ الأصناف المستخرجة في المنيو
+// =========================================================================
+export async function adminSaveScannedRowsAction(rows: any[]) {
+  try {
+    const list = Array.isArray(rows) ? rows : [];
+    if (list.length === 0) return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
+
+    const existingCats = await db.select().from(categories).catch(() => []);
+    const catMap = new Map<string, string>();
+    for (let i = 0; i < existingCats.length; i++) {
+      catMap.set(existingCats[i].nameAr.trim().toLowerCase(), existingCats[i].id);
+    }
+
+    let nextSortOrder = existingCats.length;
+
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      const catNameAr = String(r.categoryNameAr || r.categoryAr || "أصناف المنيو").trim();
+      const catNameEn = String(r.categoryNameEn || r.categoryEn || catNameAr).trim();
+      const itemNameAr = String(r.itemNameAr || r.nameAr || "").trim();
+      const itemNameEn = String(r.itemNameEn || r.nameEn || "").trim();
+      const descAr = String(r.descriptionAr || "").trim();
+      const descEn = String(r.descriptionEn || "").trim();
+      const priceNum = Number(r.price || 0);
+
+      if (!itemNameAr) continue;
+
+      let catId = catMap.get(catNameAr.toLowerCase());
+      if (!catId) {
+        catId = `cat-${Date.now()}-${i}`;
+        await db.insert(categories).values({
+          id: catId,
+          nameAr: catNameAr,
+          nameEn: catNameEn,
+          sortOrder: nextSortOrder++,
+        });
+        catMap.set(catNameAr.toLowerCase(), catId);
+      }
+
+      const itemId = `item-${Date.now()}-${i}`;
+      await db.insert(menuItems).values({
+        id: itemId,
+        categoryId: catId,
+        nameAr: itemNameAr,
+        nameEn: itemNameEn,
+        descriptionAr: descAr,
+        descriptionEn: descEn,
+        price: priceNum,
+        imageUrl: "",
+        badge: "",
+        isAvailable: 1,
+        sortOrder: i,
+      });
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { success: true, ok: true };
+  } catch (err: any) {
+    console.error("adminSaveScannedRowsAction error:", err);
+    return { success: false, ok: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات." };
+  }
+}
+
+// =========================================================================
+// 4. إدارة التصنيفات (حذف تتابعي يفك ارتباط الأصناف)
 // =========================================================================
 export async function deleteCategoryAction(arg1: any, arg2?: any) {
   try {
@@ -230,7 +428,6 @@ export async function deleteCategoryAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
-    console.error("deleteCategoryAction error:", err);
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
   }
 }
@@ -282,7 +479,7 @@ export async function adminClearAllCategoriesAction() {
 }
 
 // =========================================================================
-// 3. إدارة مناطق التوصيل (بالعربي فقط ودعم كافة المعرفات)
+// 5. إدارة مناطق التوصيل (بالعربي فقط)
 // =========================================================================
 export async function upsertZoneAction(arg1: any, arg2?: any) {
   try {
@@ -392,7 +589,7 @@ export async function deleteZoneAction(arg1: any, arg2?: any) {
 export const adminDeleteZoneAction = deleteZoneAction;
 
 // =========================================================================
-// 4. حفظ لوحة الإعلانات ونشر العروض (Promo Bulletin)
+// 6. لوحة الإعلانات ونشر العروض
 // =========================================================================
 export async function savePromoAction(arg1: any, arg2?: any) {
   try {
@@ -446,7 +643,6 @@ export async function savePromoAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { ok: true, success: true, data: promoData, promo: promoData };
   } catch (err: unknown) {
-    console.error("savePromoAction error:", err);
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error saving promo" };
   }
 }
@@ -463,7 +659,7 @@ export const publishBulletinAction = savePromoAction;
 export const adminPublishBulletinAction = savePromoAction;
 
 // =========================================================================
-// 5. إدارة أصناف المنيو (Menu Items)
+// 7. إدارة أصناف المنيو (Menu Items)
 // =========================================================================
 export async function upsertMenuItemAction(arg1: any, arg2?: any) {
   try {
@@ -534,193 +730,7 @@ export const adminSaveItemAction = upsertMenuItemAction;
 export const adminDeleteItemAction = deleteMenuItemAction;
 
 // =========================================================================
-// 6. ماسح المنيو الذكي (Gemini AI Scanner)
-// =========================================================================
-export async function adminScanMenuAction(payload: {
-  fileName?: string;
-  imageBase64: string;
-  mimeType?: string;
-}) {
-  try {
-    let apiKey = (
-      process.env.GEMINI_API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      ""
-    ).trim().replace(/^["']|["']$/g, "");
-
-    if (!apiKey) {
-      return { success: false, ok: false, error: "لم يتم العثور على مفتاح GEMINI_API_KEY." };
-    }
-
-    if (!payload?.imageBase64) {
-      return { success: false, ok: false, error: "لم يتم استلام ملف الصورة بشكل صحيح." };
-    }
-
-    let cleanBase64 = payload.imageBase64;
-    if (cleanBase64.includes(",")) {
-      cleanBase64 = cleanBase64.split(",")[1];
-    }
-
-    const mimeType = payload.mimeType || "image/jpeg";
-
-    const promptText = `أنت خبير محترف في تحليل وقراءة قوائم طعام المطاعم واستخراج البيانات الميدانية بدقة 100%.
-قم بتحليل صورة منيو مطعم بروست الأسد (Broast El-Assad) المرفقة واستخرج جميع الأصناف والوجبات والأسعار والأقسام.
-أعد المخرجات في شكل كائن مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي مقدمات إطلاقاً:
-[
-  {
-    "categoryNameAr": "اسم القسم بالعربي",
-    "categoryNameEn": "Category name in English",
-    "itemNameAr": "اسم الوجبة أو الصنف بالعربي كاملاً",
-    "itemNameEn": "Item name in English",
-    "descriptionAr": "مكونات الوجبة إن وجدت",
-    "descriptionEn": "",
-    "price": 120
-  }
-]`;
-
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType, data: cleanBase64 } },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
-      },
-    };
-
-    const candidateEndpoints: string[] = [
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-    ];
-
-    let rawText = "";
-    let lastError = "";
-
-    for (const url of candidateEndpoints) {
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (res.ok) {
-          const resJson = await res.json();
-          rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          if (rawText) break;
-        } else {
-          lastError = await res.text();
-        }
-      } catch (err: any) {
-        lastError = err?.message || "Connection error";
-      }
-    }
-
-    if (!rawText) {
-      return { success: false, ok: false, error: `تعذر الاتصال بالذكاء الاصطناعي: ${lastError}` };
-    }
-
-    let cleanJson = rawText.trim();
-    const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      cleanJson = jsonMatch[0];
-    } else if (cleanJson.startsWith("```json")) {
-      cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
-    } else if (cleanJson.startsWith("```")) {
-      cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
-    }
-
-    const items = JSON.parse(cleanJson);
-    const rows: ScannedRow[] = items.map((it: any) => ({
-      categoryNameAr: String(it.categoryNameAr || it.categoryAr || "أصناف المنيو").trim(),
-      categoryNameEn: String(it.categoryNameEn || it.categoryEn || "Menu Items").trim(),
-      itemNameAr: String(it.itemNameAr || it.nameAr || it.name || "صنف جديد").trim(),
-      itemNameEn: String(it.itemNameEn || it.nameEn || "").trim(),
-      descriptionAr: String(it.descriptionAr || it.description || "").trim(),
-      descriptionEn: String(it.descriptionEn || "").trim(),
-      price: Number(it.price || 0),
-    }));
-
-    return { success: true, ok: true, data: rows, rows };
-  } catch (err: any) {
-    console.error("adminScanMenuAction error:", err);
-    return { success: false, ok: false, error: `حدث خطأ تقني: ${err?.message || "يرجى المحاولة مجدداً"}` };
-  }
-}
-
-export async function adminSaveScannedRowsAction(rows: any[]) {
-  try {
-    const list = Array.isArray(rows) ? rows : [];
-    if (list.length === 0) return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
-
-    const existingCats = await db.select().from(categories).catch(() => []);
-    const catMap = new Map<string, string>();
-    for (let i = 0; i < existingCats.length; i++) {
-      catMap.set(existingCats[i].nameAr.trim().toLowerCase(), existingCats[i].id);
-    }
-
-    let nextSortOrder = existingCats.length;
-
-    for (let i = 0; i < list.length; i++) {
-      const r = list[i];
-      const catNameAr = String(r.categoryNameAr || r.categoryAr || "أصناف المنيو").trim();
-      const catNameEn = String(r.categoryNameEn || r.categoryEn || catNameAr).trim();
-      const itemNameAr = String(r.itemNameAr || r.nameAr || "").trim();
-      const itemNameEn = String(r.itemNameEn || r.nameEn || "").trim();
-      const descAr = String(r.descriptionAr || "").trim();
-      const descEn = String(r.descriptionEn || "").trim();
-      const priceNum = Number(r.price || 0);
-
-      if (!itemNameAr) continue;
-
-      let catId = catMap.get(catNameAr.toLowerCase());
-      if (!catId) {
-        catId = `cat-${Date.now()}-${i}`;
-        await db.insert(categories).values({
-          id: catId,
-          nameAr: catNameAr,
-          nameEn: catNameEn,
-          sortOrder: nextSortOrder++,
-        });
-        catMap.set(catNameAr.toLowerCase(), catId);
-      }
-
-      const itemId = `item-${Date.now()}-${i}`;
-      await db.insert(menuItems).values({
-        id: itemId,
-        categoryId: catId,
-        nameAr: itemNameAr,
-        nameEn: itemNameEn,
-        descriptionAr: descAr,
-        descriptionEn: descEn,
-        price: priceNum,
-        imageUrl: "",
-        badge: "",
-        isAvailable: 1,
-        sortOrder: i,
-      });
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: any) {
-    console.error("adminSaveScannedRowsAction error:", err);
-    return { success: false, ok: false, error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات." };
-  }
-}
-
-// =========================================================================
-// 7. تحديث إعدادات الواجهة واللوجو والموقع
+// 8. تحديث إعدادات الواجهة واللوجو والموقع
 // =========================================================================
 export async function updateSettingsAction(arg1: any, arg2?: any) {
   try {
@@ -772,7 +782,6 @@ export async function updateSettingsAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { success: true, ok: true };
   } catch (err: unknown) {
-    console.error("updateSettingsAction error:", err);
     return { success: false, ok: false, error: err instanceof Error ? err.message : "Error saving settings" };
   }
 }
@@ -781,7 +790,7 @@ export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
 // =========================================================================
-// 8. الطلبات والعملاء
+// 9. الطلبات والعملاء
 // =========================================================================
 export async function updateOrderStatusAction(arg1: any, arg2?: any) {
   try {
