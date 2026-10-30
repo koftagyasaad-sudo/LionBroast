@@ -41,7 +41,7 @@ function resolveArgs(arg1: any, arg2: any) {
 }
 
 // =========================================================================
-// 1. جلب بيانات غرفة التحكم الشاملة
+// 1. جلب بيانات غرفة التحكم
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -49,7 +49,6 @@ export async function adminGetAllAction(token?: string) {
       throw new Error("Unauthorized");
     }
 
-    // استيراد مناطق دسوق الأساسية تلقائياً إن كان الجدول فارغاً
     let zones = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder).catch(() => []);
     if (zones.length === 0) {
       const defaultZones = [
@@ -166,7 +165,6 @@ export async function adminGetAllAction(token?: string) {
       textEn: currentPromoTextAr,
     };
 
-    // تحليل شرائح السلايدر المحفوظة
     let parsedHeroSlides = [];
     try {
       if (hybridSettings["hero_slides"]) {
@@ -185,6 +183,15 @@ export async function adminGetAllAction(token?: string) {
       adBanner1: hybridSettings["ad_banner_1"] || "",
       adBanner2: hybridSettings["ad_banner_2"] || "",
       branchMapsUrl: hybridSettings["branch_maps_url"] || "https://maps.google.com/?q=دسوق+شارع+الجيش",
+      locationTitleAr: hybridSettings["location_title_ar"] || "شرفنا في فرع بروست الأسد 🦁",
+      locationSubtitleAr: hybridSettings["location_subtitle_ar"] || "نقدم لك أعلى جودة وأسرع خدمة تيك واي ودليفري في دسوق والمناطق المجاورة.",
+      promoBadgeAr: hybridSettings["promo_badge_ar"] || "عروض ومميزات بروست الأسد VIP 🍗",
+      promoTitleAr: hybridSettings["promo_title_ar"] || "أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗",
+      promoSubtitleAr: hybridSettings["promo_subtitle_ar"] || "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير...",
+      promoBtnTextAr: hybridSettings["promo_btn_text_ar"] || "اطلب الآن 🍗",
+      promoBtnLink: hybridSettings["promo_btn_link"] || "/menu",
+      ctaTitleAr: hybridSettings["cta_title_ar"] || "جوعان؟ الأسد مستنيك.",
+      ctaSubtitleAr: hybridSettings["cta_subtitle_ar"] || "اطلب على واتساب في ٣٠ ثانية – أو كلم الخط الساخن والفرن يولّع على طول.",
       footerAboutAr: hybridSettings["footer_about_ar"] || "",
       footerCopyrightAr: hybridSettings["footer_copyright_ar"] || "",
       footerSloganAr: hybridSettings["footer_slogan_ar"] || "",
@@ -230,35 +237,67 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة التصنيفات (حذف تتابعي مع الأصناف)
+// 2. تحديث إعدادات الواجهة الشاملة (حفظ الـ 3 سكاشن والفوتر والسلايدر)
 // =========================================================================
-export async function deleteCategoryAction(arg1: any, arg2?: any) {
+export async function updateSettingsAction(arg1: any, arg2?: any) {
   try {
     const { payload } = resolveArgs(arg1, arg2);
-    const catId = String(payload?.id || payload);
-    if (!catId) return { ok: false, success: false, error: "معرف القسم مفقود" };
+    const keyMap: Record<string, string> = {
+      brandNameAr: "brand_name_ar",
+      brandNameEn: "brand_name_en",
+      logoUrl: "logo_url",
+      heroSlides: "hero_slides",
+      marqueeTextAr: "marquee_text_ar",
+      addressAr: "address_ar",
+      workingHoursAr: "working_hours_ar",
+      hotline: "hotline",
+      whatsapp: "whatsapp",
+      branchMapsUrl: "branch_maps_url",
+      locationTitleAr: "location_title_ar",
+      locationSubtitleAr: "location_subtitle_ar",
+      promoBadgeAr: "promo_badge_ar",
+      promoTitleAr: "promo_title_ar",
+      promoSubtitleAr: "promo_subtitle_ar",
+      promoBtnTextAr: "promo_btn_text_ar",
+      promoBtnLink: "promo_btn_link",
+      ctaTitleAr: "cta_title_ar",
+      ctaSubtitleAr: "cta_subtitle_ar",
+      footerAboutAr: "footer_about_ar",
+      footerCopyrightAr: "footer_copyright_ar",
+      footerSloganAr: "footer_slogan_ar",
+    };
 
-    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
-    if (!isNaN(Number(catId))) {
-      await db.delete(menuItems).where(eq(menuItems.categoryId, Number(catId) as any)).catch(() => {});
+    const normalized: Record<string, string> = {};
+    for (const [k, v] of Object.entries(payload || {})) {
+      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+      normalized[k] = strVal;
+      if (keyMap[k]) normalized[keyMap[k]] = strVal;
     }
 
-    await db.delete(categories).where(eq(categories.id, catId));
-    if (!isNaN(Number(catId))) {
-      await db.delete(categories).where(eq(categories.id, Number(catId) as any)).catch(() => {});
+    for (const [key, strVal] of Object.entries(normalized)) {
+      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+      if (existing.length > 0) {
+        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
+      } else {
+        await db.insert(settings).values({ key, value: strVal });
+      }
     }
 
     revalidatePath("/", "layout");
     revalidatePath("/menu", "layout");
     revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
+    return { success: true, ok: true };
   } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+    return { success: false, ok: false, error: "Error saving settings" };
   }
 }
 
-export const adminDeleteCategoryAction = deleteCategoryAction;
+export const adminSetSettingAction = updateSettingsAction;
+export const saveFrontendSettingsAction = updateSettingsAction;
 
+// =========================================================================
+// 3. إدارة الأصناف والتصنيفات والمناطق
+// =========================================================================
 export async function upsertCategoryAction(arg1: any, arg2?: any) {
   try {
     const { payload: data } = resolveArgs(arg1, arg2);
@@ -279,15 +318,32 @@ export async function upsertCategoryAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+    return { ok: false, success: false, error: "Error" };
   }
 }
 
 export const adminSaveCategoryAction = upsertCategoryAction;
 
-// =========================================================================
-// 3. إدارة أصناف المنيو مع دعم الخيارات (سنجل/دابل - حار/بارد)
-// =========================================================================
+export async function deleteCategoryAction(arg1: any, arg2?: any) {
+  try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const catId = String(payload?.id || payload);
+    if (!catId) return { ok: false, success: false, error: "معرف مفقود" };
+
+    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
+    await db.delete(categories).where(eq(categories.id, catId));
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: "Error" };
+  }
+}
+
+export const adminDeleteCategoryAction = deleteCategoryAction;
+
 export async function upsertMenuItemAction(arg1: any, arg2?: any) {
   try {
     const { payload: data } = resolveArgs(arg1, arg2);
@@ -295,7 +351,6 @@ export async function upsertMenuItemAction(arg1: any, arg2?: any) {
     const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
     const img = String(data?.imageUrl ?? data?.image ?? "");
 
-    // تخزين الخيارات (سنجل/دابل وحار/بارد) مع الوصف أو كـ JSON آمن
     const descAr = String(data?.descriptionAr || data?.description || "").trim();
     let optionsJson = "";
     if (data?.options) {
@@ -337,7 +392,7 @@ export async function upsertMenuItemAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+    return { ok: false, success: false, error: "Error" };
   }
 }
 
@@ -354,15 +409,155 @@ export async function deleteMenuItemAction(arg1: any, arg2?: any) {
     revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+    return { ok: false, success: false, error: "Error" };
   }
 }
 
 export const adminDeleteItemAction = deleteMenuItemAction;
 
-// =========================================================================
-// 4. ماسح المنيو الذكي واعتماد الأصناف
-// =========================================================================
+export async function upsertZoneAction(arg1: any, arg2?: any) {
+  try {
+    const { payload: data } = resolveArgs(arg1, arg2);
+    const nameAr = String(data?.nameAr || data?.name || "").trim();
+    const nameEn = String(data?.nameEn || nameAr).trim();
+    const feeVal = Number(data?.fee ?? data?.price ?? 0);
+    const estMin = Number(data?.estimatedMinutes ?? 25);
+    const sortOrd = Number(data?.sortOrder ?? 0);
+
+    if (!nameAr) return { ok: false, success: false, error: "اسم المنطقة مطلوب" };
+
+    let existing = null;
+    if (data?.id) {
+      try {
+        const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, data.id as any)).limit(1);
+        if (res.length > 0) existing = res[0];
+      } catch {
+        if (!isNaN(Number(data.id))) {
+          const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, Number(data.id) as any)).limit(1);
+          if (res.length > 0) existing = res[0];
+        }
+      }
+    }
+
+    if (existing) {
+      await db.update(deliveryZones).set({
+        nameAr,
+        nameEn,
+        fee: feeVal,
+        estimatedMinutes: estMin,
+        sortOrder: sortOrd,
+      }).where(eq(deliveryZones.id, existing.id));
+
+      revalidatePath("/", "layout");
+      revalidatePath("/admin", "layout");
+      return { ok: true, success: true, id: existing.id };
+    }
+
+    try {
+      const [inserted] = await db.insert(deliveryZones).values({
+        nameAr,
+        nameEn,
+        fee: feeVal,
+        estimatedMinutes: estMin,
+        sortOrder: sortOrd,
+      } as any).returning();
+
+      revalidatePath("/", "layout");
+      revalidatePath("/admin", "layout");
+      return { ok: true, success: true, id: inserted?.id };
+    } catch {
+      const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
+      await db.insert(deliveryZones).values({
+        id: genId,
+        nameAr,
+        nameEn,
+        fee: feeVal,
+        estimatedMinutes: estMin,
+        sortOrder: sortOrd,
+      } as any);
+
+      revalidatePath("/", "layout");
+      revalidatePath("/admin", "layout");
+      return { ok: true, success: true, id: genId };
+    }
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: "Error saving zone" };
+  }
+}
+
+export const adminSaveZoneAction = upsertZoneAction;
+
+export async function deleteZoneAction(arg1: any, arg2?: any) {
+  try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const id = payload?.id !== undefined ? payload.id : payload;
+    const idStr = String(id);
+    const idNum = Number(id);
+
+    if (!isNaN(idNum)) {
+      await db.delete(deliveryZones).where(eq(deliveryZones.id, idNum as any)).catch(() => {});
+    }
+    await db.delete(deliveryZones).where(eq(deliveryZones.id, idStr as any)).catch(() => {});
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: "Error" };
+  }
+}
+
+export const adminDeleteZoneAction = deleteZoneAction;
+
+export async function savePromoAction(arg1: any, arg2?: any) {
+  try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const isVisible = payload?.enabled === true || payload?.visible === true || payload?.enabled === 1;
+    const enabledStr = isVisible ? "true" : "false";
+    const textAr = String(payload?.textAr || payload?.text || "").trim();
+    const code = String(payload?.code || "LION15").trim();
+
+    const promoData = {
+      enabled: isVisible,
+      visible: isVisible,
+      textAr,
+      titleAr: textAr,
+      title: textAr,
+      code,
+    };
+
+    const promoJson = JSON.stringify(promoData);
+    const keysToUpdate: Record<string, string> = {
+      promo: promoJson,
+      promo_bulletin: promoJson,
+      promo_enabled: enabledStr,
+      promo_text_ar: textAr,
+      promo_code: code,
+      bulletin_text_ar: textAr,
+      bulletin_enabled: enabledStr,
+      bulletin_visible: enabledStr,
+    };
+
+    for (const [key, value] of Object.entries(keysToUpdate)) {
+      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+      if (existing.length > 0) {
+        await db.update(settings).set({ value }).where(eq(settings.key, key));
+      } else {
+        await db.insert(settings).values({ key, value });
+      }
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true, data: promoData, promo: promoData };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: "Error saving promo" };
+  }
+}
+
+export const adminSavePromoAction = savePromoAction;
+export const publishPromoAction = savePromoAction;
+
 export async function adminScanMenuAction(payload: {
   fileName?: string;
   imageBase64: string;
@@ -487,219 +682,6 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
   }
 }
 
-// =========================================================================
-// 5. إدارة مناطق التوصيل
-// =========================================================================
-export async function upsertZoneAction(arg1: any, arg2?: any) {
-  try {
-    const { payload: data } = resolveArgs(arg1, arg2);
-    const nameAr = String(data?.nameAr || data?.name || "").trim();
-    const nameEn = String(data?.nameEn || nameAr).trim();
-    const feeVal = Number(data?.fee ?? data?.price ?? 0);
-    const estMin = Number(data?.estimatedMinutes ?? 25);
-    const sortOrd = Number(data?.sortOrder ?? 0);
-
-    if (!nameAr) return { ok: false, success: false, error: "يرجى إدخال اسم المنطقة" };
-
-    let existing = null;
-    if (data?.id) {
-      try {
-        const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, data.id as any)).limit(1);
-        if (res.length > 0) existing = res[0];
-      } catch {
-        if (!isNaN(Number(data.id))) {
-          const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, Number(data.id) as any)).limit(1);
-          if (res.length > 0) existing = res[0];
-        }
-      }
-    }
-
-    if (existing) {
-      await db.update(deliveryZones).set({
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      }).where(eq(deliveryZones.id, existing.id));
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: existing.id };
-    }
-
-    try {
-      const [inserted] = await db.insert(deliveryZones).values({
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      } as any).returning();
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: inserted?.id };
-    } catch {
-      const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
-      await db.insert(deliveryZones).values({
-        id: genId,
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      } as any);
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: genId };
-    }
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error saving zone" };
-  }
-}
-
-export const adminSaveZoneAction = upsertZoneAction;
-
-export async function deleteZoneAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const id = payload?.id !== undefined ? payload.id : payload;
-    const idStr = String(id);
-    const idNum = Number(id);
-
-    if (!isNaN(idNum)) {
-      await db.delete(deliveryZones).where(eq(deliveryZones.id, idNum as any)).catch(() => {});
-    }
-    await db.delete(deliveryZones).where(eq(deliveryZones.id, idStr as any)).catch(() => {});
-
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminDeleteZoneAction = deleteZoneAction;
-
-// =========================================================================
-// 6. لوحة الإعلانات الترويجية
-// =========================================================================
-export async function savePromoAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const isVisible = payload?.enabled === true || payload?.visible === true || payload?.enabled === 1;
-    const enabledStr = isVisible ? "true" : "false";
-    const textAr = String(payload?.textAr || payload?.text || "").trim();
-    const code = String(payload?.code || "LION15").trim();
-
-    const promoData = {
-      enabled: isVisible,
-      visible: isVisible,
-      textAr,
-      titleAr: textAr,
-      title: textAr,
-      code,
-    };
-
-    const promoJson = JSON.stringify(promoData);
-    const keysToUpdate: Record<string, string> = {
-      promo: promoJson,
-      promo_bulletin: promoJson,
-      promo_enabled: enabledStr,
-      promo_text_ar: textAr,
-      promo_code: code,
-      bulletin_text_ar: textAr,
-      bulletin_enabled: enabledStr,
-      bulletin_visible: enabledStr,
-    };
-
-    for (const [key, value] of Object.entries(keysToUpdate)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, data: promoData, promo: promoData };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error saving promo" };
-  }
-}
-
-export const adminSavePromoAction = savePromoAction;
-export const publishPromoAction = savePromoAction;
-
-// =========================================================================
-// 7. تحديث إعدادات الواجهة (السلايدر، الفوتر، اللوجو، الخرائط)
-// =========================================================================
-export async function updateSettingsAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const keyMap: Record<string, string> = {
-      brandNameAr: "brand_name_ar",
-      brandNameEn: "brand_name_en",
-      logoUrl: "logo_url",
-      heroSlides: "hero_slides",
-      heroTitleAr: "hero_title_ar",
-      heroSubtitleAr: "hero_subtitle_ar",
-      marqueeTextAr: "marquee_text_ar",
-      addressAr: "address_ar",
-      workingHoursAr: "working_hours_ar",
-      hotline: "hotline",
-      whatsapp: "whatsapp",
-      heroImage1: "hero_image_1",
-      heroImage2: "hero_image_2",
-      heroImage3: "hero_image_3",
-      adBanner1: "ad_banner_1",
-      adBanner2: "ad_banner_2",
-      branchMapsUrl: "branch_maps_url",
-      promoTitleAr: "promo_title_ar",
-      promoSubtitleAr: "promo_subtitle_ar",
-      ctaTitleAr: "cta_title_ar",
-      ctaSubtitleAr: "cta_subtitle_ar",
-      footerAboutAr: "footer_about_ar",
-      footerCopyrightAr: "footer_copyright_ar",
-      footerSloganAr: "footer_slogan_ar",
-    };
-
-    const normalized: Record<string, string> = {};
-    for (const [k, v] of Object.entries(payload || {})) {
-      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
-      normalized[k] = strVal;
-      if (keyMap[k]) normalized[keyMap[k]] = strVal;
-    }
-
-    for (const [key, strVal] of Object.entries(normalized)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: unknown) {
-    return { success: false, ok: false, error: "Error saving settings" };
-  }
-}
-
-export const adminSetSettingAction = updateSettingsAction;
-export const saveFrontendSettingsAction = updateSettingsAction;
-
-// =========================================================================
-// 8. الطلبات والعملاء
-// =========================================================================
 export async function updateOrderStatusAction(arg1: any, arg2?: any) {
   try {
     const { payload } = resolveArgs(arg1, arg2);
