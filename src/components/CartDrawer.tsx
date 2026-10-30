@@ -11,9 +11,8 @@ import {
   ShoppingBag,
   ArrowLeft,
   Bike,
-  Sparkles,
 } from "lucide-react";
-import { cartTotal, useApp } from "@/store/app-store";
+import { useApp } from "@/store/app-store";
 
 export default function CartDrawer(props: any) {
   const cartOpen = useApp((s) => s.cartOpen);
@@ -24,7 +23,7 @@ export default function CartDrawer(props: any) {
   const deleteFromCart = useApp((s) => s.deleteFromCart);
   const clearCart = useApp((s) => s.clearCart);
 
-  // قراءة آمنة للمناطق لمنع أي خطأ reading 'find' نهائياً
+  // قراءة آمنة للمناطق
   const storeZones = useApp((s) => (s as any).zones);
   const safeZones: any[] = Array.isArray(props?.zones)
     ? props.zones
@@ -36,10 +35,16 @@ export default function CartDrawer(props: any) {
 
   const [selectedZoneId, setSelectedZoneId] = useState<any>(safeZones[0]?.id || "");
 
-  // فحص دفاعي آمن
-  const currentZone = safeZones.find((z) => String(z.id) === String(selectedZoneId)) || safeZones[0];
+  // فحص دفاعي لاختيار المنطقة وحساب الرسوم
+  const currentZone =
+    safeZones.find((z) => String(z.id) === String(selectedZoneId)) || safeZones[0];
   const deliveryFee = Number(currentZone?.fee ?? currentZone?.price ?? 15);
-  const subtotal = cartTotal(cart);
+
+  // حساب الإجمالي مباشرة داخل المكون بدون استيراد دالة خارجية
+  const subtotal = cart.reduce(
+    (sum, item) => sum + Number(item.price || 0) * (item.quantity || 1),
+    0
+  );
   const total = subtotal + (cart.length > 0 ? deliveryFee : 0);
 
   return (
@@ -90,7 +95,9 @@ export default function CartDrawer(props: any) {
                 <div className="py-20 text-center space-y-3">
                   <span className="text-6xl select-none">🍗</span>
                   <p className="text-base font-bold text-white">السلة فاضية يا بطل!</p>
-                  <p className="text-xs text-white/50">اختار وجباتك المفضلة من المنيو وخلي الأسد يولعها.</p>
+                  <p className="text-xs text-white/50">
+                    اختار وجباتك المفضلة من المنيو وخلي الأسد يولعها.
+                  </p>
                 </div>
               ) : (
                 cart.map((item) => (
@@ -99,7 +106,9 @@ export default function CartDrawer(props: any) {
                     className="rounded-2xl border border-white/10 bg-carbon-900/60 p-4 flex items-center justify-between gap-3 shadow-md"
                   >
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-extrabold truncate">{item.nameAr || item.nameEn}</h4>
+                      <h4 className="text-sm font-extrabold truncate">
+                        {item.nameAr || item.nameEn}
+                      </h4>
                       <div className="text-xs text-amber-400 font-bold mt-1">
                         {Number(item.price || 0) * item.quantity} ج.م
                       </div>
@@ -112,7 +121,9 @@ export default function CartDrawer(props: any) {
                       >
                         <Minus className="size-3" />
                       </button>
-                      <span className="text-xs font-black w-5 text-center">{item.quantity}</span>
+                      <span className="text-xs font-black w-5 text-center">
+                        {item.quantity}
+                      </span>
                       <button
                         onClick={() => addToCart(item)}
                         className="grid size-7 place-items-center rounded-lg bg-brand-500 text-white"
