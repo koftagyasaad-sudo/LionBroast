@@ -33,7 +33,6 @@ function checkAuth(token?: string) {
   return token === MASTER_PASS || (envPass ? token === envPass : true);
 }
 
-// دالة مساعدة لاستخراج البيانات سواء تم تمرير (token, data) أو (data) مباشرة
 function resolveArgs(arg1: any, arg2: any) {
   if (arg2 !== undefined) {
     return { token: typeof arg1 === "string" ? arg1 : undefined, payload: arg2 };
@@ -207,7 +206,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة التصنيفات (حذف تتابعي يفك ارتباط الأصناف لمنع قيود PostgreSQL)
+// 2. إدارة التصنيفات (حذف تتابعي يفك ارتباط الأصناف نهائياً)
 // =========================================================================
 export async function deleteCategoryAction(arg1: any, arg2?: any) {
   try {
@@ -216,10 +215,17 @@ export async function deleteCategoryAction(arg1: any, arg2?: any) {
 
     if (!catId) return { ok: false, success: false, error: "معرف القسم مفقود" };
 
-    // 1. حذف جميع الأصناف التابعة للتصنيف أولاً
+    // 1. حذف كافة الأصناف التابعة لهذا التصنيف أولاً
     await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
+    if (!isNaN(Number(catId))) {
+      await db.delete(menuItems).where(eq(menuItems.categoryId, Number(catId) as any)).catch(() => {});
+    }
+
     // 2. حذف التصنيف نفسه
     await db.delete(categories).where(eq(categories.id, catId));
+    if (!isNaN(Number(catId))) {
+      await db.delete(categories).where(eq(categories.id, Number(catId) as any)).catch(() => {});
+    }
 
     revalidatePath("/", "layout");
     revalidatePath("/menu", "layout");
@@ -278,29 +284,33 @@ export async function adminClearAllCategoriesAction() {
 }
 
 // =========================================================================
-// 3. إدارة مناطق التوصيل (عربي فقط - تقبل (token, data) أو (data) مباشرة)
+// 3. إدارة مناطق التوصيل (بالعربي فقط + دعم Serial و Text IDs)
 // =========================================================================
 export async function upsertZoneAction(arg1: any, arg2?: any) {
   try {
     const { payload: data } = resolveArgs(arg1, arg2);
 
     const nameAr = String(data?.nameAr || data?.name || "").trim();
-    const nameEn = String(data?.nameEn || nameAr).trim(); // إذا لم يُدخل إنجليزي يتم حفظ العربي لمنع أخطاء الـ DB
+    const nameEn = String(data?.nameEn || nameAr).trim(); // يضمن عدم تعارض not-null constraint
     const feeVal = Number(data?.fee ?? data?.price ?? 0);
     const estMin = Number(data?.estimatedMinutes ?? 30);
     const sortOrd = Number(data?.sortOrder ?? 0);
 
     if (!nameAr) {
-      return { ok: false, success: false, error: "يرجى كتابة اسم المنطقة بالعربي" };
+      return { ok: false, success: false, error: "يرجى إدخال اسم المنطقة بالعربي" };
     }
 
     let existing = null;
     if (data?.id) {
-      const idVal = typeof data.id === "number" ? data.id : !isNaN(Number(data.id)) ? Number(data.id) : String(data.id);
       try {
-        const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, idVal as any)).limit(1);
+        const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, data.id as any)).limit(1);
         if (res.length > 0) existing = res[0];
-      } catch {}
+      } catch {
+        if (!isNaN(Number(data.id))) {
+          const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, Number(data.id) as any)).limit(1);
+          if (res.length > 0) existing = res[0];
+        }
+      }
     }
 
     if (existing) {
@@ -320,21 +330,8 @@ export async function upsertZoneAction(arg1: any, arg2?: any) {
       return { ok: true, success: true, id: existing.id };
     }
 
+    // إضافة جديدة مع تجربة الترقيم التلقائي (Serial) والنصي تلقائياً
     try {
-      const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
-      await db.insert(deliveryZones).values({
-        id: genId,
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      } as any);
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: genId };
-    } catch {
       const [inserted] = await db
         .insert(deliveryZones)
         .values({
@@ -349,6 +346,20 @@ export async function upsertZoneAction(arg1: any, arg2?: any) {
       revalidatePath("/", "layout");
       revalidatePath("/admin", "layout");
       return { ok: true, success: true, id: inserted?.id };
+    } catch {
+      const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
+      await db.insert(deliveryZones).values({
+        id: genId,
+        nameAr,
+        nameEn,
+        fee: feeVal,
+        estimatedMinutes: estMin,
+        sortOrder: sortOrd,
+      } as any);
+
+      revalidatePath("/", "layout");
+      revalidatePath("/admin", "layout");
+      return { ok: true, success: true, id: genId };
     }
   } catch (err: unknown) {
     console.error("upsertZoneAction error:", err);
@@ -365,16 +376,13 @@ export async function deleteZoneAction(arg1: any, arg2?: any) {
   try {
     const { payload } = resolveArgs(arg1, arg2);
     const id = payload?.id !== undefined ? payload.id : payload;
+    const idStr = String(id);
+    const idNum = Number(id);
 
-    try {
-      await db.delete(deliveryZones).where(eq(deliveryZones.id, id as any));
-    } catch {
-      if (typeof id === "string" && !isNaN(Number(id))) {
-        await db.delete(deliveryZones).where(eq(deliveryZones.id, Number(id) as any));
-      } else {
-        await db.delete(deliveryZones).where(eq(deliveryZones.id, String(id) as any));
-      }
+    if (!isNaN(idNum)) {
+      await db.delete(deliveryZones).where(eq(deliveryZones.id, idNum as any)).catch(() => {});
     }
+    await db.delete(deliveryZones).where(eq(deliveryZones.id, idStr as any)).catch(() => {});
 
     revalidatePath("/", "layout");
     revalidatePath("/admin", "layout");
@@ -529,7 +537,7 @@ export const adminSaveItemAction = upsertMenuItemAction;
 export const adminDeleteItemAction = deleteMenuItemAction;
 
 // =========================================================================
-// 6. ماسح المنيو الذكي وتجنب الرموز التقديمية
+// 6. ماسح المنيو الذكي (Gemini AI Scanner)
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -545,11 +553,7 @@ export async function adminScanMenuAction(payload: {
     ).trim().replace(/^["']|["']$/g, "");
 
     if (!apiKey) {
-      return {
-        success: false,
-        ok: false,
-        error: "لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات البيئة بـ Vercel.",
-      };
+      return { success: false, ok: false, error: "لم يتم العثور على مفتاح GEMINI_API_KEY." };
     }
 
     if (!payload?.imageBase64) {
@@ -593,44 +597,12 @@ export async function adminScanMenuAction(payload: {
       },
     };
 
-    const candidateEndpoints: string[] = [];
-
-    try {
-      const listRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-      );
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        const validModels = (listData?.models || []).filter((m: any) =>
-          m?.supportedGenerationMethods?.includes("generateContent")
-        );
-
-        const flashModel = validModels.find(
-          (m: any) => m.name.includes("flash") && !m.name.includes("embedding")
-        );
-
-        if (flashModel) {
-          candidateEndpoints.push(
-            `https://generativelanguage.googleapis.com/v1beta/${flashModel.name}:generateContent?key=${apiKey}`
-          );
-        }
-
-        for (const m of validModels) {
-          candidateEndpoints.push(
-            `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`
-          );
-        }
-      }
-    } catch (e) {
-      console.warn("Dynamic model lookup fallback", e);
-    }
-
-    candidateEndpoints.push(
+    const candidateEndpoints: string[] = [
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
-    );
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+    ];
 
     let rawText = "";
     let lastError = "";
