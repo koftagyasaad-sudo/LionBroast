@@ -24,7 +24,6 @@ import {
   X,
 } from "lucide-react";
 
-// ضاغط الصور السريع في المتصفح لتفادي حد 4.5MB في Vercel نهائياً
 function compressImageForScan(file: File): Promise<Blob> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -57,13 +56,7 @@ function compressImageForScan(file: File): Promise<Blob> {
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) => {
-            resolve(blob || file);
-          },
-          "image/jpeg",
-          0.78
-        );
+        canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.78);
       };
       img.onerror = () => resolve(file);
     };
@@ -78,11 +71,9 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
   const [selectedCatId, setSelectedCatId] = useState<string>(categoriesList[0]?.id || "");
   const [showScanner, setShowScanner] = useState(false);
 
-  // حالة إضافة قسم جديد
   const [newCatNameAr, setNewCatNameAr] = useState("");
   const [addingCat, setAddingCat] = useState(false);
 
-  // حالة إضافة / تعديل صنف
   const [itemFormOpen, setItemFormOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState({
@@ -98,7 +89,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
   });
   const [savingItem, setSavingItem] = useState(false);
 
-  // حالة الماسح الذكي
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -194,7 +184,6 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
     }
   };
 
-  // استدعاء محصن مع ضغط تلقائي وفحص آمن للرد
   const handleScanMenu = async () => {
     if (!scanFile) return;
     setScanning(true);
@@ -210,20 +199,20 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
       });
 
       const text = await res.text();
-      let data: any = {};
+      let resJson: any = {};
       try {
-        data = JSON.parse(text);
+        resJson = JSON.parse(text);
       } catch {
-        throw new Error(text.slice(0, 150) || "تعذر معالجة الرد من السيرفر.");
+        throw new Error(text.slice(0, 150) || "تعذر معالجة الرد.");
       }
 
-      if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
-        setScannedRows(data.data);
+      if (resJson.ok && Array.isArray(resJson.data) && resJson.data.length > 0) {
+        setScannedRows(resJson.data);
       } else {
-        setScanMsg(data.error || "تعذر قراءة محتوى المنيو، تأكد من وضوح الصورة وزاوية التصوير.");
+        setScanMsg(resJson.error || "تعذر قراءة محتوى المنيو، يرجى تجربة صورة أوضح.");
       }
     } catch (err: any) {
-      setScanMsg(err?.message || "حدث خطأ في الاتصال بالـ API.");
+      setScanMsg(err?.message || "حدث خطأ في الاتصال.");
     } finally {
       setScanning(false);
     }
@@ -250,7 +239,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
 
   return (
     <div className="space-y-8" dir="rtl">
-      {/* الشريط العلوي المشترك */}
+      {/* الشريط العلوي */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2.5">
@@ -258,7 +247,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
             إدارة المنيو وماسح الذكاء الاصطناعي
           </h2>
           <p className="text-xs text-white/60 mt-1">
-            أضف وعدل الأقسام والأصناف يدوياً مع خيارات (سنجل/دابل وحار/بارد)، أو ارفع صورة المنيو ليقرأها الذكاء الاصطناعي فوراً.
+            أضف وعدل الأقسام والأصناف يدوياً مع خيارات (سنجل/دابل وحار/بارد)، أو استورد القائمة بالذكاء الاصطناعي.
           </p>
         </div>
 
@@ -283,7 +272,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       </div>
 
-      {/* نافذة ماسح المنيو الذكي المستقلة */}
+      {/* نافذة ماسح المنيو */}
       {showScanner && (
         <div className="rounded-3xl border border-amber-500/40 bg-carbon-950 p-6 md:p-8 space-y-6 shadow-2xl">
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -381,7 +370,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       )}
 
-      {/* شريط الأقسام الرئيسية */}
+      {/* شريط الأقسام */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 space-y-4 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex items-center gap-2">
@@ -443,7 +432,7 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       </div>
 
-      {/* قائمة الأصناف تحت القسم المحدد */}
+      {/* قائمة الأصناف */}
       <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl space-y-6">
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
           <div>
