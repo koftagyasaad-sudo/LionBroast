@@ -3,13 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-// دالة تأخير زمني لإعادة المحاولة عند ضغط سيرفرات جوجل (503)
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const file = formData.get("file") as Blob | File | null;
 
     if (!file) {
       return NextResponse.json({ ok: false, error: "لم يتم استلام ملف الصورة." }, { status: 400 });
@@ -34,9 +33,9 @@ export async function POST(req: NextRequest) {
     const base64Data = buffer.toString("base64");
     const mimeType = file.type || "image/jpeg";
 
-    const promptText = `أنت نظام ذكاء اصطناعي متخصص في استخراج بيانات قوائم طعام المطاعم بدقة 100%.
-قم بتحليل صورة المنيو المرفقة واستخرج جميع الأقسام والوجبات والأسعار والمكونات.
-هام جداً: أعد المخرجات في شكل مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون شروحات:
+    const promptText = `أنت نظام ذكاء اصطناعي متخصص في استخراج بيانات وقوائم طعام المطاعم بدقة 100%.
+قم بتحليل صورة منيو مطعم بروست الأسد واستخرج جميع الأقسام والوجبات والأسعار والمكونات.
+هام جداً: أعد المخرجات حصراً في شكل مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون شروحات:
 [
   {
     "categoryNameAr": "اسم القسم بالعربي",
@@ -46,7 +45,6 @@ export async function POST(req: NextRequest) {
   }
 ]`;
 
-    // قائمة موديلات سريعة وبديلة لتفادي ضغط السيرفرات
     const candidateModels = [
       "gemini-2.0-flash",
       "gemini-2.5-flash",
@@ -57,7 +55,6 @@ export async function POST(req: NextRequest) {
     let rawText = "";
     let lastError = "";
 
-    // تجربة الموديلات مع محاولات إعادة تلقائية عند ظهور كود 503
     for (const model of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
@@ -88,7 +85,6 @@ export async function POST(req: NextRequest) {
           } else {
             const errStatus = res.status;
             lastError = await res.text();
-            // لو السيرفر عليه ضغط (503)، انتظر ثانية وجرب مجدداً أو انقل للموديل التالي
             if (errStatus === 503) {
               await delay(1200);
               continue;
@@ -106,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     if (!rawText) {
       return NextResponse.json(
-        { ok: false, error: "سيرفر الذكاء الاصطناعي مشغول حالياً، يرجى إعادة الضغط على زر الاستخراج الآن." },
+        { ok: false, error: "سيرفر الذكاء الاصطناعي مشغول حالياً، يرجى المحاولة مجدداً الآن." },
         { status: 500 }
       );
     }
