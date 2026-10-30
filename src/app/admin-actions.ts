@@ -35,7 +35,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. جلب بيانات لوحة التحكم (حل مشكلة settings.map نهائياً)
+// 1. جلب بيانات لوحة التحكم
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -69,7 +69,6 @@ export async function adminGetAllAction(token?: string) {
       getPromo().catch(() => null),
     ]);
 
-    // مصفوفة هجينة: تعمل كـ Array لـ OpsTab (.map) وتعمل كـ Object للوصول بالمفتاح
     const hybridSettings: any = [...settingsRows];
     for (let i = 0; i < settingsRows.length; i++) {
       hybridSettings[settingsRows[i].key] = settingsRows[i].value;
@@ -185,7 +184,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. ماسح المنيو الذكي مع تنظيف وفحص مفتاح API
+// 2. ماسح المنيو الذكي مع الاستكشاف التلقائي لموديل Gemini (حل 404 نهائياً)
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -204,15 +203,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: "لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات البيئة بـ Vercel. يرجى إضافته أولاً.",
-      };
-    }
-
-    if (!apiKey.startsWith("AIzaSy")) {
-      return {
-        success: false,
-        ok: false,
-        error: `مفتاح API غير صالح (يبدأ بـ "${apiKey.substring(0, 6)}..."). تأكد من نسخ المفتاح الصحيح من Google AI Studio الذي يبدأ بـ AIzaSy...`,
+        error: "لم يتم العثور على مفتاح GEMINI_API_KEY في إعدادات البيئة بـ Vercel.",
       };
     }
 
@@ -262,13 +253,52 @@ export async function adminScanMenuAction(payload: {
       },
     };
 
-    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    // 1. الاستعلام التلقائي من حسابك عن الموديل الفعال لتفادي خطأ 404
+    const candidateEndpoints: string[] = [];
+
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const validModels = (listData?.models || []).filter((m: any) =>
+          m?.supportedGenerationMethods?.includes("generateContent")
+        );
+
+        // تفضيل موديلات flash الحديثة
+        const flashModel = validModels.find(
+          (m: any) => m.name.includes("flash") && !m.name.includes("embedding")
+        );
+
+        if (flashModel) {
+          candidateEndpoints.push(
+            `https://generativelanguage.googleapis.com/v1beta/${flashModel.name}:generateContent?key=${apiKey}`
+          );
+        }
+
+        for (const m of validModels) {
+          candidateEndpoints.push(
+            `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Dynamic model lookup warning:", e);
+    }
+
+    // موديلات احتياطية متوافقة مع التحديث الأخير
+    candidateEndpoints.push(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
+    );
+
     let rawText = "";
     let lastError = "";
 
-    for (const model of models) {
+    for (const url of candidateEndpoints) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -291,7 +321,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: `تعذر التحليل عبر الذكاء الاصطناعي: ${lastError}`,
+        error: `تعذر الاتصال بالذكاء الاصطناعي: ${lastError}`,
       };
     }
 
@@ -324,13 +354,13 @@ export async function adminScanMenuAction(payload: {
     return {
       success: false,
       ok: false,
-      error: `حدث خطأ تقني: ${err?.message || "يرجى المحاولة مرة أخرى"}`,
+      error: `حدث خطأ تقني أثناء تحليل المنيو: ${err?.message || "يرجى المحاولة مرة أخرى"}`,
     };
   }
 }
 
 // =========================================================================
-// 3. حفظ واعتماد أصناف المنيو في قاعدة بيانات Neon
+// 3. اعتماد وحفظ الأصناف المستخرجة في المنيو
 // =========================================================================
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
@@ -385,9 +415,9 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
       });
     }
 
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
     return { success: true, ok: true };
   } catch (err: any) {
     console.error("adminSaveScannedRowsAction error:", err);
@@ -396,7 +426,7 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
 }
 
 // =========================================================================
-// 4. حفظ الإعدادات، اللوجو، خرائط جوجل، والبانرات
+// 4. حفظ وتحديث إعدادات الواجهة واللوجو والموقع مع التحديث اللحظي
 // =========================================================================
 export async function updateSettingsAction(payload: Record<string, any>) {
   try {
@@ -441,9 +471,10 @@ export async function updateSettingsAction(payload: Record<string, any>) {
       }
     }
 
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
+    // تحديث فوري للكاش على مستوى كامل الموقع
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
     return { success: true, ok: true };
   } catch (err: unknown) {
     console.error("updateSettingsAction error:", err);
@@ -455,7 +486,7 @@ export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
 // =========================================================================
-// 5. العمليات التشغيلية (Categories / Items / Zones / Orders / Customers)
+// 5. العمليات التشغيلية (الأصناف / الأقسام / المناطق / الطلبات)
 // =========================================================================
 export async function upsertCategoryAction(data: any) {
   try {
@@ -479,8 +510,8 @@ export async function upsertCategoryAction(data: any) {
         sortOrder: Number(data?.sortOrder ?? 0),
       });
     }
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -490,8 +521,8 @@ export async function upsertCategoryAction(data: any) {
 export async function deleteCategoryAction(id: string) {
   try {
     await db.delete(categories).where(eq(categories.id, String(id)));
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -540,8 +571,9 @@ export async function upsertMenuItemAction(data: any) {
         sortOrder: Number(data?.sortOrder ?? 0),
       });
     }
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -551,8 +583,9 @@ export async function upsertMenuItemAction(data: any) {
 export async function deleteMenuItemAction(id: string) {
   try {
     await db.delete(menuItems).where(eq(menuItems.id, String(id)));
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -589,8 +622,8 @@ export async function upsertZoneAction(data: any) {
         sortOrder: Number(data?.sortOrder ?? 0),
       });
     }
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true, id };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -600,8 +633,8 @@ export async function upsertZoneAction(data: any) {
 export async function deleteZoneAction(id: string) {
   try {
     await db.delete(deliveryZones).where(eq(deliveryZones.id, String(id)));
-    revalidatePath("/");
-    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -614,7 +647,7 @@ export const adminDeleteZoneAction = deleteZoneAction;
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
     await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
-    revalidatePath("/admin");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -628,7 +661,7 @@ export async function deleteOrderAction(orderId: number | string) {
     const idNum = Number(orderId);
     await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
     await db.delete(orders).where(eq(orders.id, idNum));
-    revalidatePath("/admin");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
@@ -661,7 +694,7 @@ export async function upsertCustomerAction(data: any) {
         discountPercent: Number(data?.discountPercent ?? 0),
       });
     }
-    revalidatePath("/admin");
+    revalidatePath("/admin", "layout");
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
