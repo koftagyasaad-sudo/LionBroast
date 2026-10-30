@@ -33,8 +33,16 @@ function checkAuth(token?: string) {
   return token === MASTER_PASS || (envPass ? token === envPass : true);
 }
 
+// دالة مساعدة لاستخراج البيانات سواء تم تمرير (token, data) أو (data) مباشرة
+function resolveArgs(arg1: any, arg2: any) {
+  if (arg2 !== undefined) {
+    return { token: typeof arg1 === "string" ? arg1 : undefined, payload: arg2 };
+  }
+  return { token: undefined, payload: arg1 };
+}
+
 // =========================================================================
-// 1. جلب كافة بيانات غرفة التحكم (محصنة ومتوافقة 100%)
+// 1. جلب بيانات غرفة التحكم
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -64,7 +72,6 @@ export async function adminGetAllAction(token?: string) {
       getPromo().catch(() => null),
     ]);
 
-    // مصفوفة هجينة تعمل كـ Array لدوال map في OpsTab وتعمل كـ Object للوصول بالمفتاح
     const hybridSettings: any = [...settingsRows];
     for (let i = 0; i < settingsRows.length; i++) {
       hybridSettings[settingsRows[i].key] = settingsRows[i].value;
@@ -133,7 +140,7 @@ export async function adminGetAllAction(token?: string) {
       hybridSettings["bulletin_text_en"] ||
       hybridSettings["promo_text_en"] ||
       promo?.textEn ||
-      "Best-selling offer every week‼️ Ask for the price of the Xtreme Box on Tuesday";
+      currentPromoTextAr;
 
     const isPromoEnabled =
       hybridSettings["bulletin_enabled"] !== "false" &&
@@ -200,25 +207,91 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة مناطق التوصيل (إضافة، تعديل، وحذف متوافق مع كافة الهياكل)
+// 2. إدارة التصنيفات (حذف تتابعي يفك ارتباط الأصناف لمنع قيود PostgreSQL)
+// =========================================================================
+export async function deleteCategoryAction(arg1: any, arg2?: any) {
+  try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const catId = String(payload?.id || payload);
+
+    if (!catId) return { ok: false, success: false, error: "معرف القسم مفقود" };
+
+    // 1. حذف جميع الأصناف التابعة للتصنيف أولاً
+    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
+    // 2. حذف التصنيف نفسه
+    await db.delete(categories).where(eq(categories.id, catId));
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    console.error("deleteCategoryAction error:", err);
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminDeleteCategoryAction = deleteCategoryAction;
+
+export async function upsertCategoryAction(arg1: any, arg2?: any) {
+  try {
+    const { payload: data } = resolveArgs(arg1, arg2);
+    const id = data?.id || `cat-${Date.now()}`;
+    const nameAr = String(data?.nameAr || data?.name || "قسم جديد").trim();
+    const nameEn = String(data?.nameEn || nameAr).trim();
+    const sortOrder = Number(data?.sortOrder ?? 0);
+
+    const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(categories)
+        .set({ nameAr, nameEn, sortOrder })
+        .where(eq(categories.id, id));
+    } else {
+      await db.insert(categories).values({ id, nameAr, nameEn, sortOrder });
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true, id };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminSaveCategoryAction = upsertCategoryAction;
+
+export async function adminClearAllCategoriesAction() {
+  try {
+    await db.delete(menuItems);
+    await db.delete(categories);
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+// =========================================================================
+// 3. إدارة مناطق التوصيل (عربي فقط - تقبل (token, data) أو (data) مباشرة)
 // =========================================================================
 export async function upsertZoneAction(arg1: any, arg2?: any) {
   try {
-    const data =
-      arg1 && typeof arg1 === "object" && ("nameAr" in arg1 || "nameEn" in arg1 || "fee" in arg1 || "name" in arg1)
-        ? arg1
-        : arg2 && typeof arg2 === "object"
-        ? arg2
-        : arg1;
+    const { payload: data } = resolveArgs(arg1, arg2);
 
     const nameAr = String(data?.nameAr || data?.name || "").trim();
-    const nameEn = String(data?.nameEn || "").trim();
+    const nameEn = String(data?.nameEn || nameAr).trim(); // إذا لم يُدخل إنجليزي يتم حفظ العربي لمنع أخطاء الـ DB
     const feeVal = Number(data?.fee ?? data?.price ?? 0);
     const estMin = Number(data?.estimatedMinutes ?? 30);
     const sortOrd = Number(data?.sortOrder ?? 0);
 
-    if (!nameAr && !nameEn) {
-      return { ok: false, success: false, error: "اسم المنطقة مطلوب" };
+    if (!nameAr) {
+      return { ok: false, success: false, error: "يرجى كتابة اسم المنطقة بالعربي" };
     }
 
     let existing = null;
@@ -247,7 +320,6 @@ export async function upsertZoneAction(arg1: any, arg2?: any) {
       return { ok: true, success: true, id: existing.id };
     }
 
-    // إدراج منطقة جديدة مع تجربة المعرف النصي والرقمي تلقائياً
     try {
       const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
       await db.insert(deliveryZones).values({
@@ -289,8 +361,11 @@ export const saveZoneAction = upsertZoneAction;
 export const addZoneAction = upsertZoneAction;
 export const adminAddZoneAction = upsertZoneAction;
 
-export async function deleteZoneAction(id: string | number) {
+export async function deleteZoneAction(arg1: any, arg2?: any) {
   try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const id = payload?.id !== undefined ? payload.id : payload;
+
     try {
       await db.delete(deliveryZones).where(eq(deliveryZones.id, id as any));
     } catch {
@@ -300,6 +375,7 @@ export async function deleteZoneAction(id: string | number) {
         await db.delete(deliveryZones).where(eq(deliveryZones.id, String(id) as any));
       }
     }
+
     revalidatePath("/", "layout");
     revalidatePath("/admin", "layout");
     return { ok: true, success: true };
@@ -311,16 +387,11 @@ export async function deleteZoneAction(id: string | number) {
 export const adminDeleteZoneAction = deleteZoneAction;
 
 // =========================================================================
-// 3. نشر وحفظ لوحة الإعلانات (Promo Bulletin)
+// 4. حفظ لوحة الإعلانات ونشر العروض (Promo Bulletin)
 // =========================================================================
 export async function savePromoAction(arg1: any, arg2?: any) {
   try {
-    const payload =
-      arg1 && typeof arg1 === "object" && ("textAr" in arg1 || "text" in arg1 || "enabled" in arg1 || "visible" in arg1)
-        ? arg1
-        : arg2 && typeof arg2 === "object"
-        ? arg2
-        : arg1;
+    const { payload } = resolveArgs(arg1, arg2);
 
     const isVisible =
       payload?.enabled === true ||
@@ -330,7 +401,7 @@ export async function savePromoAction(arg1: any, arg2?: any) {
 
     const enabledStr = isVisible ? "true" : "false";
     const textAr = String(payload?.textAr || payload?.text || payload?.titleAr || "").trim();
-    const textEn = String(payload?.textEn || payload?.titleEn || "").trim();
+    const textEn = String(payload?.textEn || payload?.titleEn || textAr).trim();
 
     const promoData = {
       enabled: isVisible,
@@ -387,7 +458,78 @@ export const publishBulletinAction = savePromoAction;
 export const adminPublishBulletinAction = savePromoAction;
 
 // =========================================================================
-// 4. ماسح المنيو الذكي مع استخراج JSON نقي (حل مشكلة Unexpected token P)
+// 5. إدارة أصناف المنيو (Menu Items)
+// =========================================================================
+export async function upsertMenuItemAction(arg1: any, arg2?: any) {
+  try {
+    const { payload: data } = resolveArgs(arg1, arg2);
+    const id = data?.id || `item-${Date.now()}`;
+    const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
+    const img = String(data?.imageUrl ?? data?.image ?? "");
+
+    const existing = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(menuItems)
+        .set({
+          categoryId: String(data?.categoryId || ""),
+          nameAr: String(data?.nameAr || ""),
+          nameEn: String(data?.nameEn || ""),
+          descriptionAr: String(data?.descriptionAr || ""),
+          descriptionEn: String(data?.descriptionEn || ""),
+          price: Number(data?.price || 0),
+          imageUrl: img,
+          badge: String(data?.badge || ""),
+          isAvailable: isAvail,
+          sortOrder: Number(data?.sortOrder ?? 0),
+        })
+        .where(eq(menuItems.id, id));
+    } else {
+      await db.insert(menuItems).values({
+        id,
+        categoryId: String(data?.categoryId || ""),
+        nameAr: String(data?.nameAr || ""),
+        nameEn: String(data?.nameEn || ""),
+        descriptionAr: String(data?.descriptionAr || ""),
+        descriptionEn: String(data?.descriptionEn || ""),
+        price: Number(data?.price || 0),
+        imageUrl: img,
+        badge: String(data?.badge || ""),
+        isAvailable: isAvail,
+        sortOrder: Number(data?.sortOrder ?? 0),
+      });
+    }
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true, id };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export async function deleteMenuItemAction(arg1: any, arg2?: any) {
+  try {
+    const { payload } = resolveArgs(arg1, arg2);
+    const id = payload?.id !== undefined ? payload.id : payload;
+    await db.delete(menuItems).where(eq(menuItems.id, String(id)));
+
+    revalidatePath("/", "layout");
+    revalidatePath("/menu", "layout");
+    revalidatePath("/admin", "layout");
+    return { ok: true, success: true };
+  } catch (err: unknown) {
+    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
+  }
+}
+
+export const adminSaveItemAction = upsertMenuItemAction;
+export const adminDeleteItemAction = deleteMenuItemAction;
+
+// =========================================================================
+// 6. ماسح المنيو الذكي وتجنب الرموز التقديمية
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -423,14 +565,14 @@ export async function adminScanMenuAction(payload: {
 
     const promptText = `أنت خبير محترف في تحليل وقراءة قوائم طعام المطاعم واستخراج البيانات الميدانية بدقة 100%.
 قم بتحليل صورة منيو مطعم بروست الأسد (Broast El-Assad) المرفقة واستخرج جميع الأصناف والوجبات والأسعار والأقسام.
-أعد المخرجات في شكل كائن مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي مقدمات أو شروحات نصية إطلاقاً، طبقاً للهيكل التالي:
+أعد المخرجات في شكل كائن مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي مقدمات إطلاقاً:
 [
   {
-    "categoryNameAr": "اسم القسم بالعربي (مثلاً: وجبات البروست، السندوتشات، الوجبات الفردية، الوجبات العائلية، الإضافات)",
+    "categoryNameAr": "اسم القسم بالعربي",
     "categoryNameEn": "Category name in English",
     "itemNameAr": "اسم الوجبة أو الصنف بالعربي كاملاً",
     "itemNameEn": "Item name in English",
-    "descriptionAr": "مكونات الوجبة أو الوصف المكتوب بالمنيو إن وجد",
+    "descriptionAr": "مكونات الوجبة إن وجدت",
     "descriptionEn": "",
     "price": 120
   }
@@ -441,12 +583,7 @@ export async function adminScanMenuAction(payload: {
         {
           parts: [
             { text: promptText },
-            {
-              inlineData: {
-                mimeType,
-                data: cleanBase64,
-              },
-            },
+            { inlineData: { mimeType, data: cleanBase64 } },
           ],
         },
       ],
@@ -519,14 +656,9 @@ export async function adminScanMenuAction(payload: {
     }
 
     if (!rawText) {
-      return {
-        success: false,
-        ok: false,
-        error: `تعذر الاتصال بالذكاء الاصطناعي: ${lastError}`,
-      };
+      return { success: false, ok: false, error: `تعذر الاتصال بالذكاء الاصطناعي: ${lastError}` };
     }
 
-    // استخراج مصفوفة الـ JSON حصراً وتجاهل أي كلمات تقديمية مثل Professional...
     let cleanJson = rawText.trim();
     const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
@@ -548,25 +680,13 @@ export async function adminScanMenuAction(payload: {
       price: Number(it.price || 0),
     }));
 
-    return {
-      success: true,
-      ok: true,
-      data: rows,
-      rows,
-    };
+    return { success: true, ok: true, data: rows, rows };
   } catch (err: any) {
     console.error("adminScanMenuAction error:", err);
-    return {
-      success: false,
-      ok: false,
-      error: `حدث خطأ تقني أثناء تحليل المنيو: ${err?.message || "يرجى المحاولة مرة أخرى"}`,
-    };
+    return { success: false, ok: false, error: `حدث خطأ تقني: ${err?.message || "يرجى المحاولة مجدداً"}` };
   }
 }
 
-// =========================================================================
-// 5. اعتماد وحفظ الأصناف المستخرجة في المنيو
-// =========================================================================
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
     const list = Array.isArray(rows) ? rows : [];
@@ -583,7 +703,7 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
     for (let i = 0; i < list.length; i++) {
       const r = list[i];
       const catNameAr = String(r.categoryNameAr || r.categoryAr || "أصناف المنيو").trim();
-      const catNameEn = String(r.categoryNameEn || r.categoryEn || "Menu Items").trim();
+      const catNameEn = String(r.categoryNameEn || r.categoryEn || catNameAr).trim();
       const itemNameAr = String(r.itemNameAr || r.nameAr || "").trim();
       const itemNameEn = String(r.itemNameEn || r.nameEn || "").trim();
       const descAr = String(r.descriptionAr || "").trim();
@@ -631,10 +751,12 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
 }
 
 // =========================================================================
-// 6. حفظ الإعدادات، الشعار، والخرائط وتحديث كامل الواجهة فورياً
+// 7. تحديث إعدادات الواجهة واللوجو والموقع
 // =========================================================================
-export async function updateSettingsAction(payload: Record<string, any>) {
+export async function updateSettingsAction(arg1: any, arg2?: any) {
   try {
+    const { payload } = resolveArgs(arg1, arg2);
+
     const keyMap: Record<string, string> = {
       brandNameAr: "brand_name_ar",
       brandNameEn: "brand_name_en",
@@ -661,7 +783,7 @@ export async function updateSettingsAction(payload: Record<string, any>) {
     };
 
     const normalized: Record<string, string> = {};
-    for (const [k, v] of Object.entries(payload)) {
+    for (const [k, v] of Object.entries(payload || {})) {
       const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
       normalized[k] = strVal;
       if (keyMap[k]) normalized[keyMap[k]] = strVal;
@@ -690,143 +812,14 @@ export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
 // =========================================================================
-// 7. إدارة التصنيفات (حذف تتابعي ومنع التكرار)
+// 8. الطلبات والعملاء
 // =========================================================================
-export async function upsertCategoryAction(data: any) {
+export async function updateOrderStatusAction(arg1: any, arg2?: any) {
   try {
-    const id = data?.id || `cat-${Date.now()}`;
-    const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+    const { payload } = resolveArgs(arg1, arg2);
+    const orderId = payload?.orderId || payload?.id || arg1;
+    const status = payload?.status || arg2;
 
-    if (existing.length > 0) {
-      await db
-        .update(categories)
-        .set({
-          nameAr: String(data?.nameAr || ""),
-          nameEn: String(data?.nameEn || ""),
-          sortOrder: Number(data?.sortOrder ?? 0),
-        })
-        .where(eq(categories.id, id));
-    } else {
-      await db.insert(categories).values({
-        id,
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || ""),
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteCategoryAction(id: string) {
-  try {
-    const catId = String(id);
-    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
-    await db.delete(categories).where(eq(categories.id, catId));
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    console.error("deleteCategoryAction error:", err);
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSaveCategoryAction = upsertCategoryAction;
-export const adminDeleteCategoryAction = deleteCategoryAction;
-
-export async function adminClearAllCategoriesAction() {
-  try {
-    await db.delete(menuItems);
-    await db.delete(categories);
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-// =========================================================================
-// 8. إدارة أصناف المنيو (Menu Items)
-// =========================================================================
-export async function upsertMenuItemAction(data: any) {
-  try {
-    const id = data?.id || `item-${Date.now()}`;
-    const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
-    const img = String(data?.imageUrl ?? data?.image ?? "");
-
-    const existing = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(menuItems)
-        .set({
-          categoryId: String(data?.categoryId || ""),
-          nameAr: String(data?.nameAr || ""),
-          nameEn: String(data?.nameEn || ""),
-          descriptionAr: String(data?.descriptionAr || ""),
-          descriptionEn: String(data?.descriptionEn || ""),
-          price: Number(data?.price || 0),
-          imageUrl: img,
-          badge: String(data?.badge || ""),
-          isAvailable: isAvail,
-          sortOrder: Number(data?.sortOrder ?? 0),
-        })
-        .where(eq(menuItems.id, id));
-    } else {
-      await db.insert(menuItems).values({
-        id,
-        categoryId: String(data?.categoryId || ""),
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || ""),
-        descriptionAr: String(data?.descriptionAr || ""),
-        descriptionEn: String(data?.descriptionEn || ""),
-        price: Number(data?.price || 0),
-        imageUrl: img,
-        badge: String(data?.badge || ""),
-        isAvailable: isAvail,
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function deleteMenuItemAction(id: string) {
-  try {
-    await db.delete(menuItems).where(eq(menuItems.id, String(id)));
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSaveItemAction = upsertMenuItemAction;
-export const adminDeleteItemAction = deleteMenuItemAction;
-
-// =========================================================================
-// 9. إدارة الطلبات والعملاء (Orders & Customers)
-// =========================================================================
-export async function updateOrderStatusAction(orderId: number | string, status: string) {
-  try {
     await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
     revalidatePath("/admin", "layout");
     return { ok: true, success: true };
@@ -837,9 +830,10 @@ export async function updateOrderStatusAction(orderId: number | string, status: 
 
 export const adminSetOrderStatusAction = updateOrderStatusAction;
 
-export async function deleteOrderAction(orderId: number | string) {
+export async function deleteOrderAction(arg1: any, arg2?: any) {
   try {
-    const idNum = Number(orderId);
+    const { payload } = resolveArgs(arg1, arg2);
+    const idNum = Number(payload?.id || payload);
     await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
     await db.delete(orders).where(eq(orders.id, idNum));
     revalidatePath("/admin", "layout");
@@ -849,8 +843,9 @@ export async function deleteOrderAction(orderId: number | string) {
   }
 }
 
-export async function upsertCustomerAction(data: any) {
+export async function upsertCustomerAction(arg1: any, arg2?: any) {
   try {
+    const { payload: data } = resolveArgs(arg1, arg2);
     if (data?.id) {
       await db
         .update(customers)
