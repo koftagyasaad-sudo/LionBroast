@@ -9,8 +9,6 @@ import {
 import {
   Megaphone,
   MapPin,
-  Clock,
-  Coins,
   Plus,
   Trash2,
   Save,
@@ -19,6 +17,7 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  RefreshCw,
 } from "lucide-react";
 
 interface OpsTabProps {
@@ -27,8 +26,17 @@ interface OpsTabProps {
   refresh?: () => void;
 }
 
-export default function OpsTab({ token, data, refresh }: OpsTabProps) {
-  // 1. حالة لوحة الإعلانات (Promo Bulletin)
+// مناطق دسوق الخمسة الأساسية لضمان التطابق 100% بين لوحة التحكم والموقع
+const DESOUK_DEFAULT_ZONES = [
+  { id: "zone-1", nameAr: "دسوق - وسط البلد وشارع الجيش", fee: 15, estimatedMinutes: 25 },
+  { id: "zone-2", nameAr: "دسوق - منطقة المستشفى والمحطة", fee: 15, estimatedMinutes: 25 },
+  { id: "zone-3", nameAr: "دسوق - حي الكشلة والميدان الإبراهيمي", fee: 15, estimatedMinutes: 30 },
+  { id: "zone-4", nameAr: "دسوق - دحروج وقرى الساحل", fee: 20, estimatedMinutes: 35 },
+  { id: "zone-5", nameAr: "القرى والمناطق المجاورة لدسوق", fee: 25, estimatedMinutes: 40 },
+];
+
+export default function OpsTab({ data, refresh }: OpsTabProps) {
+  // 1. لوحة الإعلانات الترويجية
   const promoInit = data?.promo || data?.bulletin || {};
   const [promoEnabled, setPromoEnabled] = useState<boolean>(
     promoInit.enabled !== false && promoInit.visible !== false
@@ -36,31 +44,30 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
   const [promoTextAr, setPromoTextAr] = useState<string>(
     promoInit.textAr ||
       promoInit.text ||
-      "العرض الأكثر مبيعاً كل اسبوع‼️ اسأل على سعر الاكستريم بوكس يوم التلات"
+      "خصم 15% على أول طلب بـ كود: LION15"
   );
   const [promoCode, setPromoCode] = useState<string>(promoInit.code || "LION15");
   const [savingPromo, setSavingPromo] = useState(false);
   const [promoSuccess, setPromoSuccess] = useState(false);
 
-  // 2. حالة مناطق التوصيل (Delivery Zones)
-  const initialZones: any[] = Array.isArray(data?.zones)
+  // 2. مناطق التوصيل: تفعيل مناطق دسوق الخمس تلقائياً في حال كانت قاعدة البيانات فارغة
+  const dbZones: any[] = Array.isArray(data?.zones)
     ? data.zones
     : Array.isArray(data?.deliveryZones)
     ? data.deliveryZones
     : [];
 
+  const initialZones = dbZones.length > 0 ? dbZones : DESOUK_DEFAULT_ZONES;
   const [zonesList, setZonesList] = useState<any[]>(initialZones);
 
-  // حقول إضافة منطقة جديدة
   const [newZoneName, setNewZoneName] = useState("");
   const [newZoneFee, setNewZoneFee] = useState<number>(15);
   const [newZoneTime, setNewZoneTime] = useState<number>(25);
   const [addingZone, setAddingZone] = useState(false);
-
-  // حالة تعديل وحفظ منطقة موجودة
   const [updatingZoneId, setUpdatingZoneId] = useState<string | number | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
-  // حفظ ونشر لوحة الإعلانات
+  // حفظ ونشر الإعلان
   const handlePublishPromo = async () => {
     setSavingPromo(true);
     setPromoSuccess(false);
@@ -77,8 +84,6 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
         if (refresh) await refresh();
         setTimeout(() => setPromoSuccess(false), 3000);
       }
-    } catch (e) {
-      console.error(e);
     } finally {
       setSavingPromo(false);
     }
@@ -111,21 +116,19 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
         setNewZoneTime(25);
         if (refresh) await refresh();
       }
-    } catch (e) {
-      console.error(e);
     } finally {
       setAddingZone(false);
     }
   };
 
-  // تعديل محتوى حقل في منطقة موجودة داخل القائمة
+  // تعديل منطقة في القائمة
   const handleZoneChange = (id: string | number, field: string, val: any) => {
     setZonesList((prev) =>
       prev.map((z) => (z.id === id ? { ...z, [field]: val } : z))
     );
   };
 
-  // حفظ التعديل في الداتابيز
+  // حفظ تعديل منطقة في قاعدة البيانات
   const handleSaveZone = async (zone: any) => {
     setUpdatingZoneId(zone.id);
     try {
@@ -134,17 +137,33 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
         nameAr: zone.nameAr || zone.name,
         nameEn: zone.nameEn || zone.nameAr || zone.name,
         fee: Number(zone.fee ?? zone.price ?? 0),
-        estimatedMinutes: Number(zone.estimatedMinutes ?? 30),
+        estimatedMinutes: Number(zone.estimatedMinutes ?? 25),
       });
       if (refresh) await refresh();
-    } catch (e) {
-      console.error(e);
     } finally {
       setTimeout(() => setUpdatingZoneId(null), 800);
     }
   };
 
-  // حذف منطقة نهائياً
+  // مزامنة وحفظ مناطق دسوق الخمس في قاعدة البيانات بضغطة واحدة
+  const handleSyncDesoukZones = async () => {
+    setSeeding(true);
+    try {
+      for (const z of DESOUK_DEFAULT_ZONES) {
+        await upsertZoneAction({
+          nameAr: z.nameAr,
+          nameEn: z.nameAr,
+          fee: z.fee,
+          estimatedMinutes: z.estimatedMinutes,
+        });
+      }
+      if (refresh) await refresh();
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  // حذف منطقة
   const handleDeleteZone = async (id: string | number) => {
     if (!confirm("هل أنت متأكد من حذف هذه المنطقة؟")) return;
     setZonesList((prev) => prev.filter((z) => z.id !== id));
@@ -175,7 +194,6 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
             </div>
           </div>
 
-          {/* زر التبديل بين إظهار أو إخفاء الإعلان */}
           <button
             type="button"
             onClick={() => setPromoEnabled((prev) => !prev)}
@@ -199,7 +217,6 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
           </button>
         </div>
 
-        {/* حقول الإعلان */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <div>
@@ -251,7 +268,6 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
             </div>
           </div>
 
-          {/* معاينة حية لشكل الإعلان في الموقع */}
           <div className="rounded-2xl border border-amber-500/30 bg-carbon-950/80 p-5 space-y-3">
             <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">
               معاينة حية في واجهة الموقع
@@ -269,11 +285,6 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
                 </div>
               )}
             </div>
-            {!promoEnabled && (
-              <p className="text-[10px] text-red-400 font-bold text-center">
-                * تنبيه: هذا الإعلان مخفي حالياً ولن يظهر للعملاء حتى تفعل زر الظهور.
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -290,17 +301,29 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
                 مناطق وأسعار التوصيل · Delivery Zones
               </h2>
               <p className="text-xs text-white/60 mt-0.5">
-                المناطق المسجلة هنا تظهر في صفحة الموقع الرئيسية وسلة الشراء مع سعرها ووقت توصيلها.
+                تتحكم في أسماء مناطق دسوق وأسعار التوصيل ووقت الوصول المتوقع بالدقائق.
               </p>
             </div>
           </div>
 
-          <span className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-black text-amber-400 border border-white/10">
-            {zonesList.length} مناطق مسجلة
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSyncDesoukZones}
+              disabled={seeding}
+              className="flex items-center gap-2 rounded-2xl bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 px-4 py-2 text-xs font-black transition cursor-pointer"
+            >
+              {seeding ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+              <span>مزامنة مناطق دسوق في الداتابيز ⚡</span>
+            </button>
+
+            <span className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-black text-amber-400 border border-white/10">
+              {zonesList.length} مناطق مسجلة
+            </span>
+          </div>
         </div>
 
-        {/* نموذج إضافة منطقة جديدة يدوياً */}
+        {/* نموذج إضافة منطقة جديدة */}
         <form
           onSubmit={handleAddZone}
           className="rounded-2xl border border-brand-500/30 bg-carbon-950 p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end shadow-inner"
@@ -350,104 +373,98 @@ export default function OpsTab({ token, data, refresh }: OpsTabProps) {
           </div>
         </form>
 
-        {/* جدول عرض وتعديل وحذف كافة المناطق المسجلة في قاعدة البيانات */}
+        {/* جدول عرض وتعديل مناطق دسوق الحالية */}
         <div className="space-y-4">
           <h3 className="text-sm font-black text-white/80">المناطق المضافة الحالية (تعديل مباشر):</h3>
 
-          {zonesList.length > 0 ? (
-            <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg bg-carbon-950">
-              <table className="w-full text-right text-xs text-white">
-                <thead className="bg-white/5 border-b border-white/10 text-white/60 font-black">
-                  <tr>
-                    <th className="p-3.5">اسم المنطقة (عربي)</th>
-                    <th className="p-3.5 w-32">السعر (ج.م)</th>
-                    <th className="p-3.5 w-32">الوقت (دقيقة)</th>
-                    <th className="p-3.5 text-center w-28">إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {zonesList.map((zone) => {
-                    const isSavingThis = updatingZoneId === zone.id;
-                    return (
-                      <tr key={zone.id} className="hover:bg-white/5 transition">
-                        <td className="p-3">
-                          <input
-                            type="text"
-                            value={zone.nameAr || zone.name || ""}
-                            onChange={(e) =>
-                              handleZoneChange(zone.id, "nameAr", e.target.value)
-                            }
-                            className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-bold text-white outline-none focus:border-brand-500"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <input
-                            type="number"
-                            min="0"
-                            value={zone.fee ?? zone.price ?? 0}
-                            onChange={(e) =>
-                              handleZoneChange(
-                                zone.id,
-                                "fee",
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-black text-amber-400 outline-none focus:border-brand-500 text-left"
-                            dir="ltr"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <input
-                            type="number"
-                            min="5"
-                            value={zone.estimatedMinutes ?? 30}
-                            onChange={(e) =>
-                              handleZoneChange(
-                                zone.id,
-                                "estimatedMinutes",
-                                parseInt(e.target.value) || 25
-                              )
-                            }
-                            className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-bold text-emerald-400 outline-none focus:border-brand-500 text-left"
-                            dir="ltr"
-                          />
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleSaveZone(zone)}
-                              disabled={isSavingThis}
-                              className="grid size-8 place-items-center rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition cursor-pointer"
-                              title="حفظ التعديل"
-                            >
-                              {isSavingThis ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Save className="size-3.5" />
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteZone(zone.id)}
-                              className="grid size-8 place-items-center rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition cursor-pointer"
-                              title="حذف المنطقة"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-white/15 bg-carbon-950 p-8 text-center text-xs text-white/40">
-              لا توجد مناطق مسجلة حالياً. استخدم النموذج أعلاه لإضافة منطقتك الأولى.
-            </div>
-          )}
+          <div className="rounded-2xl border border-white/10 overflow-hidden shadow-lg bg-carbon-950">
+            <table className="w-full text-right text-xs text-white">
+              <thead className="bg-white/5 border-b border-white/10 text-white/60 font-black">
+                <tr>
+                  <th className="p-3.5">اسم المنطقة (عربي)</th>
+                  <th className="p-3.5 w-32">السعر (ج.م)</th>
+                  <th className="p-3.5 w-32">الوقت (دقيقة)</th>
+                  <th className="p-3.5 text-center w-28">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {zonesList.map((zone) => {
+                  const isSavingThis = updatingZoneId === zone.id;
+                  return (
+                    <tr key={zone.id} className="hover:bg-white/5 transition">
+                      <td className="p-3">
+                        <input
+                          type="text"
+                          value={zone.nameAr || zone.name || ""}
+                          onChange={(e) =>
+                            handleZoneChange(zone.id, "nameAr", e.target.value)
+                          }
+                          className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-bold text-white outline-none focus:border-brand-500"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          min="0"
+                          value={zone.fee ?? zone.price ?? 0}
+                          onChange={(e) =>
+                            handleZoneChange(
+                              zone.id,
+                              "fee",
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-black text-amber-400 outline-none focus:border-brand-500 text-left"
+                          dir="ltr"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          min="5"
+                          value={zone.estimatedMinutes ?? 25}
+                          onChange={(e) =>
+                            handleZoneChange(
+                              zone.id,
+                              "estimatedMinutes",
+                              parseInt(e.target.value) || 25
+                            )
+                          }
+                          className="w-full rounded-lg border border-white/10 bg-carbon-900 px-3 py-1.5 text-xs font-bold text-emerald-400 outline-none focus:border-brand-500 text-left"
+                          dir="ltr"
+                        />
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveZone(zone)}
+                            disabled={isSavingThis}
+                            className="grid size-8 place-items-center rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition cursor-pointer"
+                            title="حفظ التعديل"
+                          >
+                            {isSavingThis ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Save className="size-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteZone(zone.id)}
+                            className="grid size-8 place-items-center rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition cursor-pointer"
+                            title="حذف المنطقة"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
