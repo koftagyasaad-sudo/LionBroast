@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/db";
-import { deliveryZones, categories, menuItems } from "@/db/schema";
+import { deliveryZones, menuItems } from "@/db/schema";
 import { getCategoriesWithItems, getFrontendSettings, getPromo } from "@/db/queries";
 import Header from "@/components/Header";
 import HeroSlider from "@/components/HeroSlider";
@@ -12,6 +12,8 @@ import LocationBlock from "@/components/LocationBlock";
 import ChefCta from "@/components/ChefCta";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
+import ClientBoot from "@/components/ClientBoot";
+import { Sparkles, Megaphone } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,7 +48,6 @@ export default async function HomePage() {
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
-  // تجهيز مصفوفة شرائح كاملة ومحصنة تمنع خطأ s is not iterable نهائياً
   const heroSlides = [
     {
       id: "slide-1",
@@ -83,9 +84,27 @@ export default async function HomePage() {
     },
   ];
 
+  // التحقق من حالة ظهور الإعلان المؤقت (Promo Bulletin)
+  const isPromoVisible =
+    promo &&
+    (promo.enabled !== false && promo.visible !== false) &&
+    Boolean(promo.textAr || promo.title);
+
   return (
-    <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500 overflow-x-hidden">
-      {/* 1. الهيدر وشريط التنقل العلوي */}
+    <main className="min-h-screen bg-zinc-50 dark:bg-carbon-950 text-zinc-900 dark:text-white selection:bg-brand-500 overflow-x-hidden transition-colors duration-300">
+      {/* 0. تهيئة المتجر */}
+      <ClientBoot
+        categories={catsWithItems}
+        items={bestItems}
+        menuItems={bestItems}
+        zones={zonesList}
+        deliveryZones={zonesList}
+        settings={frontend}
+        frontend={frontend}
+        promo={promo}
+      />
+
+      {/* 1. الهيدر */}
       <Header frontend={frontend} settings={frontend} promo={promo} />
 
       {/* 2. السلايدر الرئيسي */}
@@ -94,15 +113,51 @@ export default async function HomePage() {
       {/* 3. شريط الأخبار المتحرك */}
       <MarqueeStrip text={marqueeText} items={[marqueeText, marqueeText]} />
 
-      {/* 4. سكشن الأكثر مبيعاً */}
-      {catsWithItems.length > 0 && bestItems.length > 0 && (
-        <section id="best">
-          <BestSellers categories={catsWithItems} items={bestItems} />
+      {/* 4. لوحة الإعلانات الترويجية والعروض المؤقتة (تظهر وتختفي ديناميكياً من غرفة التحكم) */}
+      {isPromoVisible && (
+        <section className="mx-auto max-w-7xl px-4 pt-6 pb-2 md:px-8" dir="rtl">
+          <div className="relative overflow-hidden rounded-3xl border border-amber-500/50 bg-gradient-to-r from-carbon-950 via-amber-950/40 to-carbon-950 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
+            <div className="absolute -left-10 -top-10 size-40 rounded-full bg-amber-500/20 blur-3xl pointer-events-none" />
+            <div className="absolute -right-10 -bottom-10 size-40 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4 text-center md:text-right">
+                <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-amber-500/20 text-amber-400 ring-2 ring-amber-500/40 text-2xl animate-pulse">
+                  <Megaphone className="size-7" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-[11px] font-black text-amber-300 border border-amber-500/30 mb-1.5">
+                    <Sparkles className="size-3 text-amber-400" />
+                    <span>عرض مؤقت وحصري · Limited Time</span>
+                  </div>
+                  <h3 className="text-lg md:text-2xl font-black text-white leading-relaxed">
+                    {promo.textAr || promo.title}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-3">
+                <Link
+                  href="/menu"
+                  className="rounded-2xl bg-gradient-to-r from-amber-500 to-brand-500 hover:from-amber-600 hover:to-brand-600 px-7 py-3.5 text-sm font-black text-white shadow-xl transition hover:scale-105 active:scale-95"
+                >
+                  اطلب العرض الآن 🍗
+                </Link>
+              </div>
+            </div>
+          </div>
         </section>
       )}
 
-      {/* 5. بانر العروض والمميزات VIP */}
-      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8" dir="rtl">
+      {/* 5. سكشن الأكثر مبيعاً */}
+      {bestItems.length > 0 && (
+        <section id="best">
+          <BestSellers categories={catsWithItems} items={bestItems} data={bestItems} />
+        </section>
+      )}
+
+      {/* 6. بانر العروض والمميزات VIP */}
+      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 text-white" dir="rtl">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-amber-600 to-brand-500 p-8 md:p-12 shadow-2xl">
           <div className="absolute -left-10 -top-10 size-60 rounded-full bg-white/10 blur-3xl pointer-events-none" />
           <div className="absolute -right-10 -bottom-10 size-60 rounded-full bg-black/20 blur-3xl pointer-events-none" />
@@ -133,16 +188,16 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 6. سكشن المنيو وقائمة الطعام */}
+      {/* 7. سكشن المنيو */}
       <section id="menu">
         {catsWithItems.length > 0 ? (
           <MenuPreview categories={catsWithItems} />
         ) : (
           <div className="mx-auto max-w-7xl px-4 py-16 text-center" dir="rtl">
-            <div className="rounded-3xl border border-white/10 bg-carbon-900/50 p-10 max-w-xl mx-auto backdrop-blur-md">
+            <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white/70 dark:bg-carbon-900/50 p-10 max-w-xl mx-auto backdrop-blur-md shadow-sm">
               <span className="text-5xl">🦁</span>
-              <h3 className="mt-4 text-xl font-black text-white">جاري تجهيز وتحديث قائمة الطعام بالمنيو الجديد</h3>
-              <p className="mt-2 text-sm text-white/60">
+              <h3 className="mt-4 text-xl font-black text-zinc-900 dark:text-white">جاري تجهيز وتحديث قائمة الطعام بالمنيو الجديد</h3>
+              <p className="mt-2 text-sm text-zinc-500 dark:text-white/60">
                 يمكنك إضافة وتحديث الأصناف بسهولة عبر ماسح المنيو الذكي أو لوحة التحكم.
               </p>
               <div className="mt-6">
@@ -158,22 +213,22 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 7. سكشن مناطق وأسعار التوصيل (بالعربي فقط) */}
+      {/* 8. سكشن مناطق وأسعار التوصيل (يقرأ مباشرة من قاعدة البيانات) */}
       <section id="zones">
         <ZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
 
-      {/* 8. سكشن عنوان الفرع ورابط Google Maps المباشر */}
+      {/* 9. سكشن عنوان الفرع ورابط Google Maps */}
       <LocationBlock frontend={frontend} />
 
-      {/* 9. بانر الطلب السريع (جوعان؟ الأسد مستنيك) */}
+      {/* 10. بانر الطلب السريع */}
       <ChefCta frontend={frontend} settings={frontend} />
 
-      {/* 10. الفوتر وروابط التواصل */}
+      {/* 11. الفوتر */}
       <Footer frontend={frontend} settings={frontend} />
 
-      {/* سلة المشتريات العامة */}
-      <CartDrawer />
+      {/* سلة المشتريات */}
+      <CartDrawer zones={zonesList} deliveryZones={zonesList} items={bestItems} menuItems={bestItems} categories={catsWithItems} />
     </main>
   );
 }
