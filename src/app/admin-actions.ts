@@ -18,11 +18,12 @@ import { getFrontendSettings, getPromo } from "@/db/queries";
 const MASTER_PASS = "Asaad123456@@";
 
 export interface ScannedRow {
-  categoryAr?: string;
-  categoryEn?: string;
-  nameAr: string;
-  nameEn?: string;
+  categoryNameAr: string;
+  categoryNameEn?: string;
+  itemNameAr: string;
+  itemNameEn?: string;
   descriptionAr?: string;
+  descriptionEn?: string;
   price: number;
   badge?: string;
 }
@@ -34,7 +35,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. جلب كافة بيانات لوحة التحكم مع ضمان الحقول الرقمية
+// 1. جلب بيانات لوحة التحكم (محصنة بالكامل)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -180,7 +181,229 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. إدارة التصنيفات (Categories)
+// 2. محرك مسح المنيو الذكي بواسطة الذكاء الاصطناعي (Gemini Vision Engine)
+// =========================================================================
+export async function adminScanMenuAction(payload: {
+  fileName?: string;
+  imageBase64: string;
+  mimeType?: string;
+}) {
+  try {
+    const apiKey =
+      process.env.GEMINI_API_KEY?.trim() ||
+      process.env.GOOGLE_API_KEY?.trim() ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
+
+    if (!apiKey) {
+      return {
+        success: false,
+        ok: false,
+        error:
+          "مفتاح الذكاء الاصطناعي غير متوفر! يرجى إضافة متغير البيئة GEMINI_API_KEY في إعدادات Vercel ثم إعادة النشر.",
+      };
+    }
+
+    if (!payload?.imageBase64) {
+      return {
+        success: false,
+        ok: false,
+        error: "لم يتم استلام ملف الصورة بشكل سليم من المتصفح.",
+      };
+    }
+
+    let cleanBase64 = payload.imageBase64;
+    if (cleanBase64.includes(",")) {
+      cleanBase64 = cleanBase64.split(",")[1];
+    }
+
+    const mimeType = payload.mimeType || "image/jpeg";
+
+    const promptText = `أنت خبير محترف في تحليل وقراءة قوائم طعام المطاعم واستخراج البيانات الميدانية بدقة 100%.
+قم بتحليل صورة منيو مطعم بروست الأسد (Broast El-Assad) المرفقة واستخرج جميع الأصناف والوجبات والأسعار والأقسام.
+أعد المخرجات في شكل كائن مصفوفة JSON Array نقية ومباشرة بدون أي وسوم ماركداون وبدون أي شروحات نصية خارجية، طبقاً للهيكل التالي:
+[
+  {
+    "categoryNameAr": "اسم القسم بالعربي (مثلاً: وجبات البروست، السندوتشات، الوجبات الفردية، الوجبات العائلية، الإضافات)",
+    "categoryNameEn": "Category name in English",
+    "itemNameAr": "اسم الوجبة أو الصنف بالعربي كاملاً",
+    "itemNameEn": "Item name in English",
+    "descriptionAr": "مكونات الوجبة أو الوصف المكتوب بالمنيو إن وجد",
+    "descriptionEn": "",
+    "price": 120
+  }
+]`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            {
+              inlineData: {
+                mimeType,
+                data: cleanBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      },
+    };
+
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    let rawText = "";
+    let lastError = "";
+
+    for (const model of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (res.ok) {
+          const resJson = await res.json();
+          rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (rawText) break;
+        } else {
+          const errText = await res.text();
+          lastError = `Gemini API Status ${res.status}: ${errText}`;
+        }
+      } catch (err: any) {
+        lastError = err?.message || "Connection error";
+      }
+    }
+
+    if (!rawText) {
+      return {
+        success: false,
+        ok: false,
+        error: `فشل التحليل من سيرفر الذكاء الاصطناعي: ${lastError}`,
+      };
+    }
+
+    let cleanJson = rawText.trim();
+    if (cleanJson.startsWith("```json")) {
+      cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
+    } else if (cleanJson.startsWith("```")) {
+      cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
+    }
+
+    const items = JSON.parse(cleanJson);
+    if (!Array.isArray(items) || items.length === 0) {
+      return {
+        success: false,
+        ok: false,
+        error: "لم يتمكن الذكاء الاصطناعي من استخراج أي أصناف من هذه الصورة. يرجى تجربة صورة أوضح أو بزاوية مستقيمة.",
+      };
+    }
+
+    const rows: ScannedRow[] = items.map((it: any) => ({
+      categoryNameAr: String(it.categoryNameAr || it.categoryAr || "أصناف المنيو").trim(),
+      categoryNameEn: String(it.categoryNameEn || it.categoryEn || "Menu Items").trim(),
+      itemNameAr: String(it.itemNameAr || it.nameAr || it.name || "صنف جديد").trim(),
+      itemNameEn: String(it.itemNameEn || it.nameEn || "").trim(),
+      descriptionAr: String(it.descriptionAr || it.description || "").trim(),
+      descriptionEn: String(it.descriptionEn || "").trim(),
+      price: Number(it.price || 0),
+    }));
+
+    return {
+      success: true,
+      ok: true,
+      data: rows,
+      rows,
+    };
+  } catch (err: any) {
+    console.error("adminScanMenuAction error:", err);
+    return {
+      success: false,
+      ok: false,
+      error: `حدث خطأ تقني أثناء تحليل الصورة: ${err?.message || "يرجى التحقق من حجم الصورة"}`,
+    };
+  }
+}
+
+// =========================================================================
+// 3. اعتماد وحفظ الأصناف المستخرجة في قاعدة البيانات
+// =========================================================================
+export async function adminSaveScannedRowsAction(rows: any[]) {
+  try {
+    const list = Array.isArray(rows) ? rows : [];
+    if (list.length === 0) {
+      return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
+    }
+
+    const existingCats = await db.select().from(categories).catch(() => []);
+    const catMap = new Map<string, string>();
+    for (let i = 0; i < existingCats.length; i++) {
+      catMap.set(existingCats[i].nameAr.trim().toLowerCase(), existingCats[i].id);
+    }
+
+    let nextSortOrder = existingCats.length;
+
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      const catNameAr = String(r.categoryNameAr || r.categoryAr || "أصناف المنيو").trim();
+      const catNameEn = String(r.categoryNameEn || r.categoryEn || "Menu Items").trim();
+      const itemNameAr = String(r.itemNameAr || r.nameAr || "").trim();
+      const itemNameEn = String(r.itemNameEn || r.nameEn || "").trim();
+      const descAr = String(r.descriptionAr || "").trim();
+      const descEn = String(r.descriptionEn || "").trim();
+      const priceNum = Number(r.price || 0);
+
+      if (!itemNameAr) continue;
+
+      let catId = catMap.get(catNameAr.toLowerCase());
+      if (!catId) {
+        catId = `cat-${Date.now()}-${i}`;
+        await db.insert(categories).values({
+          id: catId,
+          nameAr: catNameAr,
+          nameEn: catNameEn,
+          sortOrder: nextSortOrder++,
+        });
+        catMap.set(catNameAr.toLowerCase(), catId);
+      }
+
+      const itemId = `item-${Date.now()}-${i}`;
+      await db.insert(menuItems).values({
+        id: itemId,
+        categoryId: catId,
+        nameAr: itemNameAr,
+        nameEn: itemNameEn,
+        descriptionAr: descAr,
+        descriptionEn: descEn,
+        price: priceNum,
+        imageUrl: "",
+        badge: "",
+        isAvailable: 1,
+        sortOrder: i,
+      });
+    }
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+    return { success: true, ok: true };
+  } catch (err: any) {
+    console.error("adminSaveScannedRowsAction error:", err);
+    return {
+      success: false,
+      ok: false,
+      error: err?.message || "فشل حفظ الأصناف في قاعدة البيانات.",
+    };
+  }
+}
+
+// =========================================================================
+// 4. العمليات التحريرية العادية (Categories / Menu / Zones / Settings / Orders)
 // =========================================================================
 export async function upsertCategoryAction(data: any) {
   try {
@@ -226,9 +449,6 @@ export async function deleteCategoryAction(id: string) {
 export const adminSaveCategoryAction = upsertCategoryAction;
 export const adminDeleteCategoryAction = deleteCategoryAction;
 
-// =========================================================================
-// 3. إدارة الأصناف (Menu Items)
-// =========================================================================
 export async function upsertMenuItemAction(data: any) {
   try {
     const id = data?.id || `item-${Date.now()}`;
@@ -290,9 +510,6 @@ export async function deleteMenuItemAction(id: string) {
 export const adminSaveItemAction = upsertMenuItemAction;
 export const adminDeleteItemAction = deleteMenuItemAction;
 
-// =========================================================================
-// 4. إدارة مناطق التوصيل (Delivery Zones)
-// =========================================================================
 export async function upsertZoneAction(data: any) {
   try {
     const id = data?.id || `zone-${Date.now()}`;
@@ -342,9 +559,6 @@ export async function deleteZoneAction(id: string) {
 export const adminSaveZoneAction = upsertZoneAction;
 export const adminDeleteZoneAction = deleteZoneAction;
 
-// =========================================================================
-// 5. إعدادات الواجهة والإعلانات (Settings & Banners)
-// =========================================================================
 export async function updateSettingsAction(payload: Record<string, any>) {
   try {
     const keyMap: Record<string, string> = {
@@ -393,9 +607,6 @@ export async function updateSettingsAction(payload: Record<string, any>) {
 export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
-// =========================================================================
-// 6. إدارة الطلبات والعملاء (Orders & Customers)
-// =========================================================================
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
     await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
@@ -447,18 +658,6 @@ export async function upsertCustomerAction(data: any) {
       });
     }
     revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export async function adminScanMenuAction() {
-  return { ok: true, success: true, rows: [] };
-}
-
-export async function adminSaveScannedRowsAction(_rows: any[]) {
-  try {
     return { ok: true, success: true };
   } catch (err: unknown) {
     return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
