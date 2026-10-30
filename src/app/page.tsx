@@ -1,49 +1,29 @@
-import { getMenuData, getPromo, getFrontendSettings } from "@/db/queries";
-import StoreChrome from "@/components/StoreChrome";
+import { getCategoriesWithItems, getFrontendSettings, getPromo } from "@/db/queries";
+import Header from "@/components/Header";
 import HeroSlider from "@/components/HeroSlider";
-import QuickBar from "@/components/QuickBar";
-import MarqueeStrip from "@/components/MarqueeStrip";
-import BestSellers from "@/components/BestSellers";
-import MenuPreview from "@/components/MenuPreview";
-import ZonesSection from "@/components/ZonesSection";
-import ChefCta from "@/components/ChefCta";
-import PassWidget from "@/components/PassWidget";
 import LocationBlock from "@/components/LocationBlock";
+import ChefCta from "@/components/ChefCta";
+import Footer from "@/components/Footer";
 
+// إيقاف الكاش الثابت لضمان قراءة التعديلات فور حفظها من لوحة التحكم
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function HomePage() {
-  const [{ categories, items, zones }, promo, frontend] = await Promise.all([
-    getMenuData(),
-    getPromo(),
-    getFrontendSettings(),
+  const [frontend, promo, catsWithItems] = await Promise.all([
+    getFrontendSettings().catch(() => null),
+    getPromo().catch(() => null),
+    getCategoriesWithItems().catch(() => []),
   ]);
 
-  const best = (items || []).filter((i) => i.isBestSeller && i.isAvailable);
-
   return (
-    <StoreChrome zones={zones} promo={promo} settings={frontend} frontend={frontend}>
+    <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500">
+      <Header frontend={frontend} promo={promo} />
       <HeroSlider frontend={frontend} />
-      <QuickBar />
-      <MarqueeStrip
-        marqueeAr={frontend?.marqueeAr || frontend?.marqueeTextAr}
-        marqueeEn={frontend?.marqueeEn || frontend?.marqueeTextAr}
-      />
-
-      <BestSellers items={best} />
-
-      <div className="border-t border-line bg-surface">
-        <MenuPreview categories={categories} items={(items || []).filter((i) => i.isAvailable)} />
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 py-12 md:px-8 space-y-16">
-        <PassWidget />
-        <LocationBlock settings={frontend} />
-      </div>
-
-      <ZonesSection zones={zones} />
-      <ChefCta />
-    </StoreChrome>
+      {/* باقي الأقسام */}
+      <LocationBlock frontend={frontend} />
+      <ChefCta frontend={frontend} />
+      <Footer frontend={frontend} />
+    </main>
   );
 }
