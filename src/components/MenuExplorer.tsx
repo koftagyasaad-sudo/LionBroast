@@ -1,135 +1,135 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Flame, Search, UtensilsCrossed } from "lucide-react";
-import type { CategoryDTO, MenuItemDTO } from "@/lib/types";
-import { useDict, useIsAr } from "@/lib/hooks";
+import { useState, useMemo } from "react";
+import { Search, Flame, UtensilsCrossed } from "lucide-react";
 import MenuItemCard from "@/components/MenuItemCard";
-import { cn } from "@/lib/utils";
+import ItemDialog from "@/components/ItemDialog";
 
-export default function MenuExplorer({ categories, items }: { categories: CategoryDTO[]; items: MenuItemDTO[] }) {
-  const t = useDict();
-  const isAr = useIsAr();
-  const params = useSearchParams();
-  const initialCat = params.get("c");
+interface MenuExplorerProps {
+  categories?: any[];
+  items?: any[];
+  menuItems?: any[];
+}
 
-  const [activeCat, setActiveCat] = useState<string>(initialCat && categories.some((c) => c.id === initialCat) ? initialCat : "all");
-  const [query, setQuery] = useState("");
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+export default function MenuExplorer({
+  categories = [],
+  items = [],
+  menuItems = [],
+}: MenuExplorerProps) {
+  const allItems: any[] = items.length > 0 ? items : menuItems;
+  const [activeCat, setActiveCat] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedItem, setSelectedItem] = useState<any>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter((it) => {
-      if (activeCat !== "all" && it.categoryId !== activeCat) return false;
+  // تصفية وبحث محصن 100% ضد أي قيمة undefined
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allItems.filter((it: any) => {
+      if (!it) return false;
+
+      if (activeCat !== "all" && String(it.categoryId) !== String(activeCat)) {
+        return false;
+      }
+
       if (!q) return true;
-      return [it.nameAr, it.nameEn, it.descriptionAr ?? "", it.descriptionEn ?? ""].some((s) => s.toLowerCase().includes(q));
+
+      const searchableFields = [
+        String(it.nameAr || ""),
+        String(it.nameEn || ""),
+        String(it.name || ""),
+        String(it.descriptionAr || ""),
+        String(it.descriptionEn || ""),
+        String(it.description || ""),
+      ];
+
+      return searchableFields.some(
+        (s) => typeof s === "string" && s.toLowerCase().includes(q)
+      );
     });
-  }, [items, activeCat, query]);
-
-  const visibleCats = useMemo(
-    () => categories.filter((c) => activeCat === "all" || c.id === activeCat),
-    [categories, activeCat],
-  );
-
-  const forCat = (cid: string) => filtered.filter((i) => i.categoryId === cid);
+  }, [allItems, activeCat, searchQuery]);
 
   return (
-    <>
-      {/* Page head */}
-      <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/10 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-500">
-            <UtensilsCrossed className="size-4" /> {t.sections.menuKicker}
-          </span>
-          <h1 className="mt-4 text-4xl font-extrabold tracking-tight md:text-5xl">{t.sections.menuTitle}</h1>
-          <p className="mt-2 max-w-md text-sm text-ink-2">{t.sections.menuSub}</p>
-        </div>
-
-        <div className="relative w-full md:w-80">
-          <Search className="absolute start-4 top-1/2 size-4.5 -translate-y-1/2 text-ink-2" />
+    <div className="space-y-8" dir="rtl">
+      {/* Search & Categories Bar */}
+      <div className="space-y-6">
+        {/* Search Input */}
+        <div className="relative max-w-md mx-auto">
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={isAr ? "دوّر على الكرسبي..." : "Search the crunch..."}
-            className="w-full rounded-full border border-line bg-surface py-3.5 ps-11 pe-4 text-sm font-semibold outline-none transition focus:border-brand-500"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث عن وجبة أو صنف بالاسم أو المكونات..."
+            className="w-full rounded-2xl border border-white/15 bg-carbon-900/80 px-11 py-3 text-xs md:text-sm font-bold text-white placeholder:text-white/40 outline-none focus:border-brand-500 transition shadow-lg backdrop-blur-md"
           />
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 size-4 text-brand-400" />
         </div>
-      </div>
 
-      {/* Sticky category nav */}
-      <div className="no-scrollbar sticky top-[68px] z-40 -mx-4 mt-8 flex gap-2 overflow-x-auto border-b border-line bg-bg/85 px-4 py-3 backdrop-blur-xl md:mx-0 md:rounded-full md:border md:px-2">
-        <button
-          onClick={() => setActiveCat("all")}
-          className={cn(
-            "shrink-0 rounded-full px-5 py-2.5 text-sm font-extrabold transition",
-            activeCat === "all" ? "flame-badge text-white shadow-lg" : "bg-surface text-ink-2 hover:text-ink",
-          )}
-        >
-          {isAr ? "الكل" : "All"}
-        </button>
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setActiveCat(c.id)}
-            className={cn(
-              "shrink-0 rounded-full px-5 py-2.5 text-sm font-extrabold transition",
-              activeCat === c.id ? "flame-badge text-white shadow-lg" : "bg-surface text-ink-2 hover:text-ink",
-            )}
-          >
-            {isAr ? c.nameAr : c.nameEn}
-          </button>
-        ))}
-      </div>
-
-      {/* Sections */}
-      <div className="mt-10 space-y-14">
-        {visibleCats.map((c) => {
-          const catItems = forCat(c.id);
-          if (!catItems.length) return null;
-          return (
-            <section
-              key={c.id}
-              ref={(el) => {
-                sectionRefs.current[c.id] = el;
-              }}
+        {/* Categories Tabs */}
+        {categories.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              onClick={() => setActiveCat("all")}
+              className={`rounded-xl px-4 py-2 text-xs font-black transition cursor-pointer border ${
+                activeCat === "all"
+                  ? "bg-brand-500 text-white border-brand-500 shadow-md"
+                  : "bg-carbon-900/60 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+              }`}
             >
-              <div className="mb-6 flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-2xl bg-brand-500/10 text-brand-500">
-                  <Flame className="size-5" />
-                </span>
-                <div>
-                  <h2 className="text-xl font-extrabold md:text-2xl">{isAr ? c.nameAr : c.nameEn}</h2>
-                  <p className="text-xs font-semibold text-ink-2">{isAr ? c.nameEn : c.nameAr}</p>
-                </div>
-                <div className="ms-auto rounded-full bg-surface px-3 py-1 text-[11px] font-extrabold text-ink-2">
-                  {catItems.length} {isAr ? "صنف" : "items"}
-                </div>
-              </div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-30px" }}
-                transition={{ duration: 0.5 }}
-                className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              >
-                {catItems.map((it) => (
-                  <MenuItemCard key={it.id} item={it} />
-                ))}
-              </motion.div>
-            </section>
-          );
-        })}
+              الكل ({allItems.length})
+            </button>
 
-        {visibleCats.every((c) => forCat(c.id).length === 0) && (
-          <div className="grid place-items-center gap-4 py-20 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/img/mascot-lion.png" alt="mascot" className="size-24 rounded-3xl object-cover" />
-            <p className="text-lg font-extrabold">{isAr ? "مفيش نتايج — جرّب كلمة تانية" : "No results — try another word"}</p>
+            {categories.map((cat: any) => {
+              const isSelected = String(cat.id) === String(activeCat);
+              const count = allItems.filter(
+                (it: any) => String(it.categoryId) === String(cat.id)
+              ).length;
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCat(cat.id)}
+                  className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-black transition cursor-pointer border ${
+                    isSelected
+                      ? "bg-brand-500 text-white border-brand-500 shadow-md"
+                      : "bg-carbon-900/60 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  <span>{cat.nameAr || cat.name}</span>
+                  <span className="text-[10px] opacity-60">({count})</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
-    </>
+
+      {/* Items Grid */}
+      {filteredItems.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredItems.map((item: any, idx: number) => (
+            <MenuItemCard
+              key={item.id || idx}
+              item={item}
+              onSelect={() => setSelectedItem(item)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-dashed border-white/10 bg-carbon-900/40 p-12 text-center space-y-3">
+          <UtensilsCrossed className="size-10 text-brand-500 mx-auto opacity-40" />
+          <p className="text-sm font-bold text-white">لم يتم العثور على وجبات مطابقة</p>
+          <p className="text-xs text-white/40">جرّب البحث باسم آخر أو اختر قسماً مختلفاً.</p>
+        </div>
+      )}
+
+      {/* Modal Dialog */}
+      {selectedItem && (
+        <ItemDialog
+          item={selectedItem}
+          open={Boolean(selectedItem)}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
+    </div>
   );
 }
