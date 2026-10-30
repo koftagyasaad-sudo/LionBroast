@@ -15,7 +15,7 @@ import {
   Sun,
   UtensilsCrossed,
   Users,
-  MonitorSmartphone, // استيراد أيقونة القسم الجديد
+  MonitorSmartphone,
 } from "lucide-react";
 import type { AdminBundle } from "@/lib/admin-types";
 import { adminGetAllAction } from "@/app/admin-actions";
@@ -26,7 +26,7 @@ import CustomersTab from "@/components/admin/CustomersTab";
 import MenuTab from "@/components/admin/MenuTab";
 import MenuScanner from "@/components/admin/MenuScanner";
 import OpsTab from "@/components/admin/OpsTab";
-import FrontendTab from "@/components/admin/FrontendTab"; // استيراد القسم الجديد
+import FrontendTab from "@/components/admin/FrontendTab";
 
 type TabKey = "overview" | "orders" | "customers" | "menu" | "scanner" | "frontend" | "ops";
 
@@ -36,21 +36,16 @@ const TABS: { key: TabKey; labelAr: string; labelEn: string; icon: typeof Layout
   { key: "customers", labelAr: "العملاء CRM", labelEn: "Customers", icon: Users },
   { key: "menu", labelAr: "المنيو", labelEn: "Menu CRUD", icon: UtensilsCrossed },
   { key: "scanner", labelAr: "ماسح المنيو AI", labelEn: "AI Scanner", icon: ScanLine },
-  { key: "frontend", labelAr: "إعدادات الواجهة", labelEn: "Site Content", icon: MonitorSmartphone }, // الزرار الجديد
+  { key: "frontend", labelAr: "إعدادات الواجهة", labelEn: "Site Content", icon: MonitorSmartphone },
   { key: "ops", labelAr: "المناطق والإعلانات", labelEn: "Zones & Promo", icon: Settings2 },
 ];
-
-export interface TabProps {
-  token: string;
-  data: AdminBundle;
-  refresh: () => Promise<void>;
-}
 
 export default function AdminShell({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [tab, setTab] = useState<TabKey>("overview");
   const [data, setData] = useState<AdminBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const theme = useApp((s) => s.theme);
   const setTheme = useApp((s) => s.setTheme);
 
@@ -71,14 +66,30 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
     load();
   }, [load]);
 
+  const currentLogo =
+    (data as any)?.frontend?.logoUrl ||
+    (data as any)?.frontend?.logo_url ||
+    (data as any)?.settings?.logo_url;
+
   return (
     <div className="min-h-svh bg-carbon-950 text-white">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-carbon-950/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/img/icon-512.png" alt="logo" className="size-10 rounded-xl object-cover ring-2 ring-brand-500/50" />
+            {currentLogo && !imgError ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={currentLogo}
+                alt="Broast El-Assad"
+                onError={() => setImgError(true)}
+                className="size-10 rounded-xl object-cover ring-2 ring-brand-500/50 shadow-md"
+              />
+            ) : (
+              <div className="grid size-10 place-items-center rounded-xl bg-brand-500/20 text-brand-500 ring-2 ring-brand-500/50 font-black text-xl select-none">
+                🦁
+              </div>
+            )}
             <div>
               <p className="text-sm font-extrabold">غرفة التحكم · Control Room</p>
               <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-500">Broast El-Assad</p>
@@ -135,29 +146,14 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
           ))}
         </aside>
 
-        {/* Mobile tabs */}
-        <div className="no-scrollbar fixed bottom-0 inset-x-0 z-40 flex gap-1.5 overflow-x-auto border-t border-white/10 bg-carbon-950/95 p-2 backdrop-blur-xl md:hidden">
-          {TABS.map((tItem) => (
-            <button
-              key={tItem.key}
-              onClick={() => setTab(tItem.key)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2.5 text-[11px] font-extrabold transition ${
-                tab === tItem.key ? "bg-brand-500 text-white" : "bg-white/5 text-white/60"
-              }`}
-            >
-              <tItem.icon className="size-4" />
-              {tItem.labelEn}
-            </button>
-          ))}
-        </div>
-
         {/* Content */}
         <main className="min-w-0 flex-1 pb-20 md:pb-6">
           {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm font-bold text-red-400">{error}</div>}
           {!data && !error && (
             <div className="grid place-items-center gap-4 py-32">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/img/mascot-lion.png" alt="mascot" className="size-20 animate-float rounded-2xl object-cover" />
+              <div className="grid size-20 place-items-center rounded-2xl bg-brand-500/20 text-4xl ring-2 ring-brand-500/50">
+                🦁
+              </div>
               <p className="text-sm font-bold text-white/50">جاري تجهيز غرفة التحكم...</p>
             </div>
           )}
@@ -168,8 +164,8 @@ export default function AdminShell({ token, onLogout }: { token: string; onLogou
                 {tab === "orders" && <OrdersTab token={token} data={data} refresh={load} />}
                 {tab === "customers" && <CustomersTab data={data} />}
                 {tab === "menu" && <MenuTab token={token} data={data} refresh={load} />}
-                {tab === "scanner" && <MenuScanner token={token} data={data} refresh={load} />}
-                {tab === "frontend" && <FrontendTab token={token} data={data} refresh={load} />} {/* محتوى القسم الجديد */}
+                {tab === "scanner" && <MenuScanner />}
+                {tab === "frontend" && <FrontendTab data={data} refresh={load} />}
                 {tab === "ops" && <OpsTab token={token} data={data} refresh={load} />}
               </motion.div>
             </AnimatePresence>
