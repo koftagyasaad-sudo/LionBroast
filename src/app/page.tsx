@@ -13,12 +13,10 @@ import ChefCta from "@/components/ChefCta";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 
-// إيقاف التخزين المؤقت الثابت لضمان قراءة التعديلات من لوحة التحكم فوراً
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function HomePage() {
-  // جلب البيانات من السيرفر مع حماية كاملة ضد أي انهيار
   const [frontend, promo, rawCatsWithItems, rawZones, rawItems] = await Promise.all([
     getFrontendSettings().catch(() => null),
     getPromo().catch(() => null),
@@ -27,11 +25,9 @@ export default async function HomePage() {
     db.select().from(menuItems).catch(() => []),
   ]);
 
-  // تأمين مصفوفات مضمونة ومحصنة 100% لمنع خطأ is not iterable
   const zonesList = Array.isArray(rawZones) ? rawZones : [];
   const itemsList = Array.isArray(rawItems) ? rawItems : [];
 
-  // التأكد من أن كل تصنيف يحتوي على مصفوفة items حقيقية
   const catsWithItems = Array.isArray(rawCatsWithItems)
     ? rawCatsWithItems.map((c: any) => ({
         ...c,
@@ -42,28 +38,63 @@ export default async function HomePage() {
       }))
     : [];
 
-  // جمع كافة الأصناف النشطة
   const allItems = catsWithItems.flatMap((c: any) => c.items || []);
   const bestItems = allItems.length > 0 ? allItems : itemsList;
 
-  // نص شريط الأخبار
   const marqueeText =
     frontend?.marqueeTextAr ||
     frontend?.marquee_text_ar ||
     "🔥 أقوى بروست مقرمش وطازج في دسوق | اطلب الآن واستمتع بالطعم الأسدي الأصلي 🔥";
 
+  // تجهيز مصفوفة شرائح كاملة ومحصنة تمنع خطأ s is not iterable نهائياً
+  const heroSlides = [
+    {
+      id: "slide-1",
+      title: frontend?.heroTitleAr || frontend?.hero_title_ar || "أقوى بروست مقرمش وطازج في دسوق",
+      subtitle: frontend?.heroSubtitleAr || frontend?.hero_subtitle_ar || "طعم لا يُقاوم وخبرة سنوات من التتبيل السرّي الخاص!",
+      image: frontend?.heroImage1 || frontend?.hero_image_1 || "/img/hero-1.png",
+      imageUrl: frontend?.heroImage1 || frontend?.hero_image_1 || "/img/hero-1.png",
+      tag: "الوحش الأصلي",
+      badge: "NEW!",
+      ctaText: "اطلب الآن",
+      ctaLink: "/menu",
+    },
+    {
+      id: "slide-2",
+      title: "العزومة جاهزة",
+      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات، اطلبها ووصلها السكة.",
+      image: frontend?.heroImage2 || frontend?.hero_image_2 || "/img/hero-2.png",
+      imageUrl: frontend?.heroImage2 || frontend?.hero_image_2 || "/img/hero-2.png",
+      tag: "وجبة عائلية",
+      badge: "الأكثر طلباً",
+      ctaText: "اطلب العزومة",
+      ctaLink: "/menu",
+    },
+    {
+      id: "slide-3",
+      title: "أكبر قطعة بروست في دسوق",
+      subtitle: "قرمشة وتتبيلة ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير.",
+      image: frontend?.heroImage3 || frontend?.hero_image_3 || "/img/hero-3.png",
+      imageUrl: frontend?.heroImage3 || frontend?.hero_image_3 || "/img/hero-3.png",
+      tag: "عروض VIP",
+      badge: "توفير",
+      ctaText: "شوف العروض",
+      ctaLink: "/menu",
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500 overflow-x-hidden">
-      {/* 1. الهيدر وشريط التنقل العلوي (محمي ومطابق للتصميم) */}
+      {/* 1. الهيدر وشريط التنقل العلوي */}
       <Header frontend={frontend} settings={frontend} promo={promo} />
 
       {/* 2. السلايدر الرئيسي */}
-      <HeroSlider frontend={frontend} />
+      <HeroSlider frontend={frontend} slides={heroSlides} items={heroSlides} data={heroSlides} />
 
-      {/* 3. شريط الأخبار المتحرك (مزود بـ text و items لتفادي أي خطأ spread) */}
+      {/* 3. شريط الأخبار المتحرك */}
       <MarqueeStrip text={marqueeText} items={[marqueeText, marqueeText]} />
 
-      {/* 4. سكشن الأكثر مبيعاً (لا يُعرض إلا عند وجود أصناف فعلية ومزود بكافة الخصائص المطلوبة) */}
+      {/* 4. سكشن الأكثر مبيعاً */}
       {catsWithItems.length > 0 && bestItems.length > 0 && (
         <section id="best">
           <BestSellers categories={catsWithItems} items={bestItems} />
@@ -102,7 +133,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 6. سكشن المنيو وقائمة الطعام (مع معالجة الحالة الفارغة بأمان تام) */}
+      {/* 6. سكشن المنيو وقائمة الطعام */}
       <section id="menu">
         {catsWithItems.length > 0 ? (
           <MenuPreview categories={catsWithItems} />
@@ -127,7 +158,7 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 7. سكشن مناطق وأسعار التوصيل (مزود بالمصفوفة لجميع الأسماء المحتملة) */}
+      {/* 7. سكشن مناطق وأسعار التوصيل (بالعربي فقط) */}
       <section id="zones">
         <ZonesSection zones={zonesList} deliveryZones={zonesList} settings={frontend} />
       </section>
