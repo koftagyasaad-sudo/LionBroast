@@ -35,7 +35,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// 1. جلب بيانات لوحة التحكم (محصنة بالكامل)
+// 1. جلب بيانات لوحة التحكم (محصنة ضد أي انهيار)
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -181,7 +181,7 @@ export async function verifyAdminAction(passcode: string) {
 }
 
 // =========================================================================
-// 2. محرك مسح المنيو الذكي بواسطة الذكاء الاصطناعي (Gemini Vision Engine)
+// 2. محرك مسح المنيو مع الاستكشاف التلقائي للموديلات (Auto Model Discovery)
 // =========================================================================
 export async function adminScanMenuAction(payload: {
   fileName?: string;
@@ -200,7 +200,7 @@ export async function adminScanMenuAction(payload: {
         success: false,
         ok: false,
         error:
-          "مفتاح الذكاء الاصطناعي غير متوفر! يرجى إضافة متغير البيئة GEMINI_API_KEY في إعدادات Vercel ثم إعادة النشر.",
+          "مفتاح الذكاء الاصطناعي غير متوفر في متغيرات البيئة! يرجى إضافة GEMINI_API_KEY في إعدادات Vercel.",
       };
     }
 
@@ -208,7 +208,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: "لم يتم استلام ملف الصورة بشكل سليم من المتصفح.",
+        error: "لم يتم استلام ملف الصورة بشكل صحيح.",
       };
     }
 
@@ -254,13 +254,42 @@ export async function adminScanMenuAction(payload: {
       },
     };
 
-    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    // استكشاف الموديلات المتاحة تلقائياً لمفتاح الـ API لتجنب خطأ 404 نهائياً
+    const candidateEndpoints: string[] = [];
+
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const models = listData?.models || [];
+        for (const m of models) {
+          if (m?.supportedGenerationMethods?.includes("generateContent")) {
+            candidateEndpoints.push(
+              `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not list models dynamically, falling back to static list", e);
+    }
+
+    // إضافة نقاط النهاية القياسية والحديثة كاحتياط
+    candidateEndpoints.push(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+    );
+
     let rawText = "";
     let lastError = "";
 
-    for (const model of models) {
+    for (const url of candidateEndpoints) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -273,7 +302,7 @@ export async function adminScanMenuAction(payload: {
           if (rawText) break;
         } else {
           const errText = await res.text();
-          lastError = `Gemini API Status ${res.status}: ${errText}`;
+          lastError = errText;
         }
       } catch (err: any) {
         lastError = err?.message || "Connection error";
@@ -284,7 +313,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: `فشل التحليل من سيرفر الذكاء الاصطناعي: ${lastError}`,
+        error: `تعذر الاتصال بموديل الذكاء الاصطناعي: ${lastError}`,
       };
     }
 
@@ -300,7 +329,7 @@ export async function adminScanMenuAction(payload: {
       return {
         success: false,
         ok: false,
-        error: "لم يتمكن الذكاء الاصطناعي من استخراج أي أصناف من هذه الصورة. يرجى تجربة صورة أوضح أو بزاوية مستقيمة.",
+        error: "لم يتمكن الذكاء الاصطناعي من قراءة أي أصناف من هذه الصورة. يرجى تجربة صورة أوضح أو بزاوية مستقيمة.",
       };
     }
 
@@ -325,13 +354,13 @@ export async function adminScanMenuAction(payload: {
     return {
       success: false,
       ok: false,
-      error: `حدث خطأ تقني أثناء تحليل الصورة: ${err?.message || "يرجى التحقق من حجم الصورة"}`,
+      error: `حدث خطأ تقني أثناء تحليل المنيو: ${err?.message || "تأكد من وضوح الصورة"}`,
     };
   }
 }
 
 // =========================================================================
-// 3. اعتماد وحفظ الأصناف المستخرجة في قاعدة البيانات
+// 3. حفظ واعتماد أصناف المنيو في قاعدة بيانات Neon
 // =========================================================================
 export async function adminSaveScannedRowsAction(rows: any[]) {
   try {
@@ -403,7 +432,61 @@ export async function adminSaveScannedRowsAction(rows: any[]) {
 }
 
 // =========================================================================
-// 4. العمليات التحريرية العادية (Categories / Menu / Zones / Settings / Orders)
+// 4. حفظ وتحديث إعدادات الواجهة والصور (محصنة 100% ضد أي فقدان)
+// =========================================================================
+export async function updateSettingsAction(payload: Record<string, any>) {
+  try {
+    const keyMap: Record<string, string> = {
+      brandNameAr: "brand_name_ar",
+      brandNameEn: "brand_name_en",
+      logoUrl: "logo_url",
+      heroTitleAr: "hero_title_ar",
+      heroSubtitleAr: "hero_subtitle_ar",
+      marqueeTextAr: "marquee_text_ar",
+      addressAr: "address_ar",
+      workingHoursAr: "working_hours_ar",
+      hotline: "hotline",
+      whatsapp: "whatsapp",
+      deliveryFee: "delivery_fee",
+      taxPercent: "tax_percent",
+      heroImage1: "hero_image_1",
+      heroImage2: "hero_image_2",
+      heroImage3: "hero_image_3",
+      adBanner1: "ad_banner_1",
+      adBanner2: "ad_banner_2",
+    };
+
+    const normalized: Record<string, string> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+      normalized[k] = strVal;
+      if (keyMap[k]) normalized[keyMap[k]] = strVal;
+    }
+
+    for (const [key, strVal] of Object.entries(normalized)) {
+      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+      if (existing.length > 0) {
+        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
+      } else {
+        await db.insert(settings).values({ key, value: strVal });
+      }
+    }
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+    return { success: true, ok: true };
+  } catch (err: unknown) {
+    console.error("updateSettingsAction error:", err);
+    return { success: false, ok: false, error: err instanceof Error ? err.message : "Error saving settings" };
+  }
+}
+
+export const adminSetSettingAction = updateSettingsAction;
+export const saveFrontendSettingsAction = updateSettingsAction;
+
+// =========================================================================
+// 5. العمليات التحريرية العادية (Categories / Menu / Zones / Orders)
 // =========================================================================
 export async function upsertCategoryAction(data: any) {
   try {
@@ -558,54 +641,6 @@ export async function deleteZoneAction(id: string) {
 
 export const adminSaveZoneAction = upsertZoneAction;
 export const adminDeleteZoneAction = deleteZoneAction;
-
-export async function updateSettingsAction(payload: Record<string, any>) {
-  try {
-    const keyMap: Record<string, string> = {
-      brandNameAr: "brand_name_ar",
-      brandNameEn: "brand_name_en",
-      logoUrl: "logo_url",
-      heroTitleAr: "hero_title_ar",
-      heroSubtitleAr: "hero_subtitle_ar",
-      marqueeTextAr: "marquee_text_ar",
-      addressAr: "address_ar",
-      workingHoursAr: "working_hours_ar",
-      hotline: "hotline",
-      whatsapp: "whatsapp",
-      deliveryFee: "delivery_fee",
-      taxPercent: "tax_percent",
-      heroImage1: "hero_image_1",
-      heroImage2: "hero_image_2",
-      heroImage3: "hero_image_3",
-      adBanner1: "ad_banner_1",
-      adBanner2: "ad_banner_2",
-    };
-
-    const normalized: Record<string, string> = {};
-    for (const [k, v] of Object.entries(payload)) {
-      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
-      normalized[k] = strVal;
-      if (keyMap[k]) normalized[keyMap[k]] = strVal;
-    }
-
-    for (const [key, strVal] of Object.entries(normalized)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: err instanceof Error ? err.message : "Error" };
-  }
-}
-
-export const adminSetSettingAction = updateSettingsAction;
-export const saveFrontendSettingsAction = updateSettingsAction;
 
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
