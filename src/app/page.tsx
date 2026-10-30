@@ -12,6 +12,7 @@ import LocationBlock from "@/components/LocationBlock";
 import ChefCta from "@/components/ChefCta";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
+import ClientBoot from "@/components/ClientBoot";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -84,6 +85,18 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-carbon-950 text-white selection:bg-brand-500 overflow-x-hidden">
+      {/* 0. تهيئة وتزويد المتجر بالبيانات الأساسية لمنع أي خطأ reading 'find' */}
+      <ClientBoot
+        categories={catsWithItems}
+        items={bestItems}
+        menuItems={bestItems}
+        zones={zonesList}
+        deliveryZones={zonesList}
+        settings={frontend}
+        frontend={frontend}
+        promo={promo}
+      />
+
       {/* 1. الهيدر وشريط التنقل العلوي */}
       <Header frontend={frontend} settings={frontend} promo={promo} />
 
@@ -172,7 +185,7 @@ export default async function HomePage() {
       <Footer frontend={frontend} settings={frontend} />
 
       {/* سلة المشتريات العامة */}
-      <CartDrawer items={bestItems} menuItems={bestItems} categories={catsWithItems} />
+      <CartDrawer zones={zonesList} deliveryZones={zonesList} items={bestItems} menuItems={bestItems} categories={catsWithItems} />
     </main>
   );
 }
