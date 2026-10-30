@@ -3,7 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Flame, Languages, Menu, Moon, QrCode, ShoppingBag, Sun, UtensilsCrossed, X } from "lucide-react";
+import {
+  Flame,
+  Languages,
+  Menu,
+  Moon,
+  QrCode,
+  ShoppingBag,
+  Sun,
+  UtensilsCrossed,
+  X,
+  MapPin,
+  PhoneCall,
+} from "lucide-react";
 import { cartCount, useApp } from "@/store/app-store";
 import { useDict, useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -19,7 +31,6 @@ export default function Header({ settings, frontend }: HeaderProps) {
   const mounted = useMounted();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [imgError, setImgError] = useState(false);
 
   const lang = useApp((s) => s.lang);
   const theme = useApp((s) => s.theme);
@@ -32,11 +43,11 @@ export default function Header({ settings, frontend }: HeaderProps) {
   const openOnboarding = useApp((s) => s.openOnboarding);
 
   const storeData = frontend || settings || {};
-  const logoUrl = storeData.logoUrl || storeData.logo || "/img/icon-512.png";
-  const brandName = storeData.brandNameAr || t.brand || "بروست الأسد";
+  const logoUrl = storeData.logoUrl || storeData.logo_url || "/img/icon-512.png";
+  const brandName = storeData.brandNameAr || storeData.brand_name_ar || t.brand || "بروست الأسد";
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 15);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -45,10 +56,10 @@ export default function Header({ settings, frontend }: HeaderProps) {
   const count = mounted ? cartCount(cart) : 0;
 
   const links = [
-    { href: "/menu", label: t.nav?.menu || "المنيو" },
-    { href: "/#best", label: t.nav?.best || "الأكثر طلباً" },
-    { href: "/#zones", label: t.nav?.zones || "مناطق التوصيل" },
-    { href: "/#contact", label: t.nav?.contact || "اتصل بنا" },
+    { href: "/menu", label: "المنيو", icon: UtensilsCrossed },
+    { href: "/#best", label: "الأكثر مبيعاً", icon: Flame },
+    { href: "/#zones", label: "مناطق التوصيل", icon: MapPin },
+    { href: "/#contact", label: "الفروع والتواصل", icon: PhoneCall },
   ];
 
   const openPass = () => {
@@ -59,84 +70,76 @@ export default function Header({ settings, frontend }: HeaderProps) {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-500",
-        scrolled ? "glass border-b border-line py-2 shadow-lg" : "bg-transparent py-4",
+        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
+        scrolled
+          ? "bg-carbon-950/95 backdrop-blur-xl border-b border-white/15 py-2.5 shadow-2xl"
+          : "bg-gradient-to-b from-carbon-950/90 via-carbon-950/60 to-transparent py-4 backdrop-blur-[2px]"
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 md:px-8">
-        {/* Logo */}
+        {/* Logo & Brand Name */}
         <Link href="/" className="group flex items-center gap-3">
-          {!imgError ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={logoUrl}
-              alt="Broast El-Assad"
-              onError={() => setImgError(true)}
-              className="size-11 rounded-2xl object-cover ring-2 ring-brand-500/60 transition group-hover:rotate-6 group-hover:ring-brand-500"
-            />
-          ) : (
-            <div className="grid size-11 place-items-center rounded-2xl bg-brand-500/15 text-2xl ring-2 ring-brand-500/60">
-              🦁
-            </div>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt="Broast El-Assad"
+            className="size-11 rounded-2xl object-cover ring-2 ring-brand-500/80 shadow-lg transition group-hover:scale-105"
+          />
           <span className="leading-tight">
-            <span className="block text-lg font-extrabold tracking-tight">{brandName}</span>
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-500">
+            <span className="block text-lg font-extrabold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              {brandName}
+            </span>
+            <span className="block text-[10px] font-black uppercase tracking-[0.28em] text-brand-400 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
               {lang === "ar" ? "Broast El-Assad" : "بروست الأسد"}
             </span>
           </span>
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 lg:flex">
+        {/* Desktop Navigation with high contrast pill container */}
+        <nav className="hidden items-center gap-1 lg:flex bg-carbon-950/70 border border-white/15 rounded-full px-3 py-1 shadow-xl backdrop-blur-md">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className="rounded-full px-4 py-2 text-sm font-semibold text-ink-2 transition hover:bg-surface-2 hover:text-ink"
+              className="rounded-full px-4 py-2 text-sm font-bold text-white/90 hover:text-white hover:bg-white/15 transition drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
             >
               {l.label}
             </Link>
           ))}
         </nav>
 
-        {/* Actions */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-bold transition hover:border-brand-500/60"
-            aria-label="toggle language"
+            className="flex h-10 items-center gap-1.5 rounded-full border border-white/20 bg-carbon-950/80 px-3 text-xs font-bold text-white shadow-md backdrop-blur-md hover:border-brand-500 transition"
           >
-            <Languages className="size-4 text-brand-500" />
-            {t.misc?.lang || (lang === "ar" ? "EN" : "AR")}
+            <Languages className="size-4 text-brand-400" />
+            <span>{lang === "ar" ? "English" : "العربية"}</span>
           </button>
 
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface transition hover:border-brand-500/60"
-            aria-label="toggle theme"
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/80 text-white shadow-md backdrop-blur-md hover:border-brand-500 transition"
           >
-            {mounted && theme === "light" ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
-            {!mounted && <Moon className="size-4.5" />}
+            {mounted && theme === "light" ? <Sun className="size-4.5 text-amber-400" /> : <Moon className="size-4.5 text-blue-400" />}
           </button>
 
           <button
             onClick={openPass}
-            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/50 bg-cheese-400/10 px-3 text-xs font-bold text-cheese-400 transition hover:bg-cheese-400/20 sm:flex"
-            aria-label="lion pass"
+            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/60 bg-carbon-950/90 px-3.5 text-xs font-black text-cheese-300 shadow-md backdrop-blur-md hover:bg-cheese-400/20 transition sm:flex"
           >
-            <QrCode className="size-4" />
-            {t.nav?.pass || "بطاقة الأسد"}
+            <QrCode className="size-4 text-cheese-400" />
+            <span>بطاقة الأسد VIP</span>
           </button>
 
           <button
             onClick={() => setCartOpen(true)}
-            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105"
-            aria-label="cart"
+            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105 shadow-xl"
           >
-            <ShoppingBag className="size-4.5" />
+            <ShoppingBag className="size-5" />
             {count > 0 && (
-              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-extrabold text-carbon-950 ring-2 ring-bg">
+              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-black text-carbon-950 ring-2 ring-bg">
                 {count}
               </span>
             )}
@@ -144,32 +147,31 @@ export default function Header({ settings, frontend }: HeaderProps) {
 
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface lg:hidden"
-            aria-label="menu"
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/80 text-white lg:hidden"
           >
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile sheet */}
+      {/* Mobile Menu */}
       <AnimatePresence>
         {menuOpen && (
           <motion.nav
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="glass overflow-hidden border-b border-line lg:hidden"
+            className="bg-carbon-950/98 border-b border-white/15 backdrop-blur-2xl lg:hidden"
           >
-            <div className="space-y-1 px-4 py-4">
+            <div className="space-y-1.5 px-4 py-4">
               {links.map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-ink transition hover:bg-surface-2"
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white hover:bg-white/10"
                 >
-                  {l.href === "/menu" ? <UtensilsCrossed className="size-4 text-brand-500" /> : <Flame className="size-4 text-brand-500" />}
+                  <l.icon className="size-4 text-brand-500" />
                   {l.label}
                 </Link>
               ))}
@@ -181,7 +183,7 @@ export default function Header({ settings, frontend }: HeaderProps) {
                 className="flex w-full items-center gap-3 rounded-xl bg-cheese-400/10 px-4 py-3 text-sm font-bold text-cheese-400"
               >
                 <QrCode className="size-4" />
-                {t.nav?.pass || "بطاقة الأسد"}
+                بطاقة الأسد VIP
               </button>
             </div>
           </motion.nav>
