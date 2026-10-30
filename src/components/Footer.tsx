@@ -1,70 +1,76 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { MapPin, Clock, Phone, MessageSquare, ShieldCheck } from "lucide-react";
-import type { FrontendSettings } from "@/lib/types";
+import { MapPin, Clock, Phone, MessageCircle, ShieldCheck } from "lucide-react";
 
-interface FooterProps {
-  settings?: FrontendSettings;
-}
-
-export default function Footer({ settings }: FooterProps) {
-  const brandName = settings?.brandNameAr || "بروست الأسد";
-  const address = settings?.addressAr || "دسوق - شارع الجلاء - بجوار مسجد الإبراهيمي";
-  const workingHours = settings?.workingHoursAr || "يومياً من 12 ظهراً حتى 2 صباحاً";
-  const hotline = settings?.hotline || "01000000000";
-  const whatsapp = settings?.whatsapp || "201000000000";
-  const footerText = settings?.footerTextAr || "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.";
+export default function Footer({ frontend, settings }: { frontend?: any; settings?: any }) {
+  const data = frontend || settings || {};
+  const logoUrl = data.logoUrl || data.logo_url || "/img/icon-512.png";
+  const brandName = data.brandNameAr || data.brand_name_ar || "بروست الأسد";
+  const address = data.addressAr || data.address_ar || "دسوق - شارع الجيش - بجوار مستشفي النيل - أمام درويش للأجهزة الكهربائية";
+  const workingHours = data.workingHoursAr || data.working_hours_ar || "يومياً من 10 صباحا حتى 4 فجرا";
+  const hotline = data.hotline || "0248813666";
+  const whatsapp = data.whatsapp || "201034419424";
+  const aboutText =
+    data.footerAboutAr ||
+    data.footer_about_ar ||
+    "مطعم بروست الأسد - يقدم أفضل الوجبات السريعة والبروست المقرمش في دسوق بأعلى جودة وأفضل سعر.";
+  const copyrightText =
+    data.footerCopyrightAr ||
+    data.footer_copyright_ar ||
+    "© 2026 بروست الأسد . جميع الحقوق محفوظة.";
+  const sloganText =
+    data.footerSloganAr ||
+    data.footer_slogan_ar ||
+    "توصيل سريع داخل دسوق • طعم أسدي أصلي";
 
   return (
-    <footer className="bg-slate-950 border-t border-slate-900 text-slate-400 text-sm">
-      <div className="max-w-7xl mx-auto px-4 py-12 md:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
-          {/* Brand & Info */}
+    <footer className="border-t border-white/10 bg-carbon-950 text-white pt-16 pb-12" dir="rtl">
+      <div className="mx-auto max-w-7xl px-4 md:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+          {/* Logo & About */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              {settings?.logoUrl ? (
-                <div className="relative w-10 h-10 rounded-full overflow-hidden border border-amber-500/40">
-                  <Image src={settings.logoUrl} alt={brandName} fill className="object-cover" unoptimized />
-                </div>
-              ) : (
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg">
-                  🦁
-                </div>
-              )}
-              <span className="font-extrabold text-xl text-amber-500">{brandName}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={brandName} className="size-12 rounded-2xl object-cover ring-2 ring-brand-500/60 shadow-lg" />
+              <div>
+                <h3 className="text-xl font-extrabold text-white">{brandName}</h3>
+                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-brand-400">BROAST EL-ASSAD</span>
+              </div>
             </div>
-            <p className="text-slate-400 leading-relaxed max-w-md">{footerText}</p>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+
+            <p className="text-xs text-white/60 leading-relaxed max-w-md">
+              {aboutText}
+            </p>
+
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck className="size-3.5" />
               <span>جميع الوجبات تُحضر يومياً طازجة 100% بأعلى معايير الجودة</span>
             </div>
           </div>
 
           {/* Quick Links */}
           <div className="space-y-3">
-            <h4 className="font-bold text-slate-200 text-base mb-2 border-r-2 border-amber-500 pr-2">روابط السريعة</h4>
-            <ul className="space-y-2">
+            <h4 className="text-sm font-extrabold border-r-2 border-brand-500 pr-2">روابط سريعة</h4>
+            <ul className="space-y-2 text-xs font-semibold text-white/60">
               <li>
-                <Link href="/" className="hover:text-amber-400 transition-colors">
+                <Link href="/" className="hover:text-amber-400 transition">
                   الرئيسية
                 </Link>
               </li>
               <li>
-                <Link href="/menu" className="hover:text-amber-400 transition-colors">
+                <Link href="/menu" className="hover:text-amber-400 transition">
                   قائمة الطعام
                 </Link>
               </li>
               <li>
-                <Link href="/pass" className="hover:text-amber-400 transition-colors">
-                  كارت الولاء
+                <Link href="/pass" className="hover:text-amber-400 transition">
+                  كارت الولاء VIP
                 </Link>
               </li>
               <li>
-                <Link href="/track" className="hover:text-amber-400 transition-colors">
-                  تتبع طلبك
+                <Link href="/#zones" className="hover:text-amber-400 transition">
+                  مناطق التوصيل
                 </Link>
               </li>
             </ul>
@@ -72,23 +78,30 @@ export default function Footer({ settings }: FooterProps) {
 
           {/* Contact Details */}
           <div className="space-y-3">
-            <h4 className="font-bold text-slate-200 text-base mb-2 border-r-2 border-amber-500 pr-2">تواصل معنا</h4>
-            <div className="space-y-2 text-xs">
+            <h4 className="text-sm font-extrabold border-r-2 border-brand-500 pr-2">تواصل معنا</h4>
+            <div className="space-y-2.5 text-xs text-white/60">
               <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <MapPin className="size-4 text-brand-400 shrink-0 mt-0.5" />
                 <span>{address}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <Clock className="size-4 text-amber-400 shrink-0" />
                 <span>{workingHours}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-amber-500 shrink-0" />
-                <a href={`tel:${hotline}`} className="hover:text-amber-400 dir-ltr">{hotline}</a>
+                <Phone className="size-4 text-emerald-400 shrink-0" />
+                <a href={`tel:${hotline}`} dir="ltr" className="font-bold text-white hover:text-amber-400">
+                  {hotline}
+                </a>
               </div>
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
-                <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400">
+                <MessageCircle className="size-4 text-emerald-400 shrink-0" />
+                <a
+                  href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-emerald-400 hover:underline"
+                >
                   واتساب الخدمة
                 </a>
               </div>
@@ -96,14 +109,10 @@ export default function Footer({ settings }: FooterProps) {
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} {brandName}. جميع الحقوق محفوظة.</p>
-          <div className="flex items-center gap-4">
-            <span>توصيل سريع داخل دسوق</span>
-            <span>•</span>
-            <span>طعم أسدي أصلي</span>
-          </div>
+        {/* Bottom Copyright Bar */}
+        <div className="mt-12 pt-6 border-t border-white/10 flex flex-wrap items-center justify-between gap-4 text-xs font-semibold text-white/50">
+          <p>{copyrightText}</p>
+          <p className="text-amber-400/80">{sloganText}</p>
         </div>
       </div>
     </footer>
