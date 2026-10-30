@@ -34,7 +34,7 @@ function checkAuth(token?: string) {
 }
 
 // =========================================================================
-// FETCH ALL ADMIN DASHBOARD DATA (Complete & Fully Secured)
+// 1. جلب كافة بيانات لوحة التحكم مع ضمان الحقول الرقمية
 // =========================================================================
 export async function adminGetAllAction(token?: string) {
   try {
@@ -82,7 +82,7 @@ export async function adminGetAllAction(token?: string) {
     const customersCount = customersList.length;
     const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
-    const metricsObject = {
+    const kpisObj = {
       revenue: Number(totalRevenue || 0),
       totalRevenue: Number(totalRevenue || 0),
       sales: Number(totalRevenue || 0),
@@ -95,7 +95,7 @@ export async function adminGetAllAction(token?: string) {
       avgOrder: Number(avgOrder || 0),
       averageOrderValue: Number(avgOrder || 0),
       aov: Number(avgOrder || 0),
-      pending: ordersList.filter((o) => o.status === "pending").length,
+      pending: ordersList.filter((o) => o.status === "pending" || o.status === "preparing").length,
       completed: ordersList.filter((o) => o.status === "delivered" || o.status === "completed").length,
     };
 
@@ -139,11 +139,11 @@ export async function adminGetAllAction(token?: string) {
     return {
       ok: true,
       success: true,
-      ...metricsObject,
-      kpis: metricsObject,
-      stats: metricsObject,
-      metrics: metricsObject,
-      summary: metricsObject,
+      ...kpisObj,
+      kpis: kpisObj,
+      stats: kpisObj,
+      metrics: kpisObj,
+      summary: kpisObj,
       categories: cats,
       items: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
       menuItems: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
@@ -179,6 +179,9 @@ export async function verifyAdminAction(passcode: string) {
   return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
+// =========================================================================
+// 2. إدارة التصنيفات (Categories)
+// =========================================================================
 export async function upsertCategoryAction(data: any) {
   try {
     const id = data?.id || `cat-${Date.now()}`;
@@ -223,6 +226,9 @@ export async function deleteCategoryAction(id: string) {
 export const adminSaveCategoryAction = upsertCategoryAction;
 export const adminDeleteCategoryAction = deleteCategoryAction;
 
+// =========================================================================
+// 3. إدارة الأصناف (Menu Items)
+// =========================================================================
 export async function upsertMenuItemAction(data: any) {
   try {
     const id = data?.id || `item-${Date.now()}`;
@@ -284,6 +290,9 @@ export async function deleteMenuItemAction(id: string) {
 export const adminSaveItemAction = upsertMenuItemAction;
 export const adminDeleteItemAction = deleteMenuItemAction;
 
+// =========================================================================
+// 4. إدارة مناطق التوصيل (Delivery Zones)
+// =========================================================================
 export async function upsertZoneAction(data: any) {
   try {
     const id = data?.id || `zone-${Date.now()}`;
@@ -333,6 +342,9 @@ export async function deleteZoneAction(id: string) {
 export const adminSaveZoneAction = upsertZoneAction;
 export const adminDeleteZoneAction = deleteZoneAction;
 
+// =========================================================================
+// 5. إعدادات الواجهة والإعلانات (Settings & Banners)
+// =========================================================================
 export async function updateSettingsAction(payload: Record<string, any>) {
   try {
     const keyMap: Record<string, string> = {
@@ -381,6 +393,9 @@ export async function updateSettingsAction(payload: Record<string, any>) {
 export const adminSetSettingAction = updateSettingsAction;
 export const saveFrontendSettingsAction = updateSettingsAction;
 
+// =========================================================================
+// 6. إدارة الطلبات والعملاء (Orders & Customers)
+// =========================================================================
 export async function updateOrderStatusAction(orderId: number | string, status: string) {
   try {
     await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
