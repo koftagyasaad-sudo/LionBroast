@@ -1,173 +1,208 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Flame, Leaf, Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { X, Plus, Minus, ShoppingBag, Flame, Sparkles } from "lucide-react";
 import { useApp } from "@/store/app-store";
-import { useDict, useIsAr, useLang } from "@/lib/hooks";
-import { money } from "@/lib/utils";
-import ItemImage from "@/components/ItemImage";
 
-/** Quick-add drawer: pick marinade (Original/Spicy), size variant, quantity. */
-export default function ItemDialog() {
-  const item = useApp((s) => s.dialogItem);
-  const closeItemDialog = useApp((s) => s.closeItemDialog);
-  const addItem = useApp((s) => s.addItem);
-  const pushToast = useApp((s) => s.pushToast);
-  const t = useDict();
-  const isAr = useIsAr();
-  const lang = useLang();
+interface ItemDialogProps {
+  item?: any;
+  open?: boolean;
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function ItemDialog(props: ItemDialogProps) {
+  const app = useApp() as any;
+
+  const item = props.item || app.dialogItem || app.selectedItem || null;
+  const isOpen = props.open ?? props.isOpen ?? Boolean(item && (app.isDialogOpen ?? true));
+  const handleClose = props.onClose || app.closeDialog || (() => {});
+  const addToCart = app.addToCart || app.addItem || (() => {});
+  const setCartOpen = app.setCartOpen || app.openCart || (() => {});
 
   const [flavor, setFlavor] = useState<"original" | "spicy">("original");
-  const [sizeId, setSizeId] = useState<string | null>(null);
+  const [sizeId, setSizeId] = useState<string | number | null>(null);
   const [qty, setQty] = useState(1);
 
+  // استخدام الاختيار الآمن لمنع خطأ 'item.sizes is possibly undefined' نهائياً
   useEffect(() => {
     if (item) {
       setFlavor("original");
-      setSizeId(item.sizes[0]?.id ?? null);
+      setSizeId(item.sizes?.[0]?.id ?? null);
       setQty(1);
     }
   }, [item]);
 
-  const open = !!item;
-  const activeSize = item?.sizes.find((s) => s.id === sizeId) ?? null;
-  const unit = item ? (activeSize?.price ?? item.price) : 0;
+  if (!isOpen || !item) return null;
 
-  const confirm = () => {
-    if (!item) return;
-    addItem(
-      {
-        key: `${item.id}|${sizeId ?? ""}|${item.spicyOption ? flavor : ""}`,
-        id: item.id,
-        nameAr: item.nameAr,
-        nameEn: item.nameEn,
-        image: item.image,
-        unitPrice: unit,
-        flavor: item.spicyOption ? flavor : null,
-        sizeId,
-        sizeLabel: activeSize ? `${activeSize.ar} / ${activeSize.en}` : null,
-      },
-      qty,
-    );
-    pushToast({ title: `${t.cart.added} × ${qty}`, desc: isAr ? item.nameAr : item.nameEn, tone: "ok" });
-    closeItemDialog();
+  const safeSizes: any[] = Array.isArray(item.sizes) ? item.sizes : [];
+  const selectedSize = safeSizes.find((s) => String(s.id) === String(sizeId)) || safeSizes[0];
+  const basePrice = Number(selectedSize?.price ?? item.price ?? 0);
+  const totalPrice = basePrice * qty;
+
+  const handleAddToCart = () => {
+    addToCart({
+      id: String(item.id) + (selectedSize ? `-${selectedSize.id}` : "") + `-${flavor}`,
+      itemId: String(item.id),
+      nameAr: item.nameAr || item.name || "وجبة بروست",
+      nameEn: item.nameEn || item.nameAr || "Broast Meal",
+      price: basePrice,
+      flavor,
+      sizeName: selectedSize?.nameAr || selectedSize?.name,
+      quantity: qty,
+      imageUrl: item.imageUrl || item.image || "",
+    });
+    handleClose();
+    setCartOpen(true);
   };
 
   return (
     <AnimatePresence>
-      {open && item && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
         <motion.div
-          className="fixed inset-0 z-[85] grid place-items-center p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          onClick={handleClose}
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+        />
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 16 }}
+          transition={{ type: "spring", damping: 25, stiffness: 260 }}
+          className="relative z-10 w-full max-w-lg overflow-hidden rounded-3xl border border-white/15 bg-carbon-900 text-white shadow-2xl flex flex-col max-h-[90vh]"
         >
-          <button aria-label="close" onClick={closeItemDialog} className="absolute inset-0 bg-carbon-950/70 backdrop-blur-sm" />
-          <motion.div
-            initial={{ opacity: 0, y: 60, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-line bg-surface shadow-2xl"
-          >
-            <div className="relative h-48">
-              <ItemImage id={item.id} src={item.image} alt={isAr ? item.nameAr : item.nameEn} />
-              <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
-              <button
-                onClick={closeItemDialog}
-                className="absolute end-4 top-4 grid size-9 place-items-center rounded-full bg-carbon-950/60 text-white backdrop-blur transition hover:scale-110"
-                aria-label="close"
-              >
-                <X className="size-4.5" />
-              </button>
-              {item.isBestSeller && (
-                <span className="flame-badge absolute start-4 top-4 flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold text-white">
-                  <Flame className="size-3.5" /> {t.misc.bestSeller}
-                </span>
+          {/* Header Image */}
+          <div className="relative h-48 w-full bg-carbon-950 flex items-center justify-center border-b border-white/10 overflow-hidden">
+            {item.imageUrl || item.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.imageUrl || item.image}
+                alt={item.nameAr || item.name}
+                className="size-full object-cover"
+              />
+            ) : (
+              <span className="text-6xl select-none">🍗</span>
+            )}
+            <button
+              onClick={handleClose}
+              className="absolute top-4 left-4 grid size-9 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80 transition cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          {/* Details & Options */}
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-xl font-black text-white">{item.nameAr || item.name}</h3>
+                <span className="text-xl font-black text-amber-400">{basePrice} ج.م</span>
+              </div>
+              {item.descriptionAr && (
+                <p className="mt-2 text-xs text-white/60 leading-relaxed">{item.descriptionAr}</p>
               )}
             </div>
 
-            <div className="-mt-6 relative space-y-5 p-5">
-              <div>
-                <h3 className="text-xl font-extrabold">{isAr ? item.nameAr : item.nameEn}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-ink-2">{isAr ? item.descriptionAr : item.descriptionEn}</p>
-              </div>
-
-              {item.spicyOption && (
-                <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-2">{t.cart.flavor}</p>
-                  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-surface-2 p-1.5">
-                    <button
-                      onClick={() => setFlavor("original")}
-                      className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition ${
-                        flavor === "original" ? "bg-surface text-ink shadow" : "text-ink-2 hover:text-ink"
-                      }`}
-                    >
-                      <Leaf className="size-4 text-emerald-500" /> {t.cart.original}
-                    </button>
-                    <button
-                      onClick={() => setFlavor("spicy")}
-                      className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition ${
-                        flavor === "spicy" ? "flame-badge text-white shadow" : "text-ink-2 hover:text-ink"
-                      }`}
-                    >
-                      <Flame className="size-4" /> {t.cart.spicy}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {item.sizes.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-2">{t.cart.size}</p>
-                  <div className="space-y-2">
-                    {item.sizes.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => setSizeId(s.id)}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-sm font-bold transition ${
-                          sizeId === s.id ? "border-brand-500 bg-brand-500/10 text-ink" : "border-line text-ink-2 hover:border-brand-500/50"
-                        }`}
-                      >
-                        <span>{isAr ? s.ar : s.en}</span>
-                        <span className="text-brand-500">{money(s.price, lang)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 rounded-full border border-line bg-surface-2 px-2 py-1.5">
-                  <button
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    className="grid size-8 place-items-center rounded-full bg-surface transition hover:scale-105"
-                    aria-label="minus"
-                  >
-                    <Minus className="size-4" />
-                  </button>
-                  <span className="w-6 text-center text-base font-extrabold">{qty}</span>
-                  <button
-                    onClick={() => setQty((q) => Math.min(30, q + 1))}
-                    className="grid size-8 place-items-center rounded-full bg-surface transition hover:scale-105"
-                    aria-label="plus"
-                  >
-                    <Plus className="size-4" />
-                  </button>
-                </div>
+            {/* Flavor Selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-white/70 block">اختر النكهة:</label>
+              <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={confirm}
-                  className="glow-brand flex flex-1 items-center justify-center gap-2 rounded-full bg-brand-500 py-3.5 text-sm font-extrabold text-white transition hover:scale-[1.02] active:scale-[0.98]"
+                  type="button"
+                  onClick={() => setFlavor("original")}
+                  className={`flex items-center justify-center gap-2 rounded-2xl border p-3 text-xs font-black transition cursor-pointer ${
+                    flavor === "original"
+                      ? "border-brand-500 bg-brand-500/20 text-brand-400 shadow-md"
+                      : "border-white/10 bg-carbon-950 text-white/70 hover:border-white/20"
+                  }`}
                 >
-                  <ShoppingBag className="size-4.5" />
-                  {t.cart.add} — {money(unit * qty, lang)}
+                  <Sparkles className="size-4" />
+                  <span>عادي (أصلي)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlavor("spicy")}
+                  className={`flex items-center justify-center gap-2 rounded-2xl border p-3 text-xs font-black transition cursor-pointer ${
+                    flavor === "spicy"
+                      ? "border-red-500 bg-red-500/20 text-red-400 shadow-md"
+                      : "border-white/10 bg-carbon-950 text-white/70 hover:border-white/20"
+                  }`}
+                >
+                  <Flame className="size-4 text-red-500" />
+                  <span>حار (سبايسي 🌶️)</span>
                 </button>
               </div>
             </div>
-          </motion.div>
+
+            {/* Sizes Selection */}
+            {safeSizes.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-white/70 block">اختر الحجم:</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {safeSizes.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSizeId(s.id)}
+                      className={`flex items-center justify-between rounded-2xl border p-3 text-xs font-bold transition cursor-pointer ${
+                        String(s.id) === String(sizeId)
+                          ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-md"
+                          : "border-white/10 bg-carbon-950 text-white/70 hover:border-white/20"
+                      }`}
+                    >
+                      <span>{s.nameAr || s.name}</span>
+                      <span className="font-black text-amber-400">{s.price} ج.م</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quantity */}
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+              <span className="text-xs font-bold text-white/80">الكمية:</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="grid size-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span className="w-8 text-center text-base font-black text-white">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => q + 1)}
+                  className="grid size-9 place-items-center rounded-xl bg-brand-500 hover:bg-brand-600 text-white transition cursor-pointer shadow-md"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer CTA */}
+          <div className="p-6 border-t border-white/10 bg-carbon-950/50 flex items-center justify-between gap-4">
+            <div>
+              <span className="text-[10px] text-white/50 block font-bold">السعر الإجمالي:</span>
+              <span className="text-2xl font-black text-amber-400">{totalPrice} <span className="text-xs">ج.م</span></span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              className="flex items-center gap-2 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-95 px-8 py-3.5 text-sm font-black text-white shadow-xl glow-brand transition cursor-pointer"
+            >
+              <ShoppingBag className="size-4" />
+              <span>أضف للطلب</span>
+            </button>
+          </div>
         </motion.div>
-      )}
+      </div>
     </AnimatePresence>
   );
 }
