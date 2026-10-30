@@ -11,7 +11,52 @@ import {
 import { eq, asc, desc, inArray } from "drizzle-orm";
 
 // =========================================================================
-// 1. استعلامات العملاء وبطاقة الولاء VIP
+// 1. استعلامات صفحة المنيو وقوائم الطعام (حل خطأ getMenuData نهائياً)
+// =========================================================================
+export async function getCategoriesWithItems() {
+  try {
+    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
+    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+
+    return cats.map((cat) => ({
+      ...cat,
+      items: items.filter((item) => String(item.categoryId) === String(cat.id)),
+    }));
+  } catch (err) {
+    console.error("getCategoriesWithItems error:", err);
+    return [];
+  }
+}
+
+export async function getMenuItems() {
+  try {
+    return await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
+  } catch (err) {
+    console.error("getMenuItems error:", err);
+    return [];
+  }
+}
+
+export async function getMenuData() {
+  try {
+    const [cats, items] = await Promise.all([
+      getCategoriesWithItems(),
+      getMenuItems(),
+    ]);
+
+    return {
+      categories: cats,
+      items,
+      menuItems: items,
+    };
+  } catch (err) {
+    console.error("getMenuData error:", err);
+    return { categories: [], items: [], menuItems: [] };
+  }
+}
+
+// =========================================================================
+// 2. استعلامات العملاء وبطاقة الولاء VIP
 // =========================================================================
 export async function getPassData(code: string) {
   try {
@@ -90,7 +135,7 @@ export async function createCustomer(data: any) {
 }
 
 // =========================================================================
-// 2. استعلامات مناطق التوصيل
+// 3. استعلامات مناطق التوصيل
 // =========================================================================
 export async function getDeliveryZoneById(id: string | number) {
   try {
@@ -129,7 +174,7 @@ export async function getDeliveryZones() {
 }
 
 // =========================================================================
-// 3. استعلامات وإنشاء الطلبات (Orders)
+// 4. استعلامات وإنشاء الطلبات (Orders)
 // =========================================================================
 export async function createOrder(orderData: any, lines: any[] = []) {
   try {
@@ -188,7 +233,7 @@ export async function getOrdersByNumbers(orderNumbers: any[]) {
 }
 
 // =========================================================================
-// 4. إعدادات الواجهة الحية (بدون كاش)
+// 5. إعدادات الواجهة الحية (بدون كاش)
 // =========================================================================
 export async function getFrontendSettings() {
   try {
@@ -269,33 +314,6 @@ export async function getFrontendSettings() {
   } catch (err) {
     console.error("getFrontendSettings error:", err);
     return null;
-  }
-}
-
-// =========================================================================
-// 5. التصنيفات وقائمة الطعام الحية
-// =========================================================================
-export async function getCategoriesWithItems() {
-  try {
-    const cats = await db.select().from(categories).orderBy(asc(categories.sortOrder));
-    const items = await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-
-    return cats.map((cat) => ({
-      ...cat,
-      items: items.filter((item) => String(item.categoryId) === String(cat.id)),
-    }));
-  } catch (err) {
-    console.error("getCategoriesWithItems error:", err);
-    return [];
-  }
-}
-
-export async function getMenuItems() {
-  try {
-    return await db.select().from(menuItems).orderBy(asc(menuItems.sortOrder));
-  } catch (err) {
-    console.error("getMenuItems error:", err);
-    return [];
   }
 }
 
