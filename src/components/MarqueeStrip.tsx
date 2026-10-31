@@ -1,39 +1,25 @@
 "use client";
 
 import { Flame } from "lucide-react";
-import { useIsAr } from "@/lib/hooks";
 
-export default function MarqueeStrip({ 
-  marqueeAr, 
-  marqueeEn 
-}: { 
-  marqueeAr?: string; 
-  marqueeEn?: string 
-}) {
-  const isAr = useIsAr();
-  
-  // نصوص افتراضية في حالة إن لوحة التحكم لسه فاضية
-  const defaultAr = "كرسبي ١٠٠٪ 🔥 دجاج طازج يومياً 🔥 تتبيلة سرية من 1998 🔥 حار بجد";
-  const defaultEn = "100% CRISPY 🔥 Fresh chicken daily 🔥 Secret recipe since 1998 🔥 Seriously hot";
-
-  // اختيار النص حسب اللغة
-  const rawText = isAr ? (marqueeAr || defaultAr) : (marqueeEn || defaultEn);
-
-  // تقسيم النص بناءً على رمز النار عشان الشريط يشتغل صح
-  const words = rawText.split('🔥').map(w => w.trim()).filter(Boolean);
-  
-  // تكرار الكلمات عشان حركة الشريط تفضل شغالة بدون تقطيع
-  const row = [...words, ...words, ...words, ...words]; 
+export default function MarqueeStrip({ marqueeAr, text }: { marqueeAr?: string; text?: string; [key: string]: any }) {
+  const displayText =
+    marqueeAr ||
+    text ||
+    "توصيل سريع وساخن لجميع أنحاء دسوق • اطلب الآن واستمتع بالطعم الأسدي الأصلي 🍗";
 
   return (
-    <div className="relative mt-16 overflow-hidden border-y border-line bg-surface py-4">
-      <div className="marquee-track items-center gap-8">
-        {row.map((w, i) => (
-          <span key={i} className="flex shrink-0 items-center gap-8">
-            <span className="text-sm font-extrabold uppercase tracking-[0.2em] text-ink-2">{w}</span>
-            <Flame className="size-4 shrink-0 text-brand-500" fill="currentColor" />
-          </span>
-        ))}
+    <div className="mx-auto max-w-7xl px-4 md:px-8 py-3" dir="rtl">
+      <div className="relative overflow-hidden rounded-2xl border border-brand-500/20 bg-carbon-900/80 py-2.5 shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-8 whitespace-nowrap animate-marquee">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3 text-xs md:text-sm font-black text-amber-300 shrink-0">
+              <Flame className="w-4 h-4 text-brand-500 fill-brand-500" />
+              <span>{displayText}</span>
+              <span className="text-white/30">•</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
