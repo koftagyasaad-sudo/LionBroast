@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   upsertCategoryAction,
   deleteCategoryAction,
   upsertMenuItemAction,
   deleteMenuItemAction,
+  scanMenuAction,
   adminSaveScannedRowsAction,
 } from "@/app/admin-actions";
 import {
@@ -22,19 +23,26 @@ import {
   ScanLine,
   Loader2,
   X,
+  AlertCircle,
+  CheckCircle2,
+  Image as ImageIcon,
+  DollarSign,
+  FileText,
 } from "lucide-react";
 
-function compressImageForScan(file: File): Promise<Blob> {
-  return new Promise((resolve) => {
+// دالة ضغط الصورة داخل المتصفح لمنع خطأ تجاوز حجم البيانات المسموح به
+async function compressImageToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (e) => {
       const img = new Image();
       img.src = e.target?.result as string;
       img.onload = () => {
+        const canvas = document.createElement("canvas");
         let width = img.width;
         let height = img.height;
-        const maxDim = 1400;
+        const maxDim = 1200;
 
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -46,385 +54,403 @@ function compressImageForScan(file: File): Promise<Blob> {
           }
         }
 
-        const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
-          resolve(file);
+          resolve(e.target?.result as string);
           return;
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.78);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
       };
-      img.onerror = () => resolve(file);
+      img.onerror = () => reject(new Error("تعذر معالجة الصورة"));
     };
-    reader.onerror = () => resolve(file);
+    reader.onerror = () => reject(new Error("تعذر قراءة الملف"));
   });
 }
 
-export default function MenuTab({ data, refresh }: { token?: string; data?: any; refresh?: () => void }) {
-  const categoriesList: any[] = Array.isArray(data?.categories) ? data.categories : [];
-  const itemsList: any[] = Array.isArray(data?.menuItems || data?.items) ? (data?.menuItems || data?.items) : [];
+export default function MenuTab({ bundle, onReload, categories: propCats, items: propItems }: any) {
+  // دمج مصادر البيانات بمرونة
+  const initialCats = bundle?.categories || propCats || [];
+  const initialItems = bundle?.menuItems || bundle?.items || propItems || [];
 
-  const [selectedCatId, setSelectedCatId] = useState<string>(categoriesList[0]?.id || "");
-  const [showScanner, setShowScanner] = useState(false);
+  const [cats, setCats] = useState<any[]>(initialCats);
+  const [items, setItems] = useState<any[]>(initialItems);
+  const [activeCatId, setActiveCatId] = useState<number | string>(
+    initialCats[0]?.id || ""
+  );
 
-  const [newCatNameAr, setNewCatNameAr] = useState("");
-  const [addingCat, setAddingCat] = useState(false);
+  // حالات إضافة صنف وقسم جديد
+  const [newCatName, setNewCatName] = useState("");
+  const [catLoading, setCatLoading] = useState(false);
 
-  const [itemFormOpen, setItemFormOpen] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemForm, setItemForm] = useState({
-    categoryId: "",
-    nameAr: "",
-    price: 90,
-    descriptionAr: "",
-    badge: "",
-    imageUrl: "",
-    hasSpicyOption: true,
-    hasDoubleOption: true,
-    doubleExtraPrice: 35,
-  });
-  const [savingItem, setSavingItem] = useState(false);
+  const [itemName, setItemName] = useState("");
+  const [itemPrice, setItemPrice] = useState("");
+  const [itemDesc, setItemDesc] = useState("");
+  const [itemImage, setItemImage] = useState("/img/hero-1.png");
+  const [itemBadge, setItemBadge] = useState("");
+  const [itemLoading, setItemLoading] = useState(false);
+  const [showItemModal, setShowItemModal] = useState(false);
 
-  const [scanFile, setScanFile] = useState<File | null>(null);
+  // حالات ماسح الذكاء الاصطناعي بنظام DG-Menu
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [scannedRows, setScannedRows] = useState<any[]>([]);
-  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [saveRowsLoading, setSaveRowsLoading] = useState(false);
 
+  // 1. إضافة قسم جديد
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatNameAr.trim()) return;
-    setAddingCat(true);
+    if (!newCatName.trim()) return;
+
+    setCatLoading(true);
     try {
-      const res = await upsertCategoryAction({ nameAr: newCatNameAr.trim() });
-      if (res && res.success) {
-        setNewCatNameAr("");
-        if (refresh) await refresh();
-        if (res.id) setSelectedCatId(res.id);
+      const res = await upsertCategoryAction({
+        nameAr: newCatName.trim(),
+        nameEn: newCatName.trim(),
+        sortOrder: cats.length,
+      });
+
+      if (res.success) {
+        const created = res.category || {
+          id: Date.now(),
+          nameAr: newCatName.trim(),
+          nameEn: newCatName.trim(),
+          items: [],
+        };
+        const updated = [...cats, created];
+        setCats(updated);
+        setActiveCatId(created.id);
+        setNewCatName("");
+        onReload?.();
       }
+    } catch (err) {
+      console.error(err);
     } finally {
-      setAddingCat(false);
+      setCatLoading(false);
     }
   };
 
-  const handleDeleteCategory = async (catId: string) => {
-    if (!confirm("هل أنت متأكد من حذف هذا القسم وجميع أصنافه؟")) return;
-    await deleteCategoryAction(catId);
-    if (refresh) await refresh();
-  };
-
-  const handleOpenNewItem = (catId?: string) => {
-    setEditingItemId(null);
-    setItemForm({
-      categoryId: catId || selectedCatId || categoriesList[0]?.id || "",
-      nameAr: "",
-      price: 90,
-      descriptionAr: "",
-      badge: "الأكثر طلباً",
-      imageUrl: "",
-      hasSpicyOption: true,
-      hasDoubleOption: true,
-      doubleExtraPrice: 35,
-    });
-    setItemFormOpen(true);
-  };
-
-  const handleEditItem = (item: any) => {
-    setEditingItemId(item.id);
-    let options = { hasSpicyOption: true, hasDoubleOption: true, doubleExtraPrice: 35 };
+  // 2. حذف قسم
+  const handleDeleteCategory = async (id: number | string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا القسم بالكامل؟")) return;
     try {
-      if (item.descriptionEn && item.descriptionEn.startsWith("{")) {
-        options = { ...options, ...JSON.parse(item.descriptionEn) };
+      await deleteCategoryAction(id);
+      const updated = cats.filter((c) => c.id !== id);
+      setCats(updated);
+      if (activeCatId === id) {
+        setActiveCatId(updated[0]?.id || "");
       }
-    } catch {}
-
-    setItemForm({
-      categoryId: item.categoryId || selectedCatId,
-      nameAr: item.nameAr || item.name || "",
-      price: Number(item.price || 0),
-      descriptionAr: item.descriptionAr || item.description || "",
-      badge: item.badge || "",
-      imageUrl: item.imageUrl || item.image || "",
-      ...options,
-    });
-    setItemFormOpen(true);
+      onReload?.();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleSaveItem = async (e: React.FormEvent) => {
+  // 3. إضافة صنف يدوي وتثبيته مباشرة
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemForm.nameAr.trim()) return;
-    setSavingItem(true);
+    if (!itemName.trim() || !itemPrice) return;
+
+    const targetCat = activeCatId || cats[0]?.id;
+    if (!targetCat) {
+      alert("يرجى إنشاء قسم أولاً قبل إضافة الأصناف.");
+      return;
+    }
+
+    setItemLoading(true);
     try {
-      const optionsPayload = {
-        hasSpicyOption: itemForm.hasSpicyOption,
-        hasDoubleOption: itemForm.hasDoubleOption,
-        doubleExtraPrice: itemForm.doubleExtraPrice,
+      const payload = {
+        categoryId: targetCat,
+        nameAr: itemName.trim(),
+        nameEn: itemName.trim(),
+        price: Number(itemPrice),
+        descriptionAr: itemDesc.trim(),
+        image: itemImage || "/img/hero-1.png",
+        badge: itemBadge.trim() || null,
+        isAvailable: true,
       };
 
-      await upsertMenuItemAction({
-        id: editingItemId || `item-${Date.now()}`,
-        categoryId: itemForm.categoryId || selectedCatId,
-        nameAr: itemForm.nameAr,
-        nameEn: itemForm.nameAr,
-        price: itemForm.price,
-        descriptionAr: itemForm.descriptionAr,
-        options: optionsPayload,
-        badge: itemForm.badge,
-        imageUrl: itemForm.imageUrl,
-      });
-
-      setItemFormOpen(false);
-      if (refresh) await refresh();
+      const res = await upsertMenuItemAction(payload);
+      if (res.success) {
+        const createdItem = res.item || { ...payload, id: Date.now() };
+        setItems((prev) => [...prev, createdItem]);
+        setItemName("");
+        setItemPrice("");
+        setItemDesc("");
+        setItemBadge("");
+        setShowItemModal(false);
+        onReload?.();
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
-      setSavingItem(false);
+      setItemLoading(false);
     }
   };
 
-  const handleScanMenu = async () => {
-    if (!scanFile) return;
-    setScanning(true);
-    setScanMsg(null);
+  // 4. حذف صنف
+  const handleDeleteItem = async (id: number | string) => {
+    if (!confirm("هل أنت متأكد من حذف هذه الوجبة؟")) return;
     try {
-      const compressedBlob = await compressImageForScan(scanFile);
-      const formData = new FormData();
-      formData.append("file", compressedBlob, "menu.jpg");
+      await deleteMenuItemAction(id);
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      onReload?.();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-      const res = await fetch("/api/scan-menu", {
-        method: "POST",
-        body: formData,
-      });
+  // 5. رفع صورة المنيو وتجهيزها للماسح
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      const text = await res.text();
-      let resJson: any = {};
-      try {
-        resJson = JSON.parse(text);
-      } catch {
-        throw new Error(text.slice(0, 150) || "تعذر معالجة الرد.");
-      }
+    try {
+      setScanStatus("جاري ضغط ومعالجة أبعاد الصورة...");
+      const compressedDataUrl = await compressImageToDataUrl(file);
+      setScanPreview(compressedDataUrl);
+      setScanStatus(null);
+    } catch {
+      setScanStatus("تعذر قراءة الصورة، يرجى اختيار ملف آخر.");
+    }
+  };
 
-      if (resJson.ok && Array.isArray(resJson.data) && resJson.data.length > 0) {
-        setScannedRows(resJson.data);
+  // 6. تشغيل ماسح المنيو DG-Menu
+  const handleExecuteScan = async () => {
+    if (!scanPreview) return;
+
+    setScanLoading(true);
+    setScanStatus("جاري تحليل صورة المنيو وتفريغ الأصناف والأسعار بالذكاء الاصطناعي 🦁...");
+    try {
+      const res = await scanMenuAction(scanPreview);
+      if (res.success) {
+        const rows = res.rows || res.items || [];
+        setScannedRows(rows);
+        setScanStatus(res.message || `تم بنجاح استخراج ${rows.length} وجبة من المنيو.`);
+        onReload?.();
       } else {
-        setScanMsg(resJson.error || "تعذر قراءة محتوى المنيو، يرجى تجربة صورة أوضح.");
+        setScanStatus(res.error || "تعذر إكمال المسح، يرجى المحاولة مرة أخرى.");
       }
-    } catch (err: any) {
-      setScanMsg(err?.message || "حدث خطأ في الاتصال.");
+    } catch {
+      setScanStatus("حدث خطأ أثناء معالجة الصورة بالسيرفر.");
     } finally {
-      setScanning(false);
+      setScanLoading(false);
     }
   };
 
-  const handleSaveScanned = async () => {
+  // 7. اعتماد وحفظ جدول الأصناف الممسوحة دفعة واحدة
+  const handleConfirmSaveAllRows = async () => {
     if (scannedRows.length === 0) return;
-    setScanning(true);
+
+    setSaveRowsLoading(true);
     try {
-      await adminSaveScannedRowsAction(scannedRows);
-      setScannedRows([]);
-      setScanFile(null);
-      setScanPreview(null);
-      setShowScanner(false);
-      if (refresh) await refresh();
+      const res = await adminSaveScannedRowsAction(scannedRows);
+      if (res.success) {
+        alert("تم اعتماد وحفظ جميع أصناف المنيو في قاعدة البيانات بنجاح 🦁");
+        setScannedRows([]);
+        setScanPreview(null);
+        setScanStatus(null);
+        onReload?.();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء حفظ الأصناف.");
     } finally {
-      setScanning(false);
+      setSaveRowsLoading(false);
     }
   };
 
-  const currentCategoryItems = itemsList.filter(
-    (i) => String(i.categoryId) === String(selectedCatId)
+  // الأصناف التابعة للقسم النشط حالياً
+  const currentCategoryItems = items.filter(
+    (it) => String(it.categoryId) === String(activeCatId)
   );
 
   return (
     <div className="space-y-8" dir="rtl">
-      {/* الشريط العلوي */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2.5">
-            <UtensilsCrossed className="size-6 text-brand-500" />
-            إدارة المنيو وماسح الذكاء الاصطناعي
-          </h2>
-          <p className="text-xs text-white/60 mt-1">
-            أضف وعدل الأقسام والأصناف يدوياً مع خيارات (سنجل/دابل وحار/بارد)، أو استورد القائمة بالذكاء الاصطناعي.
-          </p>
+      
+      {/* ================= 1. ماسح المنيو الذكي (نظام DG-Menu المتطور) ================= */}
+      <div className="rounded-3xl border border-orange-500/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 md:p-8 shadow-2xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="space-y-1 text-right">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-0.5 text-xs font-black text-orange-400">
+              <ScanLine className="size-3.5" />
+              <span>ماسح المنيو التلقائي الذكي · DG-Menu Engine</span>
+            </span>
+            <h2 className="text-xl md:text-2xl font-black text-white">
+              إدخال وتحديث المنيو بضغطة زر 🍗
+            </h2>
+            <p className="text-xs text-zinc-400">
+              ارفع صورة منيو المطعم أو البوستر، وسيقوم النظام فوراً باستخراج كافة الساندوتشات والوجبات والأسعار وتوزيعها في جداول منظمة.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-2xl bg-zinc-800 hover:bg-zinc-700 px-5 py-3 text-xs font-bold text-white transition cursor-pointer border border-zinc-700"
+            >
+              <Upload className="size-4 text-orange-400" />
+              <span>{scanPreview ? "تغيير الصورة المرفوعة" : "رفع صورة المنيو 📷"}</span>
+            </button>
+
+            {scanPreview && (
+              <button
+                type="button"
+                disabled={scanLoading}
+                onClick={handleExecuteScan}
+                className="flex items-center gap-2 rounded-2xl bg-orange-600 hover:bg-orange-500 px-6 py-3 text-xs font-black text-white shadow-xl transition cursor-pointer disabled:opacity-50"
+              >
+                {scanLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                <span>{scanLoading ? "جاري المسح والاستخراج..." : "استخراج الأصناف والأسعار الآن ⚡"}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowScanner(!showScanner)}
-            className={`flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-black transition cursor-pointer border ${
-              showScanner ? "bg-amber-500/20 text-amber-300 border-amber-500/40" : "bg-white/10 hover:bg-white/15 text-white border-white/15"
-            }`}
-          >
-            <ScanLine className="size-4 text-amber-400" />
-            <span>{showScanner ? "إغلاق ماسح المنيو" : "استيراد المنيو بالذكاء الاصطناعي"}</span>
-          </button>
+        {/* حالة وتنبيهات المسح */}
+        {scanStatus && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-3.5 text-xs font-bold text-orange-300">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{scanStatus}</span>
+          </div>
+        )}
 
-          <button
-            onClick={() => handleOpenNewItem()}
-            className="flex items-center gap-2 rounded-2xl bg-brand-500 hover:bg-brand-600 px-6 py-3 text-xs font-black text-white shadow-xl glow-brand transition cursor-pointer"
-          >
-            <Plus className="size-4" />
-            <span>إضافة وجبة جديدة</span>
-          </button>
-        </div>
+        {/* جدول استعراض الأصناف الممسوحة (DG-Menu Table) */}
+        {scannedRows.length > 0 && (
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-5 text-emerald-400" />
+                <h3 className="text-sm font-black text-white">
+                  تم استخراج ({scannedRows.length}) وجبة وصنف بنجاح
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                disabled={saveRowsLoading}
+                onClick={handleConfirmSaveAllRows}
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-lg transition cursor-pointer"
+              >
+                {saveRowsLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                <span>اعتماد وحفظ كافة الأصناف في المنيو فوراً 🦁</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-400 font-bold">
+                    <th className="py-2.5 px-3">القسم</th>
+                    <th className="py-2.5 px-3">اسم الوجبة</th>
+                    <th className="py-2.5 px-3">السعر (ج.م)</th>
+                    <th className="py-2.5 px-3">الوصف والتفاصيل</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 font-medium text-zinc-300">
+                  {scannedRows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-zinc-900/60 transition">
+                      <td className="py-2 px-3 font-bold text-amber-400">
+                        {row.categoryName || row.categoryAr || "عام"}
+                      </td>
+                      <td className="py-2 px-3 font-bold text-white">
+                        {row.nameAr || row.name}
+                      </td>
+                      <td className="py-2 px-3 font-black text-emerald-400 font-mono">
+                        {row.price} ج.م
+                      </td>
+                      <td className="py-2 px-3 text-zinc-400 max-w-xs truncate">
+                        {row.descriptionAr || row.description || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* نافذة ماسح المنيو */}
-      {showScanner && (
-        <div className="rounded-3xl border border-amber-500/40 bg-carbon-950 p-6 md:p-8 space-y-6 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <div className="flex items-center gap-2.5">
-              <Sparkles className="size-5 text-amber-400 animate-pulse" />
-              <h3 className="text-base font-black text-white">استيراد المنيو بصورة (نظام الذكاء الاصطناعي المباشر)</h3>
-            </div>
-            <button onClick={() => setShowScanner(false)} className="text-white/40 hover:text-white cursor-pointer">
-              <X className="size-5" />
-            </button>
+      {/* ================= 2. إدارة الأقسام (Categories) ================= */}
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 md:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <Layers className="size-5 text-orange-500" />
+              <span>أقسام قائمة الطعام ({cats.length})</span>
+            </h3>
+            <p className="text-xs text-zinc-400">اضغط على أي قسم لعرض وتعديل الأصناف الموجودة بداخله.</p>
           </div>
 
-          {scannedRows.length === 0 ? (
-            <div className="space-y-4">
-              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center hover:border-brand-500 transition bg-carbon-900/50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  id="scanner-upload"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) {
-                      setScanFile(f);
-                      setScanPreview(URL.createObjectURL(f));
-                    }
-                  }}
-                />
-                <label htmlFor="scanner-upload" className="cursor-pointer flex flex-col items-center justify-center gap-2">
-                  <Upload className="size-10 text-brand-500" />
-                  <span className="text-sm font-bold text-white">اختر صورة المنيو لتحليلها بالذكاء الاصطناعي</span>
-                  <span className="text-[11px] text-white/40">تتم المعالجة عبر سيرفر الذكاء الاصطناعي مباشرة مع ضغط آمن تلقائياً</span>
-                </label>
-              </div>
-
-              {scanPreview && (
-                <div className="space-y-3">
-                  <div className="max-h-72 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center bg-black/50">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={scanPreview} alt="Menu Preview" className="max-h-72 object-contain" />
-                  </div>
-                  <button
-                    onClick={handleScanMenu}
-                    disabled={scanning}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-brand-500 py-3.5 text-sm font-black text-white shadow-xl disabled:opacity-50 cursor-pointer"
-                  >
-                    {scanning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                    <span>{scanning ? "جاري قراءة واستخراج الأصناف والأسعار..." : "استخراج الأصناف والأسعار الآن"}</span>
-                  </button>
-                </div>
-              )}
-
-              {scanMsg && (
-                <p className="text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20">{scanMsg}</p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-emerald-400">تم استخراج ({scannedRows.length}) صنف بنجاح! راجعهم واضغط اعتماد:</span>
-                <button
-                  onClick={handleSaveScanned}
-                  disabled={scanning}
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-black text-white cursor-pointer shadow-lg"
-                >
-                  <Check className="size-4" />
-                  <span>اعتماد وإضافة لكل أقسام المنيو</span>
-                </button>
-              </div>
-
-              <div className="max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-carbon-900">
-                <table className="w-full text-right text-xs">
-                  <thead className="border-b border-white/10 text-white/50 p-2 font-bold">
-                    <tr>
-                      <th className="p-3">القسم</th>
-                      <th className="p-3">اسم الوجبة</th>
-                      <th className="p-3">الوصف</th>
-                      <th className="p-3">السعر</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {scannedRows.map((r, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2 font-bold text-amber-400">{r.categoryNameAr}</td>
-                        <td className="p-2 font-bold text-white">{r.itemNameAr}</td>
-                        <td className="p-2 text-white/60 text-[11px]">{r.descriptionAr}</td>
-                        <td className="p-2 font-black text-white">{r.price} ج.م</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* شريط الأقسام */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 space-y-4 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-          <div className="flex items-center gap-2">
-            <Layers className="size-5 text-brand-500" />
-            <h3 className="text-base font-black text-white">الأقسام الرئيسية للمنيو</h3>
-          </div>
-
-          <form onSubmit={handleAddCategory} className="flex gap-2">
+          {/* نموذج إضافة قسم سريع */}
+          <form onSubmit={handleAddCategory} className="flex items-center gap-2">
             <input
               type="text"
               required
-              value={newCatNameAr}
-              onChange={(e) => setNewCatNameAr(e.target.value)}
-              placeholder="اسم قسم جديد (مثال: وجبات التوفير)"
-              className="rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2 text-xs font-bold text-white outline-none focus:border-brand-500 w-56"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              placeholder="اسم القسم الجديد (مثال: الساندوتشات)..."
+              className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs font-bold text-white placeholder:text-zinc-600 outline-none focus:border-orange-500 w-56"
             />
             <button
               type="submit"
-              disabled={addingCat}
-              className="flex items-center gap-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 px-4 py-2 text-xs font-black text-white cursor-pointer transition disabled:opacity-50"
+              disabled={catLoading}
+              className="flex items-center gap-1.5 rounded-2xl bg-orange-600 hover:bg-orange-500 px-4 py-2 text-xs font-black text-white transition cursor-pointer disabled:opacity-50"
             >
-              <Plus className="size-3.5" />
+              {catLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
               <span>إضافة قسم</span>
             </button>
           </form>
         </div>
 
-        <div className="flex flex-wrap gap-2.5 pt-2">
-          {categoriesList.map((cat) => {
-            const isSelected = String(cat.id) === String(selectedCatId);
-            const count = itemsList.filter((i) => String(i.categoryId) === String(cat.id)).length;
+        {/* كروت الأقسام الأفقية */}
+        <div className="flex flex-wrap items-center gap-2.5 pt-2">
+          {cats.map((cat) => {
+            const isActive = String(cat.id) === String(activeCatId);
+            const count = items.filter((it) => String(it.categoryId) === String(cat.id)).length;
 
             return (
               <div
                 key={cat.id}
-                onClick={() => setSelectedCatId(cat.id)}
-                className={`group flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black transition cursor-pointer border ${
-                  isSelected
-                    ? "bg-brand-500 text-white border-brand-500 shadow-lg glow-brand"
-                    : "bg-carbon-950 text-white/70 border-white/10 hover:border-white/20 hover:text-white"
+                onClick={() => setActiveCatId(cat.id)}
+                className={`group flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-bold transition cursor-pointer border ${
+                  isActive
+                    ? "bg-orange-600 text-white border-orange-500 shadow-lg shadow-orange-600/20"
+                    : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white"
                 }`}
               >
                 <span>{cat.nameAr}</span>
-                <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px]">{count}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                    isActive ? "bg-black/30 text-white" : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {count}
+                </span>
+
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDeleteCategory(cat.id);
                   }}
-                  className="size-4 grid place-items-center rounded-full hover:bg-red-500/30 text-white/40 hover:text-red-400 transition ml-1"
-                  title="حذف هذا القسم"
+                  className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition pr-1"
+                  title="حذف القسم"
                 >
-                  <X className="size-3" />
+                  <Trash2 className="size-3" />
                 </button>
               </div>
             );
@@ -432,287 +458,181 @@ export default function MenuTab({ data, refresh }: { token?: string; data?: any;
         </div>
       </div>
 
-      {/* قائمة الأصناف */}
-      <div className="rounded-3xl border border-white/10 bg-carbon-900/60 p-6 md:p-8 backdrop-blur-xl space-y-6">
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
-          <div>
-            <h3 className="text-lg font-black text-white">
-              أصناف قسم:{" "}
-              <span className="text-amber-400">
-                {categoriesList.find((c) => String(c.id) === String(selectedCatId))?.nameAr || "اختر قسماً"}
+      {/* ================= 3. إدارة الوجبات والأصناف داخل القسم المحدد ================= */}
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 md:p-8 space-y-6">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <UtensilsCrossed className="size-5 text-orange-500" />
+              <span>
+                أصناف قسم:{" "}
+                <span className="text-orange-400">
+                  {cats.find((c) => String(c.id) === String(activeCatId))?.nameAr || "القسم المحدد"}
+                </span>{" "}
+                ({currentCategoryItems.length})
               </span>
             </h3>
-            <p className="text-xs text-white/50 mt-0.5">({currentCategoryItems.length}) وجبات مسجلة في هذا القسم</p>
+            <p className="text-xs text-zinc-400">إضافة وتعديل وحذف الوجبات في هذا القسم يدوياً.</p>
           </div>
 
           <button
-            onClick={() => handleOpenNewItem(selectedCatId)}
-            className="flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white px-4 py-2 text-xs font-black cursor-pointer transition border border-white/15"
+            type="button"
+            onClick={() => setShowItemModal(true)}
+            className="flex items-center gap-2 rounded-2xl bg-orange-600 hover:bg-orange-500 px-5 py-2.5 text-xs font-black text-white shadow-xl transition cursor-pointer active:scale-95"
           >
-            <Plus className="size-3.5 text-brand-500" />
-            <span>إضافة صنف هنا</span>
+            <Plus className="size-4" />
+            <span>إضافة صنف هنا 🍗</span>
           </button>
         </div>
 
+        {/* شبكة كروت الأصناف */}
         {currentCategoryItems.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {currentCategoryItems.map((item) => {
-              let options = { hasSpicyOption: false, hasDoubleOption: false, doubleExtraPrice: 0 };
-              try {
-                if (item.descriptionEn && item.descriptionEn.startsWith("{")) {
-                  options = JSON.parse(item.descriptionEn);
-                }
-              } catch {}
-
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-white/10 bg-carbon-950 p-5 space-y-4 flex flex-col justify-between shadow-lg"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="size-16 rounded-xl overflow-hidden bg-black/50 border border-white/10 shrink-0 flex items-center justify-center">
-                        {item.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.imageUrl} alt={item.nameAr} className="size-full object-cover" />
-                        ) : (
-                          <span className="text-2xl select-none">🍗</span>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-black text-sm text-white truncate">{item.nameAr}</h4>
-                          {item.badge && (
-                            <span className="rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30 px-2 py-0.5 text-[9px] font-black">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-white/50 mt-1 line-clamp-2 leading-relaxed">
-                          {item.descriptionAr || "لا توجد مكونات مكتوبة"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/5">
-                      {options.hasSpicyOption && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 text-red-400 border border-red-500/20 px-2 py-0.5 text-[10px] font-bold">
-                          <Flame className="size-2.5" /> متاح (حار / بارد)
-                        </span>
-                      )}
-                      {options.hasDoubleOption && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold">
-                          سنجل / دابل (+{options.doubleExtraPrice || 35} ج.م)
-                        </span>
-                      )}
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {currentCategoryItems.map((item) => (
+              <div
+                key={item.id}
+                className="group relative rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3 hover:border-zinc-700 transition flex flex-col justify-between"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 flex-1">
+                    <h4 className="text-sm font-black text-white group-hover:text-orange-400 transition">
+                      {item.nameAr}
+                    </h4>
+                    {item.descriptionAr && (
+                      <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
+                        {item.descriptionAr}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-white/10">
-                    <div>
-                      <span className="text-base font-black text-amber-400">{item.price}</span>
-                      <span className="text-[11px] text-white/60 mr-1">ج.م</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEditItem(item)}
-                        className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
-                        title="تعديل"
-                      >
-                        <Edit2 className="size-3.5" />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (confirm(`حذف ${item.nameAr}؟`)) {
-                            await deleteMenuItemAction(item.id);
-                            if (refresh) await refresh();
-                          }
-                        }}
-                        className="grid size-8 place-items-center rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition cursor-pointer"
-                        title="حذف"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
+                  <div className="text-left shrink-0">
+                    <span className="text-base font-black text-emerald-400 font-mono">
+                      {item.price}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 mr-1 font-bold">ج.م</span>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-zinc-500">
+                    {item.isAvailable ? "متوفر للطلب ✅" : "غير متاح حالياً ❌"}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="flex items-center gap-1 text-[11px] font-bold text-red-400/80 hover:text-red-400 transition cursor-pointer"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>حذف الوجبة</span>
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-carbon-950 p-10 text-center space-y-3">
-            <span className="text-4xl select-none">🍗</span>
-            <p className="text-sm font-bold text-white">لا توجد أصناف في هذا القسم حالياً</p>
+          <div className="py-12 text-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20">
+            <UtensilsCrossed className="size-8 mx-auto text-zinc-600 mb-2" />
+            <p className="text-xs font-bold text-zinc-400">
+              لا توجد وجبات مسجلة في هذا القسم حتى الآن.
+            </p>
             <button
-              onClick={() => handleOpenNewItem(selectedCatId)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2 text-xs font-black text-white"
+              type="button"
+              onClick={() => setShowItemModal(true)}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs font-black text-orange-400 hover:text-orange-300"
             >
               <Plus className="size-3.5" />
-              <span>إضافة صنف يدوي الآن</span>
+              <span>اضغط هنا لإضافة أول صنف يدوي</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* النافذة المنبثقة لإضافة وتعديل صنف */}
-      {itemFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" dir="rtl">
-          <div className="w-full max-w-xl rounded-3xl border border-white/15 bg-carbon-900 p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-lg font-black text-white">
-                {editingItemId ? "تعديل الصنف والخيارات" : "إضافة صنف جديد للمنيو"}
+      {/* ================= 4. نافذة إضافة صنف يدوي منبثقة ================= */}
+      {showItemModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 space-y-4 text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Plus className="size-4 text-orange-500" />
+                <span>إضافة وجبة وصنف جديد</span>
               </h3>
-              <button onClick={() => setItemFormOpen(false)} className="text-white/40 hover:text-white cursor-pointer">
-                <X className="size-5" />
+              <button
+                type="button"
+                onClick={() => setShowItemModal(false)}
+                className="text-zinc-500 hover:text-white"
+              >
+                <X className="size-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveItem} className="space-y-4">
+            <form onSubmit={handleAddItem} className="space-y-3.5 text-right">
               <div>
-                <label className="block text-xs font-bold text-white/70 mb-1">القسم التابع له:</label>
-                <select
-                  value={itemForm.categoryId}
-                  onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
-                  className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
-                >
-                  {categoriesList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nameAr}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-white/70 mb-1">اسم الصنف أو الوجبة (عربي):</label>
-                  <input
-                    type="text"
-                    required
-                    value={itemForm.nameAr}
-                    onChange={(e) => setItemForm({ ...itemForm, nameAr: e.target.value })}
-                    placeholder="مثال: وجبة بروست الأسد سوبر"
-                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-white/70 mb-1">السعر الأساسي (ج.م):</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    step="0.5"
-                    value={itemForm.price}
-                    onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-black text-amber-400 outline-none focus:border-brand-500 text-left"
-                    dir="ltr"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-white/70 mb-1">المكونات وتفاصيل الوجبة (الوصف):</label>
-                <textarea
-                  rows={2}
-                  value={itemForm.descriptionAr}
-                  onChange={(e) => setItemForm({ ...itemForm, descriptionAr: e.target.value })}
-                  placeholder="مثال: 4 قطع بروست كرسبي + بطاطس + كول سلو + ثومية + عيش"
-                  className="w-full rounded-xl border border-white/15 bg-carbon-950 p-3 text-xs font-semibold text-white outline-none focus:border-brand-500"
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  اسم الوجبة بالعربي:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                  placeholder="مثال: ساندوتش فايتر تريبل"
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-zinc-600 outline-none focus:border-orange-500"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-white/70 mb-1">شارة مميزة (Badge):</label>
-                  <input
-                    type="text"
-                    value={itemForm.badge}
-                    onChange={(e) => setItemForm({ ...itemForm, badge: e.target.value })}
-                    placeholder="مثال: الأكثر طلباً أو NEW!"
-                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-white/70 mb-1">رابط أو صورة الوجبة:</label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={itemForm.imageUrl}
-                    onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })}
-                    placeholder="ضع رابط صورة مباشر أو اتركها فارغة"
-                    className="w-full rounded-xl border border-white/15 bg-carbon-950 px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-brand-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  السعر بالجنيه (EGP):
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="1"
+                  value={itemPrice}
+                  onChange={(e) => setItemPrice(e.target.value)}
+                  placeholder="مثال: 120"
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-black text-white placeholder:text-zinc-600 outline-none focus:border-orange-500 font-mono"
+                />
               </div>
 
-              <div className="rounded-2xl border border-brand-500/30 bg-carbon-950 p-4 space-y-4">
-                <span className="text-xs font-black text-amber-400 block border-b border-white/10 pb-2">
-                  خيارات طلب الصنف للعميل (Options):
-                </span>
-
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={itemForm.hasSpicyOption}
-                      onChange={(e) => setItemForm({ ...itemForm, hasSpicyOption: e.target.checked })}
-                      className="size-4 accent-brand-500 rounded"
-                    />
-                    <span className="text-xs font-bold text-white">إتاحة خيار (حار 🌶️ / بارد عادي) للعميل</span>
-                  </label>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={itemForm.hasDoubleOption}
-                        onChange={(e) => setItemForm({ ...itemForm, hasDoubleOption: e.target.checked })}
-                        className="size-4 accent-brand-500 rounded"
-                      />
-                      <span className="text-xs font-bold text-white">إتاحة خيار الأحجام (سنجل فردي / دابل مضاعف)</span>
-                    </label>
-
-                    {itemForm.hasDoubleOption && (
-                      <div className="mr-6 flex items-center gap-2">
-                        <span className="text-[11px] text-white/60">سعر إضافة الدابل على السعر الأساسي:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={itemForm.doubleExtraPrice}
-                          onChange={(e) => setItemForm({ ...itemForm, doubleExtraPrice: parseFloat(e.target.value) || 0 })}
-                          className="w-24 rounded-lg border border-white/15 bg-carbon-900 px-2.5 py-1 text-xs font-black text-amber-400 outline-none text-left"
-                          dir="ltr"
-                        />
-                        <span className="text-[11px] text-white/60">ج.م</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  وصف المكونات والوجبة:
+                </label>
+                <textarea
+                  rows={2}
+                  value={itemDesc}
+                  onChange={(e) => setItemDesc(e.target.value)}
+                  placeholder="مثال: قطع استربس مقرمشة + بطاطس + صوص شيدر..."
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white placeholder:text-zinc-600 outline-none focus:border-orange-500 resize-none"
+                />
               </div>
 
-              <div className="pt-2 flex justify-end gap-3">
+              <div className="pt-2 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setItemFormOpen(false)}
-                  className="rounded-xl border border-white/10 px-5 py-2.5 text-xs font-bold text-white/60 hover:text-white"
+                  onClick={() => setShowItemModal(false)}
+                  className="flex-1 rounded-2xl border border-zinc-800 bg-zinc-900 py-3 text-xs font-bold text-zinc-400 hover:text-white"
                 >
                   إلغاء
                 </button>
+
                 <button
                   type="submit"
-                  disabled={savingItem}
-                  className="flex items-center gap-2 rounded-xl bg-brand-500 hover:bg-brand-600 px-7 py-2.5 text-xs font-black text-white shadow-lg disabled:opacity-50 cursor-pointer"
+                  disabled={itemLoading}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl bg-orange-600 hover:bg-orange-500 py-3 text-xs font-black text-white shadow-xl transition disabled:opacity-50"
                 >
-                  {savingItem ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  <span>{savingItem ? "جاري الحفظ..." : "حفظ الصنف"}</span>
+                  {itemLoading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  <span>حفظ الوجبة الآن</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 }
