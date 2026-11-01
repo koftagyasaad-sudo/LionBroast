@@ -8,11 +8,42 @@ import {
   settings,
   deliveryZones,
   customers,
+  orders,
 } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 
 // =========================================================================
-// 1. إدارة الأقسام (Categories) - حل مشكلة إضافة الأقسام يدوياً نهائياً
+// 1. إدارة إعدادات الواجهة (FrontendTab)
+// =========================================================================
+export async function saveFrontendSettingsAction(data: Record<string, any>) {
+  try {
+    for (const [key, value] of Object.entries(data)) {
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      await db
+        .insert(settings)
+        .values({ key, value: stringValue })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: stringValue },
+        });
+    }
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("saveFrontendSettingsAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ إعدادات الواجهة" };
+  }
+}
+
+// دالة متوافقة مع التسميات البديلة
+export async function updateFrontendAction(data: Record<string, any>) {
+  return saveFrontendSettingsAction(data);
+}
+
+// =========================================================================
+// 2. إدارة الأقسام (MenuTab) - حل مشكلة إضافة الأقسام يدوياً
 // =========================================================================
 export async function createCategoryAction(data: {
   nameAr: string;
@@ -25,7 +56,6 @@ export async function createCategoryAction(data: {
     if (!nameAr) throw new Error("اسم القسم بالعربية مطلوب");
 
     const nameEn = String(data.nameEn || nameAr).trim();
-    // توليد slug فريد ونظيف لعدم مخالفة قيود قاعدة البيانات
     const slug =
       nameEn
         .toLowerCase()
@@ -55,6 +85,34 @@ export async function createCategoryAction(data: {
   }
 }
 
+export async function updateCategoryAction(
+  id: string | number,
+  data: Partial<{
+    nameAr: string;
+    nameEn: string;
+    image: string;
+    sortOrder: number;
+    isActive: boolean;
+  }>
+) {
+  try {
+    const catId = Number(id);
+    await db
+      .update(categories)
+      .set(data as any)
+      .where(eq(categories.id, catId as any));
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateCategoryAction error:", error);
+    return { success: false, error: error?.message || "فشل تعديل القسم" };
+  }
+}
+
 export async function deleteCategoryAction(categoryId: string | number) {
   try {
     const id = Number(categoryId);
@@ -74,7 +132,7 @@ export async function deleteCategoryAction(categoryId: string | number) {
 }
 
 // =========================================================================
-// 2. إدارة الأصناف والوجبات (Menu Items)
+// 3. إدارة الأصناف والوجبات (MenuTab)
 // =========================================================================
 export async function createMenuItemAction(data: {
   categoryId: string | number;
@@ -113,6 +171,42 @@ export async function createMenuItemAction(data: {
   }
 }
 
+export async function updateMenuItemAction(
+  id: string | number,
+  data: Partial<{
+    categoryId: string | number;
+    nameAr: string;
+    nameEn: string;
+    price: number;
+    descriptionAr: string;
+    image: string;
+    badge: string;
+    sortOrder: number;
+    isAvailable: boolean;
+  }>
+) {
+  try {
+    const itemId = Number(id);
+    const updateData: any = { ...data };
+    if (updateData.categoryId) updateData.categoryId = Number(updateData.categoryId);
+    if (updateData.price) updateData.price = Number(updateData.price);
+
+    await db
+      .update(menuItems)
+      .set(updateData)
+      .where(eq(menuItems.id, itemId as any));
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateMenuItemAction error:", error);
+    return { success: false, error: error?.message || "فشل تعديل الصنف" };
+  }
+}
+
 export async function deleteMenuItemAction(itemId: string | number) {
   try {
     const id = Number(itemId);
@@ -130,7 +224,66 @@ export async function deleteMenuItemAction(itemId: string | number) {
 }
 
 // =========================================================================
-// 3. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner) بنظام DG-Menu المتطور
+// 4. إدارة الطلبات (OrdersTab)
+// =========================================================================
+export async function updateOrderStatusAction(
+  orderId: string | number,
+  status: string
+) {
+  try {
+    const id = Number(orderId);
+    await db
+      .update(orders)
+      .set({ status } as any)
+      .where(eq(orders.id, id as any));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateOrderStatusAction error:", error);
+    return { success: false, error: error?.message || "فشل تحديث حالة الطلب" };
+  }
+}
+
+export async function deleteOrderAction(orderId: string | number) {
+  try {
+    const id = Number(orderId);
+    await db.delete(orders).where(eq(orders.id, id as any));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteOrderAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف الطلب" };
+  }
+}
+
+// =========================================================================
+// 5. إدارة العمليات والإعدادات العامة (OpsTab)
+// =========================================================================
+export async function saveOpsSettingsAction(data: Record<string, any>) {
+  try {
+    for (const [key, value] of Object.entries(data)) {
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      await db
+        .insert(settings)
+        .values({ key, value: stringValue })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: stringValue },
+        });
+    }
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("saveOpsSettingsAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ إعدادات العمليات" };
+  }
+}
+
+// =========================================================================
+// 6. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner) بنظام DG-Menu
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -143,17 +296,16 @@ export async function scanMenuAction(imageBase64: string) {
       return {
         success: false,
         error:
-          "مفتاح الذكاء الاصطناعي (GEMINI_API_KEY) غير مضاف في Vercel Environment Variables. برجاء إضافته لتفعيل الماسك الذكي.",
+          "مفتاح الذكاء الاصطناعي (GEMINI_API_KEY) غير مضاف في Vercel Environment Variables. برجاء إضافته لتفعيل الماسح.",
       };
     }
 
-    // تنظيف كود الـ Base64
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
     const promptText = `
 أنت خبير إدخال بيانات قوائم طعام المطاعم بدقة 100%.
 قم بفحص صورة قائمة طعام مطعم بروست الأسد بدقة، واستخرج جميع الأقسام (Categories) والأصناف (Items) والأسعار بالجنيه المصري (EGP).
-أرجع النتيجة بصيغة JSON فقط بدون أي نصوص خارجية كالتالي:
+أرجع النتيجة بصيغة JSON فقط كالتالي:
 {
   "categories": [
     {
@@ -200,23 +352,20 @@ export async function scanMenuAction(imageBase64: string) {
     );
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API Error:", errText);
       return {
         success: false,
-        error: "تعذر الاتصال بخادم الذكاء الاصطناعي، تأكد من صحة المفتاح وحصته في Google AI Studio.",
+        error: "تعذر الاتصال بسيرفر الذكاء الاصطناعي، تأكد من صحة المفتاح وحصته في Google AI Studio.",
       };
     }
 
     const data = await response.json();
     const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawJson) {
-      return { success: false, error: "لم يتمكن الماسح من استخراج أي نصوص من الصورة." };
+      return { success: false, error: "لم يتمكن الماسح من استخراج نصوص واضحة من الصورة." };
     }
 
     const parsed = JSON.parse(rawJson);
 
-    // إدخال الأقسام والوجبات المستخرجة فوراً إلى قاعدة البيانات
     if (parsed.categories && Array.isArray(parsed.categories)) {
       for (let i = 0; i < parsed.categories.length; i++) {
         const cat = parsed.categories[i];
@@ -253,12 +402,12 @@ export async function scanMenuAction(imageBase64: string) {
     };
   } catch (error: any) {
     console.error("scanMenuAction error:", error);
-    return { success: false, error: error?.message || "حدث خطأ غير متوقع أثناء مسح المنيو." };
+    return { success: false, error: error?.message || "حدث خطأ أثناء مسح المنيو." };
   }
 }
 
 // =========================================================================
-// 4. إدارة المناطق والإعلانات (حل مشكلة عدم الظهور في الواجهة نهائياً)
+// 7. إدارة المناطق والإعلانات (تحديث الواجهة الفوري)
 // =========================================================================
 export async function saveZonesAndPromoAction(formData: {
   zones?: any[];
@@ -269,7 +418,6 @@ export async function saveZonesAndPromoAction(formData: {
   };
 }) {
   try {
-    // 1. تحديث الإعلانات الترويجية والعروض المؤقتة
     if (formData.promo) {
       const p = formData.promo;
       await db
@@ -297,9 +445,7 @@ export async function saveZonesAndPromoAction(formData: {
         });
     }
 
-    // 2. تحديث جدول مناطق التوصيل الفعلي وتخزين نسخة احتياطية
     if (formData.zones && Array.isArray(formData.zones)) {
-      // حفظ في جدول deliveryZones المباشر
       await db.delete(deliveryZones);
       for (let i = 0; i < formData.zones.length; i++) {
         const z = formData.zones[i];
@@ -313,7 +459,6 @@ export async function saveZonesAndPromoAction(formData: {
         } as any);
       }
 
-      // حفظ نسخة JSON في جدول settings كحماية إضافية
       await db
         .insert(settings)
         .values({ key: "delivery_zones", value: JSON.stringify(formData.zones) })
@@ -323,7 +468,6 @@ export async function saveZonesAndPromoAction(formData: {
         });
     }
 
-    // إجبار Next.js على مسح كاش الواجهة الرئيسية وإعادة بنائها بالبيانات الجديدة فوراً
     revalidatePath("/");
     revalidatePath("/admin");
     revalidatePath("/menu");
@@ -335,8 +479,13 @@ export async function saveZonesAndPromoAction(formData: {
   }
 }
 
+// دالة بديلة للتوافق
+export async function savePromoAction(promo: any) {
+  return saveZonesAndPromoAction({ promo });
+}
+
 // =========================================================================
-// 5. حفظ بيانات العميل (VIP Customer Upsert)
+// 8. حفظ بيانات العميل (VIP Customer Upsert)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
