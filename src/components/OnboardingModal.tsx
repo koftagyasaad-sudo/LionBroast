@@ -127,13 +127,32 @@ export default function OnboardingModal() {
             <X className="size-4" />
           </button>
 
-          {/* اللوجو بحجم محكوم ومثالي (لا يتجاوز 64px) */}
-          <div className="mx-auto mb-4 size-16 rounded-2xl bg-brand-500/15 border border-brand-500/30 p-2.5 flex items-center justify-center shadow-lg">
+          {/* اللوجو بحجم محكوم ومثالي ومحصن بالبكسل ضد أي تمدد */}
+          <div
+            className="mx-auto mb-4 rounded-2xl bg-brand-500/15 border border-brand-500/30 p-2 flex items-center justify-center shadow-lg"
+            style={{
+              width: "56px",
+              height: "56px",
+              minWidth: "56px",
+              maxWidth: "56px",
+              maxHeight: "56px",
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/img/icon-512.png"
               alt="بروست الأسد"
-              className="size-full object-contain max-h-12 max-w-12"
+              width={42}
+              height={42}
+              style={{
+                width: "42px",
+                height: "42px",
+                maxWidth: "42px",
+                maxHeight: "42px",
+                objectFit: "contain",
+                display: "block",
+              }}
+              className="rounded-xl"
             />
           </div>
 
