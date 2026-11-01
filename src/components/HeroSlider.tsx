@@ -9,33 +9,33 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
   const defaultSlides = [
     {
       id: "slide-1",
-      badge: "أقوى قرمشة في دسوق 🔥",
-      title: "أكبر قطعة بروست في دسوق 🦁",
-      subtitle: "قرمشة وتتبيلة سرية ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير الفردية والعائلية.",
-      image: frontend?.heroImage1 || "/img/hero-1.png",
-      cta1Text: "اطلب دلوقتي 🍗",
+      badge: "وليمة العيلة",
+      title: "العزومة جاهزة",
+      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات. اطلبها ووصلها السكة.",
+      image: frontend?.heroImage2 || "/img/hero-2.png",
+      cta1Text: "اطلب الوليمة",
       cta1Link: "/menu",
       cta2Text: "شوف المنيو",
       cta2Link: "/menu",
     },
     {
       id: "slide-2",
-      badge: "وليمة التوفير للأسود",
-      title: "العزومة جاهزة لكل العيلة",
-      subtitle: "قطع بروست مقرمشة مع البطاطس العائلية، الكول سلو والثومية، توصيل سخن ومقرمش لحد باب بيتك.",
-      image: frontend?.heroImage2 || "/img/hero-2.png",
-      cta1Text: "اطلب الوليمة الآن",
+      badge: "إصدار النار 🔥",
+      title: "الحار اللي يولّع",
+      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
+      image: frontend?.heroImage1 || "/img/hero-1.png",
+      cta1Text: "تحدي النار 🍗",
       cta1Link: "/menu",
-      cta2Text: "قائمة العروض",
+      cta2Text: "شوف المنيو",
       cta2Link: "/menu",
     },
     {
       id: "slide-3",
-      badge: "إصدار التحدي الناري",
-      title: "الحار اللي يولّع 🔥",
-      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
+      badge: "أقوى قرمشة في دسوق",
+      title: "أكبر قطعة بروست في دسوق",
+      subtitle: "قرمشة وتتبيلة سرية ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير.",
       image: frontend?.heroImage3 || "/img/hero-3.png",
-      cta1Text: "تحدي النار 🍗",
+      cta1Text: "شوف العروض",
       cta1Link: "/menu",
       cta2Text: "المنيو كامل",
       cta2Link: "/menu",
@@ -61,8 +61,8 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
   const slide = currentSlides[current] || currentSlides[0];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 md:px-8 pt-28 pb-6" dir="rtl">
-      <section className="relative h-[520px] md:h-[580px] w-full overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 text-white shadow-2xl">
+    <div className="mx-auto max-w-7xl px-4 md:px-8 pt-24 pb-6" dir="rtl">
+      <section className="relative h-[560px] md:h-[600px] w-full overflow-hidden rounded-3xl border border-white/10 bg-carbon-950 text-white shadow-2xl">
         <AnimatePresence mode="wait">
           <motion.div
             key={current}
@@ -80,12 +80,12 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
                 className="size-full object-cover object-center"
               />
             ) : (
-              <div className="size-full bg-gradient-to-r from-red-950 via-zinc-950 to-amber-950" />
+              <div className="size-full bg-gradient-to-r from-red-950 via-carbon-950 to-amber-950" />
             )}
 
-            {/* تدرج التظليل الأصلي لحماية قراءة النصوص فوق الصورة */}
-            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/95 via-zinc-950/70 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+            {/* التدرج المظلم الأصلي الفخم لحماية وضوح النصوص */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-carbon-950/70 to-carbon-950/95" />
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-carbon-950 to-transparent" />
           </motion.div>
         </AnimatePresence>
 
@@ -93,67 +93,67 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
         <div className="relative z-10 flex h-full flex-col justify-center px-6 md:px-14">
           <div className="max-w-2xl space-y-4 text-right">
             {slide.badge && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/40 bg-orange-500/15 px-4 py-1.5 text-xs font-black text-orange-400 backdrop-blur-md">
-                <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-4 py-1.5 text-xs font-black text-amber-400 backdrop-blur-md">
+                <Flame className="w-3.5 h-3.5 text-brand-500 animate-pulse" />
                 <span>{slide.badge}</span>
               </span>
             )}
 
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-tight drop-shadow-lg">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl font-black text-white leading-tight drop-shadow-lg">
               {slide.title}
             </h1>
 
-            <p className="text-xs sm:text-base md:text-lg font-medium text-zinc-300 leading-relaxed max-w-xl drop-shadow">
+            <p className="text-sm sm:text-base md:text-lg font-medium text-white/80 leading-relaxed max-w-xl drop-shadow">
               {slide.subtitle}
             </p>
 
-            {/* أزرار الإجراء */}
+            {/* الأزرار الأصلية */}
             <div className="flex flex-wrap items-center gap-3 pt-3">
               <Link
                 href={slide.cta1Link || "/menu"}
-                className="rounded-2xl bg-orange-600 hover:bg-orange-500 px-8 py-3.5 text-xs md:text-sm font-black text-white shadow-xl glow-brand transition active:scale-95"
+                className="rounded-2xl bg-brand-500 hover:bg-brand-600 px-8 py-3.5 text-xs md:text-sm font-black text-white shadow-xl glow-brand transition active:scale-95"
               >
-                {slide.cta1Text || "اطلب الآن 🍗"}
+                {slide.cta1Text || "اطلب الوليمة"}
               </Link>
 
               <Link
                 href={slide.cta2Link || "/menu"}
-                className="flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900/80 hover:bg-zinc-800 px-6 py-3.5 text-xs md:text-sm font-bold text-white backdrop-blur-md transition"
+                className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/15 px-6 py-3.5 text-xs md:text-sm font-bold text-white backdrop-blur-md transition"
               >
                 <UtensilsCrossed className="w-4 h-4 text-amber-400" />
                 <span>{slide.cta2Text || "شوف المنيو"}</span>
               </Link>
             </div>
 
-            {/* مميزات سريعة */}
-            <div className="flex flex-wrap items-center gap-3 pt-4 text-xs font-bold text-zinc-300">
-              <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 px-3 py-1.5 backdrop-blur-md border border-zinc-800">
-                <Clock className="w-3.5 h-3.5 text-orange-400" />
-                <span>٣٠-٤٥ دقيقة</span>
+            {/* شريط المميزات الثلاثة المطابق للشاشة */}
+            <div className="flex flex-wrap items-center gap-3 pt-4 text-xs font-bold text-white/80">
+              <div className="flex items-center gap-1.5 rounded-xl bg-black/40 px-3 py-1.5 backdrop-blur-md border border-white/5">
+                <Clock className="w-3.5 h-3.5 text-brand-400" />
+                <span>يوصلك في ٣٠-٤٥ دقيقة</span>
               </div>
-              <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 px-3 py-1.5 backdrop-blur-md border border-zinc-800">
+              <div className="flex items-center gap-1.5 rounded-xl bg-black/40 px-3 py-1.5 backdrop-blur-md border border-white/5">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span>٤.٩ تقييم</span>
+                <span>٤.٩ من +٢٬٤٠٠ تقييم</span>
               </div>
-              <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 px-3 py-1.5 backdrop-blur-md border border-zinc-800">
+              <div className="flex items-center gap-1.5 rounded-xl bg-black/40 px-3 py-1.5 backdrop-blur-md border border-white/5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>دجاج طازج 100%</span>
+                <span>دجاج طازج يومياً</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* أزرار التقليب */}
+        {/* أسهم التنقل */}
         <div className="absolute bottom-6 left-6 z-20 flex items-center gap-2">
           <button
             onClick={() => setCurrent((prev) => (prev - 1 + currentSlides.length) % currentSlides.length)}
-            className="grid size-10 place-items-center rounded-full border border-zinc-700 bg-zinc-900/80 text-white backdrop-blur-md hover:bg-orange-600 transition cursor-pointer"
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md hover:bg-brand-500 transition cursor-pointer"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCurrent((prev) => (prev + 1) % currentSlides.length)}
-            className="grid size-10 place-items-center rounded-full border border-zinc-700 bg-zinc-900/80 text-white backdrop-blur-md hover:bg-orange-600 transition cursor-pointer"
+            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md hover:bg-brand-500 transition cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
