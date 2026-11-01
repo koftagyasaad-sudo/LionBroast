@@ -10,10 +10,53 @@ import {
   customers,
   orders,
 } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 // =========================================================================
-// 1. تبويب الواجهة (FrontendTab)
+// 1. الدالة المركزية للوحة التحكم (AdminShell.tsx)
+// =========================================================================
+export async function adminGetAllAction() {
+  try {
+    const [allCats, allItems, allZones, allSettings, allCustomers, allOrders] =
+      await Promise.all([
+        db.select().from(categories).orderBy(categories.sortOrder).catch(() => []),
+        db.select().from(menuItems).orderBy(menuItems.sortOrder).catch(() => []),
+        db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder).catch(() => []),
+        db.select().from(settings).catch(() => []),
+        db.select().from(customers).orderBy(desc(customers.id)).catch(() => []),
+        db.select().from(orders).orderBy(desc(orders.id)).catch(() => []),
+      ]);
+
+    const settingsMap: Record<string, any> = {};
+    allSettings.forEach((s: any) => {
+      settingsMap[s.key] = s.value;
+    });
+
+    const bundle = {
+      categories: allCats || [],
+      menuItems: allItems || [],
+      items: allItems || [],
+      zones: allZones || [],
+      deliveryZones: allZones || [],
+      settings: settingsMap,
+      customers: allCustomers || [],
+      orders: allOrders || [],
+    };
+
+    return {
+      success: true,
+      data: bundle,
+      bundle,
+      ...bundle,
+    };
+  } catch (error: any) {
+    console.error("adminGetAllAction error:", error);
+    return { success: false, error: error?.message || "فشل جلب بيانات النظام" };
+  }
+}
+
+// =========================================================================
+// 2. تبويب الواجهة (FrontendTab)
 // =========================================================================
 export async function saveFrontendSettingsAction(data: Record<string, any>) {
   try {
@@ -42,7 +85,7 @@ export async function updateFrontendAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 2. تبويب الأقسام (MenuTab)
+// 3. تبويب الأقسام (MenuTab)
 // =========================================================================
 export async function upsertCategoryAction(data: {
   id?: string | number;
@@ -144,7 +187,7 @@ export async function deleteCategoryAction(categoryId: string | number) {
 }
 
 // =========================================================================
-// 3. تبويب الأصناف والوجبات (MenuTab)
+// 4. تبويب الأصناف والوجبات (MenuTab)
 // =========================================================================
 export async function upsertMenuItemAction(data: {
   id?: string | number;
@@ -264,7 +307,7 @@ export async function deleteMenuItemAction(itemId: string | number) {
 }
 
 // =========================================================================
-// 4. حفظ نتائج ماسح الذكاء الاصطناعي (adminSaveScannedRowsAction)
+// 5. حفظ واعتماد أصناف الذكاء الاصطناعي (adminSaveScannedRowsAction)
 // =========================================================================
 export async function adminSaveScannedRowsAction(data: any) {
   try {
@@ -321,7 +364,7 @@ export async function adminSaveScannedRowsAction(data: any) {
 }
 
 // =========================================================================
-// 5. محرك فحص المنيو بالذكاء الاصطناعي (AI Scanner)
+// 6. ماسح المنيو بالذكاء الاصطناعي (AI Scanner)
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -448,7 +491,7 @@ export async function adminScanMenuAction(imageBase64: string) {
 }
 
 // =========================================================================
-// 6. تبويب العمليات والمناطق والإعلانات (OpsTab) - الدوال المطلوبة تحديداً
+// 7. تبويب العمليات والمناطق والإعلانات (OpsTab)
 // =========================================================================
 export async function upsertZoneAction(data: {
   id?: string | number;
@@ -605,7 +648,7 @@ export async function saveOpsSettingsAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 7. تبويب الطلبات (OrdersTab)
+// 8. تبويب الطلبات (OrdersTab)
 // =========================================================================
 export async function updateOrderStatusAction(
   orderId: string | number,
@@ -640,7 +683,7 @@ export async function deleteOrderAction(orderId: string | number) {
 }
 
 // =========================================================================
-// 8. تسجيل واستخراج كارت العميل VIP (CustomerQRCode)
+// 9. بطاقة العميل VIP (CustomerQRCode)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
