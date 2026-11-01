@@ -13,7 +13,7 @@ import {
 import { eq, asc, desc } from "drizzle-orm";
 
 // =========================================================================
-// 1. إدارة إعدادات الواجهة (FrontendTab)
+// 1. تبويب الواجهة (FrontendTab)
 // =========================================================================
 export async function saveFrontendSettingsAction(data: Record<string, any>) {
   try {
@@ -42,7 +42,7 @@ export async function updateFrontendAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 2. إدارة الأقسام (MenuTab) - دعم كامل لـ upsert و create و update
+// 2. تبويب الأقسام (MenuTab)
 // =========================================================================
 export async function upsertCategoryAction(data: {
   id?: string | number;
@@ -54,7 +54,7 @@ export async function upsertCategoryAction(data: {
 }) {
   try {
     const nameAr = String(data.nameAr || "").trim();
-    if (!nameAr) throw new Error("اسم القسم مطلوب");
+    if (!nameAr) throw new Error("اسم القسم بالعربية مطلوب");
     const nameEn = String(data.nameEn || nameAr).trim();
 
     if (data.id) {
@@ -136,7 +136,6 @@ export async function deleteCategoryAction(categoryId: string | number) {
     revalidatePath("/");
     revalidatePath("/menu");
     revalidatePath("/admin");
-
     return { success: true };
   } catch (error: any) {
     console.error("deleteCategoryAction error:", error);
@@ -145,7 +144,7 @@ export async function deleteCategoryAction(categoryId: string | number) {
 }
 
 // =========================================================================
-// 3. إدارة الأصناف والوجبات (MenuTab) - دعم كامل لـ upsert و create و update
+// 3. تبويب الأصناف والوجبات (MenuTab)
 // =========================================================================
 export async function upsertMenuItemAction(data: {
   id?: string | number;
@@ -240,7 +239,13 @@ export async function updateMenuItemAction(
     isAvailable: boolean;
   }>
 ) {
-  return upsertMenuItemAction({ id, categoryId: data.categoryId || 0, nameAr: data.nameAr || "", price: data.price || 0, ...data });
+  return upsertMenuItemAction({
+    id,
+    categoryId: data.categoryId || 0,
+    nameAr: data.nameAr || "",
+    price: data.price || 0,
+    ...data,
+  });
 }
 
 export async function deleteMenuItemAction(itemId: string | number) {
@@ -251,7 +256,6 @@ export async function deleteMenuItemAction(itemId: string | number) {
     revalidatePath("/");
     revalidatePath("/menu");
     revalidatePath("/admin");
-
     return { success: true };
   } catch (error: any) {
     console.error("deleteMenuItemAction error:", error);
@@ -260,28 +264,35 @@ export async function deleteMenuItemAction(itemId: string | number) {
 }
 
 // =========================================================================
-// 4. حفظ الأصناف الممسوحة بالـ AI (adminSaveScannedRowsAction)
+// 4. حفظ نتائج ماسح الذكاء الاصطناعي (adminSaveScannedRowsAction)
 // =========================================================================
 export async function adminSaveScannedRowsAction(data: any) {
   try {
     const rows = Array.isArray(data) ? data : data?.rows || data?.items || [];
     for (const row of rows) {
       const categoryName = String(row.categoryName || row.categoryAr || row.category || "عام").trim();
-      
-      const existingCategories = await db.select().from(categories).where(eq(categories.nameAr, categoryName));
+
+      const existingCategories = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.nameAr, categoryName));
+
       let targetCategoryId: number;
 
       if (existingCategories.length > 0) {
         targetCategoryId = existingCategories[0].id;
       } else {
         const slug = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const [newCat] = await db.insert(categories).values({
-          nameAr: categoryName,
-          nameEn: row.categoryEn || categoryName,
-          slug,
-          image: "/img/hero-1.png",
-          isActive: true,
-        } as any).returning();
+        const [newCat] = await db
+          .insert(categories)
+          .values({
+            nameAr: categoryName,
+            nameEn: row.categoryEn || categoryName,
+            slug,
+            image: "/img/hero-1.png",
+            isActive: true,
+          } as any)
+          .returning();
         targetCategoryId = newCat.id;
       }
 
@@ -302,7 +313,6 @@ export async function adminSaveScannedRowsAction(data: any) {
     revalidatePath("/");
     revalidatePath("/menu");
     revalidatePath("/admin");
-
     return { success: true, count: rows.length };
   } catch (error: any) {
     console.error("adminSaveScannedRowsAction error:", error);
@@ -311,66 +321,7 @@ export async function adminSaveScannedRowsAction(data: any) {
 }
 
 // =========================================================================
-// 5. إدارة الطلبات (OrdersTab)
-// =========================================================================
-export async function updateOrderStatusAction(
-  orderId: string | number,
-  status: string
-) {
-  try {
-    const id = Number(orderId);
-    await db
-      .update(orders)
-      .set({ status } as any)
-      .where(eq(orders.id, id as any));
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error: any) {
-    console.error("updateOrderStatusAction error:", error);
-    return { success: false, error: error?.message || "فشل تحديث حالة الطلب" };
-  }
-}
-
-export async function deleteOrderAction(orderId: string | number) {
-  try {
-    const id = Number(orderId);
-    await db.delete(orders).where(eq(orders.id, id as any));
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error: any) {
-    console.error("deleteOrderAction error:", error);
-    return { success: false, error: error?.message || "فشل حذف الطلب" };
-  }
-}
-
-// =========================================================================
-// 6. إدارة العمليات والإعدادات التشغيلية (OpsTab)
-// =========================================================================
-export async function saveOpsSettingsAction(data: Record<string, any>) {
-  try {
-    for (const [key, value] of Object.entries(data)) {
-      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
-      await db
-        .insert(settings)
-        .values({ key, value: stringValue })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: stringValue },
-        });
-    }
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error: any) {
-    console.error("saveOpsSettingsAction error:", error);
-    return { success: false, error: error?.message || "فشل حفظ إعدادات العمليات" };
-  }
-}
-
-// =========================================================================
-// 7. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner)
+// 5. محرك فحص المنيو بالذكاء الاصطناعي (AI Scanner)
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -497,42 +448,115 @@ export async function adminScanMenuAction(imageBase64: string) {
 }
 
 // =========================================================================
-// 8. إدارة المناطق والإعلانات (تحديث الواجهة الفوري)
+// 6. تبويب العمليات والمناطق والإعلانات (OpsTab) - الدوال المطلوبة تحديداً
 // =========================================================================
+export async function upsertZoneAction(data: {
+  id?: string | number;
+  nameAr: string;
+  nameEn?: string;
+  deliveryFee: number;
+  estimatedMinutes?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}) {
+  try {
+    const nameAr = String(data.nameAr || "").trim();
+    if (!nameAr) throw new Error("اسم المنطقة مطلوب");
+
+    if (data.id) {
+      const zoneId = Number(data.id);
+      await db
+        .update(deliveryZones)
+        .set({
+          nameAr,
+          nameEn: data.nameEn || nameAr,
+          deliveryFee: Number(data.deliveryFee || 0),
+          estimatedMinutes: data.estimatedMinutes || "30-45 دقيقة",
+          sortOrder: data.sortOrder !== undefined ? Number(data.sortOrder) : undefined,
+          isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
+        } as any)
+        .where(eq(deliveryZones.id, zoneId as any));
+    } else {
+      await db.insert(deliveryZones).values({
+        nameAr,
+        nameEn: String(data.nameEn || nameAr).trim(),
+        deliveryFee: Number(data.deliveryFee || 0),
+        estimatedMinutes: String(data.estimatedMinutes || "30-45 دقيقة"),
+        sortOrder: Number(data.sortOrder || 0),
+        isActive: true,
+      } as any);
+    }
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("upsertZoneAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ المنطقة" };
+  }
+}
+
+export async function deleteZoneAction(zoneId: string | number) {
+  try {
+    const id = Number(zoneId);
+    await db.delete(deliveryZones).where(eq(deliveryZones.id, id as any));
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteZoneAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف المنطقة" };
+  }
+}
+
+export async function savePromoAction(promo: {
+  enabled: boolean;
+  textAr: string;
+  code?: string;
+  title?: string;
+}) {
+  try {
+    await db
+      .insert(settings)
+      .values({ key: "promo_enabled", value: promo.enabled ? "true" : "false" })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: promo.enabled ? "true" : "false" },
+      });
+
+    await db
+      .insert(settings)
+      .values({ key: "promo_text_ar", value: promo.textAr || promo.title || "" })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: promo.textAr || promo.title || "" },
+      });
+
+    await db
+      .insert(settings)
+      .values({ key: "promo", value: JSON.stringify(promo) })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: JSON.stringify(promo) },
+      });
+
+    revalidatePath("/");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("savePromoAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ العرض المؤقت" };
+  }
+}
+
 export async function saveZonesAndPromoAction(formData: {
   zones?: any[];
-  promo?: {
-    enabled: boolean;
-    textAr: string;
-    code?: string;
-  };
+  promo?: any;
 }) {
   try {
     if (formData.promo) {
-      const p = formData.promo;
-      await db
-        .insert(settings)
-        .values({ key: "promo_enabled", value: p.enabled ? "true" : "false" })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: p.enabled ? "true" : "false" },
-        });
-
-      await db
-        .insert(settings)
-        .values({ key: "promo_text_ar", value: p.textAr || "" })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: p.textAr || "" },
-        });
-
-      await db
-        .insert(settings)
-        .values({ key: "promo", value: JSON.stringify(p) })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: JSON.stringify(p) },
-        });
+      await savePromoAction(formData.promo);
     }
 
     if (formData.zones && Array.isArray(formData.zones)) {
@@ -548,20 +572,10 @@ export async function saveZonesAndPromoAction(formData: {
           isActive: true,
         } as any);
       }
-
-      await db
-        .insert(settings)
-        .values({ key: "delivery_zones", value: JSON.stringify(formData.zones) })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: JSON.stringify(formData.zones) },
-        });
     }
 
     revalidatePath("/");
     revalidatePath("/admin");
-    revalidatePath("/menu");
-
     return { success: true };
   } catch (error: any) {
     console.error("saveZonesAndPromoAction error:", error);
@@ -569,12 +583,64 @@ export async function saveZonesAndPromoAction(formData: {
   }
 }
 
-export async function savePromoAction(promo: any) {
-  return saveZonesAndPromoAction({ promo });
+export async function saveOpsSettingsAction(data: Record<string, any>) {
+  try {
+    for (const [key, value] of Object.entries(data)) {
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      await db
+        .insert(settings)
+        .values({ key, value: stringValue })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: stringValue },
+        });
+    }
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("saveOpsSettingsAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ إعدادات العمليات" };
+  }
 }
 
 // =========================================================================
-// 9. حفظ بيانات العميل (VIP Customer Upsert)
+// 7. تبويب الطلبات (OrdersTab)
+// =========================================================================
+export async function updateOrderStatusAction(
+  orderId: string | number,
+  status: string
+) {
+  try {
+    const id = Number(orderId);
+    await db
+      .update(orders)
+      .set({ status } as any)
+      .where(eq(orders.id, id as any));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateOrderStatusAction error:", error);
+    return { success: false, error: error?.message || "فشل تحديث حالة الطلب" };
+  }
+}
+
+export async function deleteOrderAction(orderId: string | number) {
+  try {
+    const id = Number(orderId);
+    await db.delete(orders).where(eq(orders.id, id as any));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteOrderAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف الطلب" };
+  }
+}
+
+// =========================================================================
+// 8. تسجيل واستخراج كارت العميل VIP (CustomerQRCode)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
