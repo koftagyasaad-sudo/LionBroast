@@ -9,22 +9,22 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
   const defaultSlides = [
     {
       id: "slide-1",
-      badge: "وليمة العيلة",
-      title: "العزومة جاهزة",
-      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات. اطلبها ووصلها السكة.",
-      image: frontend?.heroImage2 || "/img/hero-2.png",
-      cta1Text: "اطلب الوليمة",
+      badge: "إصدار النار 🔥",
+      title: "الحار اللي يولّع",
+      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
+      image: frontend?.heroImage1 || "/img/hero-1.png",
+      cta1Text: "تحدي النار 🍗",
       cta1Link: "/menu",
       cta2Text: "شوف المنيو",
       cta2Link: "/menu",
     },
     {
       id: "slide-2",
-      badge: "إصدار النار 🔥",
-      title: "الحار اللي يولّع",
-      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
-      image: frontend?.heroImage1 || "/img/hero-1.png",
-      cta1Text: "تحدي النار 🍗",
+      badge: "وليمة العيلة",
+      title: "العزومة جاهزة",
+      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات. اطلبها ووصلها السكة.",
+      image: frontend?.heroImage2 || "/img/hero-2.png",
+      cta1Text: "اطلب الوليمة",
       cta1Link: "/menu",
       cta2Text: "شوف المنيو",
       cta2Link: "/menu",
@@ -83,7 +83,7 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
               <div className="size-full bg-gradient-to-r from-red-950 via-carbon-950 to-amber-950" />
             )}
 
-            {/* التدرج المظلم الأصلي الفخم لحماية وضوح النصوص */}
+            {/* التدرج الداكن الفاخر لحماية قراءة النصوص فوق الصورة */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-carbon-950/70 to-carbon-950/95" />
             <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-carbon-950 to-transparent" />
           </motion.div>
@@ -107,13 +107,13 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
               {slide.subtitle}
             </p>
 
-            {/* الأزرار الأصلية */}
+            {/* أزرار الإجراء */}
             <div className="flex flex-wrap items-center gap-3 pt-3">
               <Link
                 href={slide.cta1Link || "/menu"}
                 className="rounded-2xl bg-brand-500 hover:bg-brand-600 px-8 py-3.5 text-xs md:text-sm font-black text-white shadow-xl glow-brand transition active:scale-95"
               >
-                {slide.cta1Text || "اطلب الوليمة"}
+                {slide.cta1Text || "اطلب الآن 🍗"}
               </Link>
 
               <Link
@@ -125,7 +125,7 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
               </Link>
             </div>
 
-            {/* شريط المميزات الثلاثة المطابق للشاشة */}
+            {/* شريط المميزات الثلاثة المطابق للرابط الأصلي */}
             <div className="flex flex-wrap items-center gap-3 pt-4 text-xs font-bold text-white/80">
               <div className="flex items-center gap-1.5 rounded-xl bg-black/40 px-3 py-1.5 backdrop-blur-md border border-white/5">
                 <Clock className="w-3.5 h-3.5 text-brand-400" />
@@ -143,7 +143,7 @@ export default function HeroSlider({ frontend, slides }: { frontend?: any; slide
           </div>
         </div>
 
-        {/* أسهم التنقل */}
+        {/* أزرار التنقل بين الشرائح */}
         <div className="absolute bottom-6 left-6 z-20 flex items-center gap-2">
           <button
             onClick={() => setCurrent((prev) => (prev - 1 + currentSlides.length) % currentSlides.length)}
