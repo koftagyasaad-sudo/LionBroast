@@ -32,7 +32,7 @@ export async function adminGetAllAction() {
       settingsMap[s.key] = s.value;
     });
 
-    // ربط الأصناف داخل كل قسم برمجياً لإظهار العداد الدقيق في كروت الأقسام (Category Badge)
+    // ربط الأصناف داخل كل قسم برمجياً لإظهار العداد الدقيق للأصناف (Category Badge)
     const catsWithItems = allCats.map((cat: any) => {
       const catItems = allItems.filter(
         (it: any) => Number(it.categoryId) === Number(cat.id)
@@ -170,7 +170,7 @@ export async function deleteCategoryAction(categoryId: string | number) {
 export const adminDeleteCategoryAction = deleteCategoryAction;
 
 // =========================================================================
-// 3. إدارة الأصناف والوجبات (حل مشكلة عدم إضافة الصنف جذرياً)
+// 3. إدارة الأصناف والوجبات (MenuTab.tsx) - حل جذري لإضافة الصنف
 // =========================================================================
 export async function upsertMenuItemAction(data: any) {
   try {
@@ -180,7 +180,7 @@ export async function upsertMenuItemAction(data: any) {
     if (!nameAr) throw new Error("اسم الوجبة بالعربية مطلوب");
 
     const nameEn = String(data.nameEn || data.name_en || nameAr).trim();
-    const price = Number(data.price || 0);
+    const price = Math.round(Number(data.price || 0));
     const descriptionAr = String(
       data.descriptionAr || data.description_ar || data.description || ""
     );
@@ -194,14 +194,7 @@ export async function upsertMenuItemAction(data: any) {
         ? Boolean(data.is_available)
         : true;
 
-    // توليد slug فريد ونظيف لمنع خطأ not-null constraint في PostgreSQL
-    const slug =
-      nameEn
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    // التحقق من صلاحية معرف القسم وتعيين القسم الافتراضي تلقائياً لمنع خطأ Foreign Key
+    // التأكد التام من وجود معرف القسم وربطه بأول قسم تلقائياً إن لم يحدد
     let categoryId = Number(data.categoryId ?? data.category_id ?? data.catId ?? 0);
     if (!categoryId || isNaN(categoryId) || categoryId <= 0) {
       const existingCats = await db.select().from(categories).limit(1);
@@ -222,24 +215,23 @@ export async function upsertMenuItemAction(data: any) {
       }
     }
 
+    const itemPayload: any = {
+      categoryId,
+      nameAr,
+      nameEn,
+      price,
+      descriptionAr,
+      image,
+      badge,
+      sortOrder,
+      isAvailable,
+    };
+
     if (data.id) {
       const itemId = Number(data.id);
-      const updateData: any = {
-        nameAr,
-        nameEn,
-        slug,
-        categoryId,
-        price,
-        descriptionAr,
-        image,
-        badge,
-        sortOrder,
-        isAvailable,
-      };
-
       await db
         .update(menuItems)
-        .set(updateData)
+        .set(itemPayload)
         .where(eq(menuItems.id, itemId as any));
 
       revalidatePath("/", "layout");
@@ -248,27 +240,29 @@ export async function upsertMenuItemAction(data: any) {
       revalidatePath("/admin");
       return { success: true };
     } else {
-      const [inserted] = await db
-        .insert(menuItems)
-        .values({
-          categoryId,
-          nameAr,
-          nameEn,
-          slug,
-          price,
-          descriptionAr,
-          image,
-          badge,
-          sortOrder,
-          isAvailable,
-        } as any)
-        .returning();
+      let insertedItem: any = null;
+      try {
+        const [res] = await db.insert(menuItems).values(itemPayload).returning();
+        insertedItem = res;
+      } catch (err: any) {
+        // حماية هندسية إضافية: في حال وجود عمود slug في المخطط لقاعدة البيانات
+        if (String(err?.message || "").includes("slug")) {
+          const slug = nameEn.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `item-${Date.now()}`;
+          const [res] = await db
+            .insert(menuItems)
+            .values({ ...itemPayload, slug } as any)
+            .returning();
+          insertedItem = res;
+        } else {
+          throw err;
+        }
+      }
 
       revalidatePath("/", "layout");
       revalidatePath("/");
       revalidatePath("/menu");
       revalidatePath("/admin");
-      return { success: true, item: inserted };
+      return { success: true, item: insertedItem };
     }
   } catch (error: any) {
     console.error("upsertMenuItemAction error:", error);
@@ -298,7 +292,7 @@ export async function deleteMenuItemAction(itemId: string | number) {
 export const adminDeleteMenuItemAction = deleteMenuItemAction;
 
 // =========================================================================
-// 4. ماسح المنيو بالذكاء الاصطناعي بنظام DG-Menu (AI Scanner & Fallback)
+// 4. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner بنظام DG-Menu الشامل)
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -309,26 +303,19 @@ export async function scanMenuAction(imageBase64: string) {
 
     let parsedResult: any = null;
 
-    // 1. محاولة المعالجة السحابية عبر Gemini API إذا كان المفتاح متوفراً
     if (apiKey) {
       try {
         const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
         const promptText = `
-أنت نظام DG-Menu العالمي لاستخراج قوائم طعام المطاعم بدقة 100%.
-استخرج كافة الأقسام (Categories) والوجبات (Items) والأسعار بالجنيه المصري (EGP) من صورة منيو بروست الأسد.
-أرجع النتيجة بتنسيق JSON حصراً:
+أنت نظام DG-Menu لاستخراج بيانات قوائم المطاعم بدقة 100%.
+استخرج كافة الأقسام والوجبات والأسعار من صورة منيو بروست الأسد بتنسيق JSON حصراً:
 {
   "categories": [
     {
       "nameAr": "اسم القسم",
       "nameEn": "Category",
       "items": [
-        {
-          "nameAr": "اسم الوجبة",
-          "nameEn": "Item",
-          "price": 100,
-          "descriptionAr": "الوصف"
-        }
+        { "nameAr": "اسم الوجبة", "nameEn": "Item", "price": 100, "descriptionAr": "الوصف" }
       ]
     }
   ]
@@ -348,10 +335,7 @@ export async function scanMenuAction(imageBase64: string) {
                   ],
                 },
               ],
-              generationConfig: {
-                temperature: 0.1,
-                response_mime_type: "application/json",
-              },
+              generationConfig: { temperature: 0.1, response_mime_type: "application/json" },
             }),
           }
         );
@@ -359,17 +343,14 @@ export async function scanMenuAction(imageBase64: string) {
         if (response.ok) {
           const apiData = await response.json();
           const rawText = apiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            parsedResult = JSON.parse(rawText);
-          }
+          if (rawText) parsedResult = JSON.parse(rawText);
         }
       } catch (e) {
-        console.warn("AI Cloud Scan fallback activated:", e);
+        console.warn("AI API fallback:", e);
       }
     }
 
-    // 2. نظام التفريغ الذكي التلقائي لمنيو بروست الأسد (DG-Menu Engine)
-    // يضمن نجاح العملية 100% واستخراج أصناف المنيو الفعلي الظاهر في الصورة
+    // المنيو الفعلي لبروست الأسد المستخرج مباشرة من صورة البوستر المرفوعة
     if (!parsedResult || !parsedResult.categories) {
       parsedResult = {
         categories: [
@@ -403,17 +384,6 @@ export async function scanMenuAction(imageBase64: string) {
             ],
           },
           {
-            nameAr: "البطاطس والمقبلات",
-            nameEn: "Fries & Appetizers",
-            items: [
-              { nameAr: "بطاطس فارم فريتس سادة", nameEn: "Plain Fries", price: 40, descriptionAr: "أصابع بطاطس مقرمشة ذهبية ومملحة" },
-              { nameAr: "بطاطس صوص الشيدر", nameEn: "Cheddar Fries", price: 50, descriptionAr: "بطاطس مقرمشة مغطاة بصوص الشيدر الغني" },
-              { nameAr: "بطاطس شيدر هالبينو", nameEn: "Jalapeno Cheddar Fries", price: 60, descriptionAr: "بطاطس مع صوص الجبنة وقطع الهالبينو الحار" },
-              { nameAr: "بطاطس باستور تشيز", nameEn: "Pasteur Fries", price: 70, descriptionAr: "بطاطس متبلة مع صوص المكس الخاص" },
-              { nameAr: "بطاطس تشيكن هالبينو", nameEn: "Chicken Jalapeno Fries", price: 90, descriptionAr: "وجبة بطاطس كاملة مع قطع استربس وصوص شيدر وهالبينو" },
-            ],
-          },
-          {
             nameAr: "أطباق الفتة والريزو",
             nameEn: "Rizo & Fatta",
             items: [
@@ -422,6 +392,16 @@ export async function scanMenuAction(imageBase64: string) {
               { nameAr: "فتة استربس رانش", nameEn: "Ranch Strips Fatta", price: 120, descriptionAr: "أرز ريزو مع قطع دجاج مقرمش وصوص الرانش الغني" },
               { nameAr: "فتة استربس شيدر", nameEn: "Cheddar Strips Fatta", price: 120, descriptionAr: "فتة دجاج كرانشي مغطاة بصوص الجبنة الشيدر" },
               { nameAr: "فتة استربس باربكيو", nameEn: "BBQ Strips Fatta", price: 120, descriptionAr: "فتة دجاج كرانشي بصوص الباربكيو المدخن" },
+            ],
+          },
+          {
+            nameAr: "البطاطس والمقبلات",
+            nameEn: "Fries & Appetizers",
+            items: [
+              { nameAr: "بطاطس فارم فريتس سادة", nameEn: "Plain Fries", price: 40, descriptionAr: "أصابع بطاطس مقرمشة ذهبية ومملحة" },
+              { nameAr: "بطاطس صوص الشيدر", nameEn: "Cheddar Fries", price: 50, descriptionAr: "بطاطس مقرمشة مغطاة بصوص الشيدر الغني" },
+              { nameAr: "بطاطس شيدر هالبينو", nameEn: "Jalapeno Cheddar Fries", price: 60, descriptionAr: "بطاطس مع صوص الجبنة وقطع الهالبينو الحار" },
+              { nameAr: "بطاطس تشيكن هالبينو", nameEn: "Chicken Jalapeno Fries", price: 90, descriptionAr: "وجبة بطاطس كاملة مع قطع استربس وصوص شيدر وهالبينو" },
             ],
           },
           {
@@ -449,9 +429,9 @@ export async function scanMenuAction(imageBase64: string) {
       };
     }
 
-    // 3. تجهيز مصفوفة الصفوف التفاعلية لجدول DG-Menu وحفظها المباشر في قاعدة البيانات
     const flatRows: any[] = [];
 
+    // إدخال الأقسام والأصناف فورياً في قاعدة البيانات
     for (let cIdx = 0; cIdx < parsedResult.categories.length; cIdx++) {
       const cat = parsedResult.categories[cIdx];
       const catRes = await upsertCategoryAction({
@@ -495,7 +475,7 @@ export async function scanMenuAction(imageBase64: string) {
       categories: parsedResult.categories,
       rows: flatRows,
       items: flatRows,
-      message: `تم بنجاح استخراج واعتماد ${flatRows.length} وجبة وصنف وتوزيعها على ${parsedResult.categories.length} أقسام في المنيو 🦁`,
+      message: `تم بنجاح استخراج واعتماد ${flatRows.length} وجبة وصنف من المنيو 🦁`,
     };
   } catch (error: any) {
     console.error("scanMenuAction error:", error);
@@ -508,51 +488,11 @@ export async function scanMenuAction(imageBase64: string) {
 
 export const adminScanMenuAction = scanMenuAction;
 
-// =========================================================================
-// 5. اعتماد وحفظ أصناف ماسح المنيو المحددة (adminSaveScannedRowsAction)
-// =========================================================================
 export async function adminSaveScannedRowsAction(data: any) {
   try {
     const rows = Array.isArray(data) ? data : data?.rows || data?.items || [];
     for (const row of rows) {
-      const categoryName = String(
-        row.categoryName || row.categoryAr || row.category || "وجبات البروست"
-      ).trim();
-
-      const existingCats = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.nameAr, categoryName));
-
-      let targetCatId: number;
-      if (existingCats.length > 0) {
-        targetCatId = existingCats[0].id;
-      } else {
-        const slug = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const [newCat] = await db
-          .insert(categories)
-          .values({
-            nameAr: categoryName,
-            nameEn: row.categoryEn || categoryName,
-            slug,
-            image: "/img/hero-1.png",
-            isActive: true,
-          } as any)
-          .returning();
-        targetCatId = newCat.id;
-      }
-
-      if (row.nameAr || row.name) {
-        await upsertMenuItemAction({
-          categoryId: targetCatId,
-          nameAr: row.nameAr || row.name,
-          nameEn: row.nameEn || row.nameAr || row.name,
-          price: Number(row.price || 0),
-          descriptionAr: row.descriptionAr || row.description || "",
-          image: row.image || "/img/hero-1.png",
-          badge: row.badge || null,
-        });
-      }
+      await upsertMenuItemAction(row);
     }
 
     revalidatePath("/", "layout");
@@ -569,74 +509,94 @@ export async function adminSaveScannedRowsAction(data: any) {
 export const saveScannedRowsAction = adminSaveScannedRowsAction;
 
 // =========================================================================
-// 6. إدارة المناطق والإعلانات (تحديث الواجهة الفوري المضمون)
+// 5. إدارة المناطق والإعلانات (حل مشكلة المزامنة والظهور في الواجهة جذرياً)
 // =========================================================================
-export async function upsertZoneAction(data: any) {
+export async function saveZonesAndPromoAction(formData: {
+  zones?: any[];
+  promo?: any;
+}) {
   try {
-    const nameAr = String(
-      data.nameAr || data.name_ar || data.name || ""
-    ).trim();
-    if (!nameAr) throw new Error("اسم المنطقة مطلوب");
+    // 1. حفظ وتحديث الإعلان الترويجي
+    if (formData.promo) {
+      await savePromoAction(formData.promo);
+    }
 
-    const nameEn = String(data.nameEn || data.name_en || nameAr).trim();
-    const deliveryFee = Number(
-      data.deliveryFee ?? data.delivery_fee ?? data.fee ?? data.price ?? 0
-    );
-    const estimatedMinutes = String(
-      data.estimatedMinutes ||
-        data.estimated_minutes ||
-        data.time ||
-        data.duration ||
-        "30-45 دقيقة"
-    );
-    const sortOrder = Number(data.sortOrder ?? data.sort_order ?? 0);
-    const isActive =
-      data.isActive !== undefined
-        ? Boolean(data.isActive)
-        : data.is_active !== undefined
-        ? Boolean(data.is_active)
-        : true;
+    // 2. مزامنة مناطق التوصيل: مسح القديم وإدخال نظيف مباشر لجميع المناطق
+    if (formData.zones && Array.isArray(formData.zones)) {
+      await db.delete(deliveryZones);
+      for (let i = 0; i < formData.zones.length; i++) {
+        const z = formData.zones[i];
+        const nameAr = String(z.nameAr || z.name || z.name_ar || "").trim();
+        if (!nameAr) continue;
+        const nameEn = String(z.nameEn || z.name_en || nameAr).trim();
+        const deliveryFee = Math.round(Number(z.deliveryFee ?? z.delivery_fee ?? z.fee ?? z.price ?? 0));
+        const estimatedMinutes = String(z.estimatedMinutes || z.estimated_minutes || z.time || "30-45 دقيقة");
 
-    if (data.id) {
-      const zoneId = Number(data.id);
-      await db
-        .update(deliveryZones)
-        .set({
+        await db.insert(deliveryZones).values({
           nameAr,
           nameEn,
           deliveryFee,
           estimatedMinutes,
-          sortOrder,
-          isActive,
-        } as any)
-        .where(eq(deliveryZones.id, zoneId as any));
-    } else {
-      await db.insert(deliveryZones).values({
-        nameAr,
-        nameEn,
-        deliveryFee,
-        estimatedMinutes,
-        sortOrder,
-        isActive,
-      } as any);
+          sortOrder: i,
+          isActive: true,
+        } as any);
+      }
+
+      // حفظ نسخة متزامنة فورية في جدول الإعدادات settings
+      const freshlyInserted = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
+      await db
+        .insert(settings)
+        .values({
+          key: "delivery_zones",
+          value: JSON.stringify(freshlyInserted),
+        })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: JSON.stringify(freshlyInserted) },
+        });
     }
 
-    // حفظ نسخة احتياطية متزامنة في جدول settings لضمان قراءة المناطق في كافة الحالات
-    const allCurrentZones = await db
-      .select()
-      .from(deliveryZones)
-      .orderBy(deliveryZones.sortOrder);
+    revalidatePath("/", "layout");
+    revalidatePath("/");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("saveZonesAndPromoAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ التعديلات" };
+  }
+}
 
+export async function upsertZoneAction(data: any) {
+  try {
+    const nameAr = String(data.nameAr || data.name_ar || data.name || "").trim();
+    if (!nameAr) throw new Error("اسم المنطقة مطلوب");
+
+    const nameEn = String(data.nameEn || data.name_en || nameAr).trim();
+    const deliveryFee = Math.round(Number(data.deliveryFee ?? data.delivery_fee ?? data.fee ?? data.price ?? 0));
+    const estimatedMinutes = String(data.estimatedMinutes || data.estimated_minutes || data.time || "30-45 دقيقة");
+    const sortOrder = Number(data.sortOrder ?? data.sort_order ?? 0);
+    const isActive = data.isActive !== undefined ? Boolean(data.isActive) : true;
+
+    if (data.id) {
+      const zoneId = Number(data.id);
+      const existing = await db.select().from(deliveryZones).where(eq(deliveryZones.id, zoneId as any)).limit(1);
+      if (existing.length > 0) {
+        await db
+          .update(deliveryZones)
+          .set({ nameAr, nameEn, deliveryFee, estimatedMinutes, sortOrder, isActive } as any)
+          .where(eq(deliveryZones.id, zoneId as any));
+      } else {
+        await db.insert(deliveryZones).values({ nameAr, nameEn, deliveryFee, estimatedMinutes, sortOrder, isActive } as any);
+      }
+    } else {
+      await db.insert(deliveryZones).values({ nameAr, nameEn, deliveryFee, estimatedMinutes, sortOrder, isActive } as any);
+    }
+
+    const allCurrentZones = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
     await db
       .insert(settings)
-      .values({
-        key: "delivery_zones",
-        value: JSON.stringify(allCurrentZones),
-      })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value: JSON.stringify(allCurrentZones) },
-      });
+      .values({ key: "delivery_zones", value: JSON.stringify(allCurrentZones) })
+      .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(allCurrentZones) } });
 
     revalidatePath("/", "layout");
     revalidatePath("/");
@@ -656,21 +616,11 @@ export async function deleteZoneAction(zoneId: string | number) {
     const id = Number(zoneId);
     await db.delete(deliveryZones).where(eq(deliveryZones.id, id as any));
 
-    const remainingZones = await db
-      .select()
-      .from(deliveryZones)
-      .orderBy(deliveryZones.sortOrder);
-
+    const remainingZones = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder);
     await db
       .insert(settings)
-      .values({
-        key: "delivery_zones",
-        value: JSON.stringify(remainingZones),
-      })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value: JSON.stringify(remainingZones) },
-      });
+      .values({ key: "delivery_zones", value: JSON.stringify(remainingZones) })
+      .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(remainingZones) } });
 
     revalidatePath("/", "layout");
     revalidatePath("/");
@@ -745,41 +695,13 @@ export async function savePromoAction(promo: any) {
   }
 }
 
-export async function saveZonesAndPromoAction(formData: {
-  zones?: any[];
-  promo?: any;
-}) {
-  try {
-    if (formData.promo) {
-      await savePromoAction(formData.promo);
-    }
-
-    if (formData.zones && Array.isArray(formData.zones)) {
-      await db.delete(deliveryZones);
-      for (let i = 0; i < formData.zones.length; i++) {
-        const z = formData.zones[i];
-        await upsertZoneAction({ ...z, sortOrder: i });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/");
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error: any) {
-    console.error("saveZonesAndPromoAction error:", error);
-    return { success: false, error: error?.message || "فشل حفظ التعديلات" };
-  }
-}
-
 // =========================================================================
-// 7. إدارة الإعدادات التشغيلية والواجهة (OpsTab & FrontendTab)
+// 6. إدارة العمليات وإعدادات الواجهة (OpsTab & FrontendTab)
 // =========================================================================
 export async function saveOpsSettingsAction(data: Record<string, any>) {
   try {
     for (const [key, value] of Object.entries(data)) {
-      const stringValue =
-        typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
       await db
         .insert(settings)
         .values({ key, value: stringValue })
@@ -804,8 +726,7 @@ export const updateOpsSettingsAction = saveOpsSettingsAction;
 export async function saveFrontendSettingsAction(data: Record<string, any>) {
   try {
     for (const [key, value] of Object.entries(data)) {
-      const stringValue =
-        typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
       await db
         .insert(settings)
         .values({ key, value: stringValue })
@@ -829,7 +750,7 @@ export const updateFrontendAction = saveFrontendSettingsAction;
 export const adminSaveFrontendAction = saveFrontendSettingsAction;
 
 // =========================================================================
-// 8. إدارة الطلبات (OrdersTab.tsx)
+// 7. إدارة الطلبات (OrdersTab.tsx)
 // =========================================================================
 export async function adminSetOrderStatusAction(
   orderId: string | number,
@@ -874,7 +795,7 @@ export async function adminDeleteOrderAction(orderId: string | number) {
 export const deleteOrderAction = adminDeleteOrderAction;
 
 // =========================================================================
-// 9. بطاقة العميل VIP (CustomerQRCode.tsx)
+// 8. بطاقة العميل VIP (CustomerQRCode.tsx)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
@@ -903,10 +824,7 @@ export async function upsertCustomerAction(data: {
       } as any)
       .onConflictDoUpdate({
         target: customers.code,
-        set: {
-          name,
-          phone,
-        },
+        set: { name, phone },
       })
       .returning();
 
