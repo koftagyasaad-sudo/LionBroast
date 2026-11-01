@@ -1,215 +1,159 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  Flame,
-  Languages,
-  Menu,
-  Moon,
-  QrCode,
-  ShoppingBag,
-  Sun,
-  UtensilsCrossed,
-  X,
-  MapPin,
-  PhoneCall,
-} from "lucide-react";
-import { useApp } from "@/store/app-store";
-import { useMounted } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRight, ChevronLeft, Flame, UtensilsCrossed, Clock, Star, ShieldCheck } from "lucide-react";
 
-interface HeaderProps {
-  settings?: any;
-  frontend?: any;
-  promo?: any;
-}
-
-export default function Header({ settings, frontend }: HeaderProps) {
-  const mounted = useMounted();
-  const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const lang = useApp((s) => s.lang);
-  const theme = useApp((s) => s.theme);
-  const cart = useApp((s) => s.cart) || [];
-  const customer = useApp((s) => s.customer);
-  const setLang = useApp((s) => s.setLang);
-  const setTheme = useApp((s) => s.setTheme);
-  const setCartOpen = useApp((s) => s.setCartOpen);
-  const setPassOpen = useApp((s) => s.setPassOpen);
-  const openOnboarding = useApp((s) => s.openOnboarding);
-
-  const storeData = frontend || settings || {};
-  const logoUrl = storeData.logoUrl || storeData.logo_url || "/img/icon-512.png";
-  const brandName = storeData.brandNameAr || storeData.brand_name_ar || "بروست الأسد";
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 15);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // تطبيق كلاس الثيم مباشرة على عنصر html
-  const handleToggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    if (typeof document !== "undefined") {
-      if (nextTheme === "dark") {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-      } else {
-        document.documentElement.classList.remove("dark");
-        document.documentElement.classList.add("light");
-      }
-      localStorage.setItem("lion_theme", nextTheme);
-    }
-  };
-
-  const count = cart.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0);
-
-  const links = [
-    { href: "/menu", label: "المنيو", icon: UtensilsCrossed },
-    { href: "/#best", label: "الأكثر مبيعاً", icon: Flame },
-    { href: "/#zones", label: "مناطق التوصيل", icon: MapPin },
-    { href: "/#contact", label: "الفروع والتواصل", icon: PhoneCall },
+export default function HeroSlider({ frontend, slides }: { frontend?: any; slides?: any[] }) {
+  const defaultSlides = [
+    {
+      id: "slide-1",
+      badge: "إصدار النار 🔥",
+      title: "الحار اللي يولّع",
+      subtitle: "ستريبس النار بغمسة الهالبينو المدخنة، خصم 20% طوال الأسبوع - جرّبها لو قدها.",
+      image: frontend?.heroImage1 || "/img/hero-1.png",
+      cta1Text: "تحدي النار 🍗",
+      cta1Link: "/menu",
+      cta2Text: "شوف المنيو",
+      cta2Link: "/menu",
+    },
+    {
+      id: "slide-2",
+      badge: "وليمة العيلة",
+      title: "العزومة جاهزة",
+      subtitle: "١٥ قطعة بروست، بطاطس عائلية، كول سلو و٤ مشروبات. اطلبها ووصلها السكة.",
+      image: frontend?.heroImage2 || "/img/hero-2.png",
+      cta1Text: "اطلب الوليمة",
+      cta1Link: "/menu",
+      cta2Text: "شوف المنيو",
+      cta2Link: "/menu",
+    },
+    {
+      id: "slide-3",
+      badge: "أقوى قرمشة",
+      title: "أكبر قطعة بروست في دسوق",
+      subtitle: "قرمشة وتتبيلة سرية ملهاش زي! اطلب دلوقتي واستمتع بأقوى عروض التوفير.",
+      image: frontend?.heroImage3 || "/img/hero-3.png",
+      cta1Text: "شوف العروض",
+      cta1Link: "/menu",
+      cta2Text: "المنيو كامل",
+      cta2Link: "/menu",
+    },
   ];
 
-  const openPass = () => {
-    if (customer) setPassOpen(true);
-    else openOnboarding("pass");
-  };
+  const currentSlides =
+    frontend?.heroSlides && Array.isArray(frontend.heroSlides) && frontend.heroSlides.length > 0
+      ? frontend.heroSlides
+      : slides && slides.length > 0
+      ? slides
+      : defaultSlides;
+
+  const [current, setCurrent] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrent((prev) => (prev + 1) % currentSlides.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [currentSlides.length]);
+
+  const slide = currentSlides[current] || currentSlides[0];
 
   return (
-    <header
-      className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "bg-zinc-900/95 dark:bg-carbon-950/95 backdrop-blur-xl border-b border-white/15 py-2.5 shadow-2xl"
-          : "bg-gradient-to-b from-black/90 via-black/50 to-transparent py-4 backdrop-blur-[2px]"
-      )}
-    >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 md:px-8">
-        {/* Logo & Brand Name */}
-        <Link href="/" className="group flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={logoUrl}
-            alt="Broast El-Assad"
-            className="size-11 rounded-2xl object-cover ring-2 ring-brand-500/80 shadow-lg transition group-hover:scale-105"
-          />
-          <span className="leading-tight">
-            <span className="block text-lg font-extrabold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-              {brandName}
-            </span>
-            <span className="block text-[10px] font-black uppercase tracking-[0.28em] text-brand-400 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-              {lang === "ar" ? "Broast El-Assad" : "بروست الأسد"}
-            </span>
-          </span>
-        </Link>
+    <section className="relative h-[85vh] min-h-[580px] max-h-[780px] w-full overflow-hidden bg-carbon-950 text-white" dir="rtl">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={current}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.7 }}
+          className="absolute inset-0"
+        >
+          {/* صورة خلفية الشريحة */}
+          {slide.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={slide.image} alt={slide.title} className="size-full object-cover object-center brightness-[0.45]" />
+          ) : (
+            <div className="size-full bg-gradient-to-r from-red-950 via-carbon-950 to-amber-950" />
+          )}
 
-        {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-1 lg:flex bg-black/60 border border-white/15 rounded-full px-3 py-1 shadow-xl backdrop-blur-md">
-          {links.map((l) => (
+          {/* طبقة تظليل متدرجة لحماية النصوص */}
+          <div className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-carbon-950/80 via-transparent to-transparent" />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* محتوى الشريحة التفاعلي */}
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-center px-4 md:px-8">
+        <div className="max-w-2xl space-y-5">
+          {slide.badge && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/20 px-4 py-1.5 text-xs font-black text-amber-300 backdrop-blur-md">
+              <Flame className="size-3.5 text-brand-500" />
+              <span>{slide.badge}</span>
+            </span>
+          )}
+
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-black leading-tight tracking-tight drop-shadow-xl text-white">
+            {slide.title}
+          </h1>
+
+          <p className="text-sm sm:text-base md:text-lg font-semibold text-white/80 leading-relaxed drop-shadow-md">
+            {slide.subtitle}
+          </p>
+
+          {/* أزرار الإجراء السريع (Buttons) */}
+          <div className="flex flex-wrap items-center gap-4 pt-3">
             <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-full px-4 py-2 text-sm font-bold text-white/90 hover:text-white hover:bg-white/15 transition drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+              href={slide.cta1Link || "/menu"}
+              className="rounded-2xl bg-gradient-to-r from-brand-500 to-amber-500 px-8 py-4 text-sm font-black text-white shadow-xl glow-brand transition hover:scale-105 active:scale-95"
             >
-              {l.label}
+              {slide.cta1Text || "اطلب الآن 🍗"}
             </Link>
-          ))}
-        </nav>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="flex h-10 items-center gap-1.5 rounded-full border border-white/20 bg-black/70 px-3 text-xs font-bold text-white shadow-md backdrop-blur-md hover:border-brand-500 transition cursor-pointer"
-          >
-            <Languages className="size-4 text-brand-400" />
-            <span>{lang === "ar" ? "English" : "العربية"}</span>
-          </button>
+            <Link
+              href={slide.cta2Link || "/menu"}
+              className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black text-white backdrop-blur-md transition hover:bg-white/20"
+            >
+              <UtensilsCrossed className="size-4" />
+              <span>{slide.cta2Text || "شوف المنيو"}</span>
+            </Link>
+          </div>
 
-          {/* زر تبديل الثيم (شغال 100%) */}
-          <button
-            onClick={handleToggleTheme}
-            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/70 text-white shadow-md backdrop-blur-md hover:border-brand-500 transition cursor-pointer"
-            title="تبديل المظهر"
-          >
-            {mounted && theme === "light" ? (
-              <Sun className="size-4.5 text-amber-400" />
-            ) : (
-              <Moon className="size-4.5 text-blue-400" />
-            )}
-          </button>
-
-          <button
-            onClick={openPass}
-            className="hidden h-10 items-center gap-1.5 rounded-full border border-cheese-400/60 bg-black/80 px-3.5 text-xs font-black text-cheese-300 shadow-md backdrop-blur-md hover:bg-cheese-400/20 transition sm:flex cursor-pointer"
-          >
-            <QrCode className="size-4 text-cheese-400" />
-            <span>بطاقة الأسد VIP</span>
-          </button>
-
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative grid size-10 place-items-center rounded-full bg-brand-500 text-white transition glow-brand hover:scale-105 shadow-xl cursor-pointer"
-          >
-            <ShoppingBag className="size-5" />
-            {count > 0 && (
-              <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-cheese-400 text-[10px] font-black text-black ring-2 ring-brand-500">
-                {count}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="grid size-10 place-items-center rounded-full border border-white/20 bg-black/70 text-white lg:hidden cursor-pointer"
-          >
-            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          {/* شريط الإحصائيات الصغير */}
+          <div className="flex flex-wrap items-center gap-6 pt-4 text-xs font-bold text-white/70">
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-4 text-brand-400" />
+              <span>يوصلك في ٣٠-٤٥ دقيقة</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Star className="size-4 text-amber-400 fill-amber-400" />
+              <span>٤.٩ من +٢٬٤٠٠ تقييم</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-emerald-400" />
+              <span>دجاج طازج يومياً</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.nav
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-zinc-950/98 border-b border-white/15 backdrop-blur-2xl lg:hidden"
-          >
-            <div className="space-y-1.5 px-4 py-4">
-              {links.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white hover:bg-white/10"
-                >
-                  <l.icon className="size-4 text-brand-500" />
-                  {l.label}
-                </Link>
-              ))}
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  openPass();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl bg-cheese-400/10 px-4 py-3 text-sm font-bold text-cheese-400"
-              >
-                <QrCode className="size-4" />
-                بطاقة الأسد VIP
-              </button>
-            </div>
-          </motion.nav>
-        )}
-      </AnimatePresence>
-    </header>
+      {/* أزرار وأسهم التنقل بين الشرائح */}
+      <div className="absolute bottom-6 left-6 z-20 flex items-center gap-2">
+        <button
+          onClick={() => setCurrent((prev) => (prev - 1 + currentSlides.length) % currentSlides.length)}
+          className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/70 text-white backdrop-blur-md hover:bg-white/20 transition cursor-pointer"
+        >
+          <ChevronRight className="size-5" />
+        </button>
+        <button
+          onClick={() => setCurrent((prev) => (prev + 1) % currentSlides.length)}
+          className="grid size-10 place-items-center rounded-full border border-white/20 bg-carbon-950/70 text-white backdrop-blur-md hover:bg-white/20 transition cursor-pointer"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
+      </div>
+    </section>
   );
 }
