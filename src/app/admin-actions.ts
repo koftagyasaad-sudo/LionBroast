@@ -1,674 +1,381 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   categories,
   menuItems,
-  deliveryZones,
   settings,
+  deliveryZones,
   customers,
-  orders,
-  orderLines,
 } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
-import { getFrontendSettings, getPromo } from "@/db/queries";
-
-const MASTER_PASS = "Asaad123456@@";
-
-export interface ScannedRow {
-  categoryNameAr: string;
-  categoryNameEn?: string;
-  itemNameAr: string;
-  itemNameEn?: string;
-  descriptionAr?: string;
-  descriptionEn?: string;
-  price: number;
-  badge?: string;
-}
-
-function checkAuth(token?: string) {
-  if (!token) return true;
-  const envPass = process.env.ADMIN_PASSCODE?.trim();
-  return token === MASTER_PASS || (envPass ? token === envPass : true);
-}
-
-function resolveArgs(arg1: any, arg2: any) {
-  if (arg2 !== undefined) {
-    return { token: typeof arg1 === "string" ? arg1 : undefined, payload: arg2 };
-  }
-  return { token: undefined, payload: arg1 };
-}
+import { eq, asc, desc } from "drizzle-orm";
 
 // =========================================================================
-// 1. جلب بيانات غرفة التحكم
+// 1. إدارة الأقسام (Categories) - حل مشكلة إضافة الأقسام يدوياً نهائياً
 // =========================================================================
-export async function adminGetAllAction(token?: string) {
+export async function createCategoryAction(data: {
+  nameAr: string;
+  nameEn?: string;
+  image?: string;
+  sortOrder?: number;
+}) {
   try {
-    if (!checkAuth(token)) {
-      throw new Error("Unauthorized");
+    const nameAr = String(data.nameAr || "").trim();
+    if (!nameAr) throw new Error("اسم القسم بالعربية مطلوب");
+
+    const nameEn = String(data.nameEn || nameAr).trim();
+    // توليد slug فريد ونظيف لعدم مخالفة قيود قاعدة البيانات
+    const slug =
+      nameEn
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || `cat-${Date.now()}`;
+
+    const [inserted] = await db
+      .insert(categories)
+      .values({
+        nameAr,
+        nameEn,
+        slug,
+        image: data.image || "/img/hero-1.png",
+        sortOrder: Number(data.sortOrder || 0),
+        isActive: true,
+      } as any)
+      .returning();
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true, category: inserted };
+  } catch (error: any) {
+    console.error("createCategoryAction error:", error);
+    return { success: false, error: error?.message || "فشل إضافة القسم" };
+  }
+}
+
+export async function deleteCategoryAction(categoryId: string | number) {
+  try {
+    const id = Number(categoryId);
+    if (isNaN(id)) throw new Error("معرف القسم غير صالح");
+
+    await db.delete(categories).where(eq(categories.id, id as any));
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteCategoryAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف القسم" };
+  }
+}
+
+// =========================================================================
+// 2. إدارة الأصناف والوجبات (Menu Items)
+// =========================================================================
+export async function createMenuItemAction(data: {
+  categoryId: string | number;
+  nameAr: string;
+  nameEn?: string;
+  price: number;
+  descriptionAr?: string;
+  image?: string;
+  badge?: string;
+  sortOrder?: number;
+}) {
+  try {
+    const [inserted] = await db
+      .insert(menuItems)
+      .values({
+        categoryId: Number(data.categoryId),
+        nameAr: String(data.nameAr).trim(),
+        nameEn: String(data.nameEn || data.nameAr).trim(),
+        price: Number(data.price || 0),
+        descriptionAr: String(data.descriptionAr || ""),
+        image: data.image || "/img/hero-1.png",
+        badge: data.badge || null,
+        sortOrder: Number(data.sortOrder || 0),
+        isAvailable: true,
+      } as any)
+      .returning();
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true, item: inserted };
+  } catch (error: any) {
+    console.error("createMenuItemAction error:", error);
+    return { success: false, error: error?.message || "فشل إضافة الوجبة" };
+  }
+}
+
+export async function deleteMenuItemAction(itemId: string | number) {
+  try {
+    const id = Number(itemId);
+    await db.delete(menuItems).where(eq(menuItems.id, id as any));
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteMenuItemAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف الصنف" };
+  }
+}
+
+// =========================================================================
+// 3. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner) بنظام DG-Menu المتطور
+// =========================================================================
+export async function scanMenuAction(imageBase64: string) {
+  try {
+    const apiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return {
+        success: false,
+        error:
+          "مفتاح الذكاء الاصطناعي (GEMINI_API_KEY) غير مضاف في Vercel Environment Variables. برجاء إضافته لتفعيل الماسك الذكي.",
+      };
     }
 
-    let zones = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder).catch(() => []);
-    if (zones.length === 0) {
-      const defaultZones = [
-        { nameAr: "دسوق - وسط البلد وشارع الجيش", nameEn: "Desouk - Downtown", fee: 15, estimatedMinutes: 25, sortOrder: 1 },
-        { nameAr: "دسوق - منطقة المستشفى والمحطة", nameEn: "Desouk - Hospital", fee: 15, estimatedMinutes: 25, sortOrder: 2 },
-        { nameAr: "دسوق - حي الكشلة والميدان الإبراهيمي", nameEn: "Desouk - El-Keshla", fee: 15, estimatedMinutes: 30, sortOrder: 3 },
-        { nameAr: "دسوق - دحروج وقرى الساحل", nameEn: "Desouk - Dahroug", fee: 20, estimatedMinutes: 35, sortOrder: 4 },
-        { nameAr: "القرى والمناطق المجاورة لدسوق", nameEn: "Desouk - Villages", fee: 25, estimatedMinutes: 40, sortOrder: 5 },
-      ];
-      try {
-        for (const def of defaultZones) {
-          await db.insert(deliveryZones).values(def as any);
+    // تنظيف كود الـ Base64
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    const promptText = `
+أنت خبير إدخال بيانات قوائم طعام المطاعم بدقة 100%.
+قم بفحص صورة قائمة طعام مطعم بروست الأسد بدقة، واستخرج جميع الأقسام (Categories) والأصناف (Items) والأسعار بالجنيه المصري (EGP).
+أرجع النتيجة بصيغة JSON فقط بدون أي نصوص خارجية كالتالي:
+{
+  "categories": [
+    {
+      "nameAr": "اسم القسم بالعربية",
+      "nameEn": "Category English Name",
+      "items": [
+        {
+          "nameAr": "اسم الوجبة بالعربي",
+          "nameEn": "Item English Name",
+          "price": 120,
+          "descriptionAr": "وصف الوجبة إن وجد"
         }
-        zones = await db.select().from(deliveryZones).orderBy(deliveryZones.sortOrder).catch(() => []);
-      } catch (e) {
-        console.error("Auto seeding zones warning:", e);
+      ]
+    }
+  ]
+}
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: promptText },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: cleanBase64,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            response_mime_type: "application/json",
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Gemini API Error:", errText);
+      return {
+        success: false,
+        error: "تعذر الاتصال بخادم الذكاء الاصطناعي، تأكد من صحة المفتاح وحصته في Google AI Studio.",
+      };
+    }
+
+    const data = await response.json();
+    const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawJson) {
+      return { success: false, error: "لم يتمكن الماسح من استخراج أي نصوص من الصورة." };
+    }
+
+    const parsed = JSON.parse(rawJson);
+
+    // إدخال الأقسام والوجبات المستخرجة فوراً إلى قاعدة البيانات
+    if (parsed.categories && Array.isArray(parsed.categories)) {
+      for (let i = 0; i < parsed.categories.length; i++) {
+        const cat = parsed.categories[i];
+        const resCat = await createCategoryAction({
+          nameAr: cat.nameAr,
+          nameEn: cat.nameEn,
+          sortOrder: i,
+        });
+
+        if (resCat.success && resCat.category && Array.isArray(cat.items)) {
+          for (let j = 0; j < cat.items.length; j++) {
+            const it = cat.items[j];
+            await createMenuItemAction({
+              categoryId: resCat.category.id,
+              nameAr: it.nameAr,
+              nameEn: it.nameEn,
+              price: Number(it.price || 0),
+              descriptionAr: it.descriptionAr || "",
+              sortOrder: j,
+            });
+          }
+        }
       }
     }
 
-    const [
-      cats,
-      items,
-      ordersList,
-      customersList,
-      settingsRows,
-      linesList,
-      frontend,
-      promo,
-    ] = await Promise.all([
-      db.select().from(categories).orderBy(categories.sortOrder).catch(() => []),
-      db.select().from(menuItems).orderBy(menuItems.sortOrder).catch(() => []),
-      db.select().from(orders).orderBy(desc(orders.createdAt)).catch(() => []),
-      db.select().from(customers).orderBy(desc(customers.createdAt)).catch(() => []),
-      db.select().from(settings).catch(() => []),
-      db.select().from(orderLines).catch(() => []),
-      getFrontendSettings().catch(() => null),
-      getPromo().catch(() => null),
-    ]);
-
-    const hybridSettings: any = [...settingsRows];
-    for (let i = 0; i < settingsRows.length; i++) {
-      hybridSettings[settingsRows[i].key] = settingsRows[i].value;
-    }
-
-    let totalRevenue = 0;
-    for (let i = 0; i < ordersList.length; i++) {
-      totalRevenue += Number(ordersList[i].totalAmount || 0);
-    }
-
-    const ordersCount = ordersList.length;
-    const customersCount = customersList.length;
-    const avgOrder = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
-
-    const kpisObj = {
-      revenue: Number(totalRevenue || 0),
-      totalRevenue: Number(totalRevenue || 0),
-      sales: Number(totalRevenue || 0),
-      orders: Number(ordersCount || 0),
-      totalOrders: Number(ordersCount || 0),
-      ordersCount: Number(ordersCount || 0),
-      customers: Number(customersCount || 0),
-      totalCustomers: Number(customersCount || 0),
-      customersCount: Number(customersCount || 0),
-      avgOrder: Number(avgOrder || 0),
-      averageOrderValue: Number(avgOrder || 0),
-      aov: Number(avgOrder || 0),
-      pending: ordersList.filter((o) => o.status === "pending" || o.status === "preparing").length,
-      completed: ordersList.filter((o) => o.status === "delivered" || o.status === "completed").length,
-    };
-
-    const enrichedOrders = ordersList.map((o) => {
-      const tot = Number(o.totalAmount || 0);
-      return {
-        ...o,
-        totalAmount: tot,
-        total: tot,
-        subtotal: Number(o.subtotal || 0),
-        deliveryFee: Number(o.deliveryFee || 0),
-      };
-    });
-
-    const enrichedCustomers = customersList.map((c) => {
-      const spent = Number(c.totalSpent || 0);
-      const ords = Number(c.totalOrders || 0);
-      return {
-        ...c,
-        name: c.name || c.fullName || "عميل",
-        totalSpent: spent,
-        ltv: spent,
-        spent: spent,
-        totalOrders: ords,
-        ordersCount: ords,
-        loyaltyPoints: Number(c.loyaltyPoints || 0),
-        discountPercent: Number(c.discountPercent || 0),
-      };
-    });
-
-    const isPromoEnabled =
-      hybridSettings["bulletin_enabled"] !== "false" &&
-      hybridSettings["promo_enabled"] !== "false";
-
-    const currentPromoTextAr =
-      hybridSettings["bulletin_text_ar"] ||
-      hybridSettings["promo_text_ar"] ||
-      promo?.textAr ||
-      "العرض الأكثر مبيعاً كل اسبوع‼️ اسأل على سعر الاكستريم بوكس يوم التلات";
-
-    const currentPromoObj = {
-      enabled: isPromoEnabled,
-      visible: isPromoEnabled,
-      title: currentPromoTextAr,
-      code: hybridSettings["promo_code"] || "LION15",
-      textAr: currentPromoTextAr,
-      textEn: currentPromoTextAr,
-    };
-
-    let parsedHeroSlides = [];
-    try {
-      if (hybridSettings["hero_slides"]) {
-        parsedHeroSlides = JSON.parse(hybridSettings["hero_slides"]);
-      }
-    } catch {}
-
-    const mergedFrontend = {
-      ...(frontend || {}),
-      ...hybridSettings,
-      logoUrl: hybridSettings["logo_url"] || hybridSettings["logoUrl"] || "/img/icon-512.png",
-      heroSlides: parsedHeroSlides.length > 0 ? parsedHeroSlides : null,
-      heroImage1: hybridSettings["hero_image_1"] || "",
-      heroImage2: hybridSettings["hero_image_2"] || "",
-      heroImage3: hybridSettings["hero_image_3"] || "",
-      adBanner1: hybridSettings["ad_banner_1"] || "",
-      adBanner2: hybridSettings["ad_banner_2"] || "",
-      branchMapsUrl: hybridSettings["branch_maps_url"] || "https://maps.google.com/?q=دسوق+شارع+الجيش",
-      locationTitleAr: hybridSettings["location_title_ar"] || "شرفنا في فرع بروست الأسد 🦁",
-      locationSubtitleAr: hybridSettings["location_subtitle_ar"] || "نقدم لك أعلى جودة وأسرع خدمة تيك واي ودليفري في دسوق والمناطق المجاورة.",
-      promoBadgeAr: hybridSettings["promo_badge_ar"] || "عروض ومميزات بروست الأسد VIP 🍗",
-      promoTitleAr: hybridSettings["promo_title_ar"] || "أكبر قطعة بروست في دسوق.. قرمشة وتتبيلة ملهاش زي! 🍗",
-      promoSubtitleAr: hybridSettings["promo_subtitle_ar"] || "اطلب دلوقتي من المنيو واستمتع بأقوى عروض التوفير...",
-      promoBtnTextAr: hybridSettings["promo_btn_text_ar"] || "اطلب الآن 🍗",
-      promoBtnLink: hybridSettings["promo_btn_link"] || "/menu",
-      ctaTitleAr: hybridSettings["cta_title_ar"] || "جوعان؟ الأسد مستنيك.",
-      ctaSubtitleAr: hybridSettings["cta_subtitle_ar"] || "اطلب على واتساب في ٣٠ ثانية – أو كلم الخط الساخن والفرن يولّع على طول.",
-      footerAboutAr: hybridSettings["footer_about_ar"] || "",
-      footerCopyrightAr: hybridSettings["footer_copyright_ar"] || "",
-      footerSloganAr: hybridSettings["footer_slogan_ar"] || "",
-    };
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
 
     return {
-      ok: true,
       success: true,
-      ...kpisObj,
-      kpis: kpisObj,
-      stats: kpisObj,
-      metrics: kpisObj,
-      summary: kpisObj,
-      categories: cats,
-      items: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
-      menuItems: items.map((i) => ({ ...i, price: Number(i.price || 0) })),
-      zones: zones.map((z) => ({ ...z, fee: Number(z.fee || 0), estimatedMinutes: Number(z.estimatedMinutes || 25) })),
-      deliveryZones: zones.map((z) => ({ ...z, fee: Number(z.fee || 0), estimatedMinutes: Number(z.estimatedMinutes || 25) })),
-      orders: enrichedOrders,
-      customers: enrichedCustomers,
-      settings: hybridSettings,
-      settingsList: settingsRows,
-      frontend: mergedFrontend,
-      promo: currentPromoObj,
-      bulletin: currentPromoObj,
+      data: parsed,
+      message: "تم مسح المنيو واستخراج الأصناف وإضافتها لقاعدة البيانات بنجاح 🦁",
     };
-  } catch (err: unknown) {
-    console.error("adminGetAllAction error:", err);
-    throw new Error(err instanceof Error ? err.message : "Failed to load dashboard data.");
+  } catch (error: any) {
+    console.error("scanMenuAction error:", error);
+    return { success: false, error: error?.message || "حدث خطأ غير متوقع أثناء مسح المنيو." };
   }
-}
-
-export const getAdminDashboardData = adminGetAllAction;
-
-export async function verifyAdminAction(passcode: string) {
-  const trimmed = String(passcode || "").trim();
-  const envPass = process.env.ADMIN_PASSCODE?.trim();
-
-  if (trimmed === MASTER_PASS || (envPass && trimmed === envPass)) {
-    return { ok: true, success: true };
-  }
-  return { ok: false, success: false, error: "رمز الدخول غير صحيح" };
 }
 
 // =========================================================================
-// 2. تحديث إعدادات الواجهة الشاملة
+// 4. إدارة المناطق والإعلانات (حل مشكلة عدم الظهور في الواجهة نهائياً)
 // =========================================================================
-export async function updateSettingsAction(arg1: any, arg2?: any) {
+export async function saveZonesAndPromoAction(formData: {
+  zones?: any[];
+  promo?: {
+    enabled: boolean;
+    textAr: string;
+    code?: string;
+  };
+}) {
   try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const keyMap: Record<string, string> = {
-      brandNameAr: "brand_name_ar",
-      brandNameEn: "brand_name_en",
-      logoUrl: "logo_url",
-      heroSlides: "hero_slides",
-      marqueeTextAr: "marquee_text_ar",
-      addressAr: "address_ar",
-      workingHoursAr: "working_hours_ar",
-      hotline: "hotline",
-      whatsapp: "whatsapp",
-      branchMapsUrl: "branch_maps_url",
-      locationTitleAr: "location_title_ar",
-      locationSubtitleAr: "location_subtitle_ar",
-      promoBadgeAr: "promo_badge_ar",
-      promoTitleAr: "promo_title_ar",
-      promoSubtitleAr: "promo_subtitle_ar",
-      promoBtnTextAr: "promo_btn_text_ar",
-      promoBtnLink: "promo_btn_link",
-      ctaTitleAr: "cta_title_ar",
-      ctaSubtitleAr: "cta_subtitle_ar",
-      footerAboutAr: "footer_about_ar",
-      footerCopyrightAr: "footer_copyright_ar",
-      footerSloganAr: "footer_slogan_ar",
-    };
-
-    const normalized: Record<string, string> = {};
-    for (const [k, v] of Object.entries(payload || {})) {
-      const strVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
-      normalized[k] = strVal;
-      if (keyMap[k]) normalized[keyMap[k]] = strVal;
-    }
-
-    for (const [key, strVal] of Object.entries(normalized)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: strVal }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value: strVal });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: unknown) {
-    return { success: false, ok: false, error: "Error saving settings" };
-  }
-}
-
-export const adminSetSettingAction = updateSettingsAction;
-export const saveFrontendSettingsAction = updateSettingsAction;
-
-// =========================================================================
-// 3. إدارة الأصناف والتصنيفات والمناطق
-// =========================================================================
-export async function upsertCategoryAction(arg1: any, arg2?: any) {
-  try {
-    const { payload: data } = resolveArgs(arg1, arg2);
-    const id = data?.id || `cat-${Date.now()}`;
-    const nameAr = String(data?.nameAr || data?.name || "قسم جديد").trim();
-    const nameEn = String(data?.nameEn || nameAr).trim();
-    const sortOrder = Number(data?.sortOrder ?? 0);
-
-    const existing = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
-    if (existing.length > 0) {
-      await db.update(categories).set({ nameAr, nameEn, sortOrder }).where(eq(categories.id, id));
-    } else {
-      await db.insert(categories).values({ id, nameAr, nameEn, sortOrder });
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminSaveCategoryAction = upsertCategoryAction;
-
-export async function deleteCategoryAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const catId = String(payload?.id || payload);
-    if (!catId) return { ok: false, success: false, error: "معرف مفقود" };
-
-    await db.delete(menuItems).where(eq(menuItems.categoryId, catId));
-    await db.delete(categories).where(eq(categories.id, catId));
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminDeleteCategoryAction = deleteCategoryAction;
-
-export async function upsertMenuItemAction(arg1: any, arg2?: any) {
-  try {
-    const { payload: data } = resolveArgs(arg1, arg2);
-    const id = data?.id || `item-${Date.now()}`;
-    const isAvail = data?.isAvailable === false || data?.isAvailable === 0 ? 0 : 1;
-    const img = String(data?.imageUrl ?? data?.image ?? "");
-
-    const descAr = String(data?.descriptionAr || data?.description || "").trim();
-    let optionsJson = "";
-    if (data?.options) {
-      optionsJson = typeof data.options === "string" ? data.options : JSON.stringify(data.options);
-    }
-
-    const existing = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
-    if (existing.length > 0) {
-      await db.update(menuItems).set({
-        categoryId: String(data?.categoryId || ""),
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || data?.nameAr || ""),
-        descriptionAr: descAr,
-        descriptionEn: optionsJson || String(data?.descriptionEn || ""),
-        price: Number(data?.price || 0),
-        imageUrl: img,
-        badge: String(data?.badge || ""),
-        isAvailable: isAvail,
-        sortOrder: Number(data?.sortOrder ?? 0),
-      }).where(eq(menuItems.id, id));
-    } else {
-      await db.insert(menuItems).values({
-        id,
-        categoryId: String(data?.categoryId || ""),
-        nameAr: String(data?.nameAr || ""),
-        nameEn: String(data?.nameEn || data?.nameAr || ""),
-        descriptionAr: descAr,
-        descriptionEn: optionsJson || String(data?.descriptionEn || ""),
-        price: Number(data?.price || 0),
-        imageUrl: img,
-        badge: String(data?.badge || ""),
-        isAvailable: isAvail,
-        sortOrder: Number(data?.sortOrder ?? 0),
-      });
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, id };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminSaveItemAction = upsertMenuItemAction;
-
-export async function deleteMenuItemAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const id = payload?.id !== undefined ? payload.id : payload;
-    await db.delete(menuItems).where(eq(menuItems.id, String(id)));
-
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminDeleteItemAction = deleteMenuItemAction;
-
-export async function upsertZoneAction(arg1: any, arg2?: any) {
-  try {
-    const { payload: data } = resolveArgs(arg1, arg2);
-    const nameAr = String(data?.nameAr || data?.name || "").trim();
-    const nameEn = String(data?.nameEn || nameAr).trim();
-    const feeVal = Number(data?.fee ?? data?.price ?? 0);
-    const estMin = Number(data?.estimatedMinutes ?? 25);
-    const sortOrd = Number(data?.sortOrder ?? 0);
-
-    if (!nameAr) return { ok: false, success: false, error: "اسم المنطقة مطلوب" };
-
-    let existing = null;
-    if (data?.id) {
-      try {
-        const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, data.id as any)).limit(1);
-        if (res.length > 0) existing = res[0];
-      } catch {
-        if (!isNaN(Number(data.id))) {
-          const res = await db.select().from(deliveryZones).where(eq(deliveryZones.id, Number(data.id) as any)).limit(1);
-          if (res.length > 0) existing = res[0];
-        }
-      }
-    }
-
-    if (existing) {
-      await db.update(deliveryZones).set({
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      }).where(eq(deliveryZones.id, existing.id));
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: existing.id };
-    }
-
-    try {
-      const [inserted] = await db.insert(deliveryZones).values({
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      } as any).returning();
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: inserted?.id };
-    } catch {
-      const genId = data?.id ? String(data.id) : `zone-${Date.now()}`;
-      await db.insert(deliveryZones).values({
-        id: genId,
-        nameAr,
-        nameEn,
-        fee: feeVal,
-        estimatedMinutes: estMin,
-        sortOrder: sortOrd,
-      } as any);
-
-      revalidatePath("/", "layout");
-      revalidatePath("/admin", "layout");
-      return { ok: true, success: true, id: genId };
-    }
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error saving zone" };
-  }
-}
-
-export const adminSaveZoneAction = upsertZoneAction;
-
-export async function deleteZoneAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const id = payload?.id !== undefined ? payload.id : payload;
-    const idStr = String(id);
-    const idNum = Number(id);
-
-    if (!isNaN(idNum)) {
-      await db.delete(deliveryZones).where(eq(deliveryZones.id, idNum as any)).catch(() => {});
-    }
-    await db.delete(deliveryZones).where(eq(deliveryZones.id, idStr as any)).catch(() => {});
-
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export const adminDeleteZoneAction = deleteZoneAction;
-
-export async function savePromoAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const isVisible = payload?.enabled === true || payload?.visible === true || payload?.enabled === 1;
-    const enabledStr = isVisible ? "true" : "false";
-    const textAr = String(payload?.textAr || payload?.text || "").trim();
-    const code = String(payload?.code || "LION15").trim();
-
-    const promoData = {
-      enabled: isVisible,
-      visible: isVisible,
-      textAr,
-      titleAr: textAr,
-      title: textAr,
-      code,
-    };
-
-    const promoJson = JSON.stringify(promoData);
-    const keysToUpdate: Record<string, string> = {
-      promo: promoJson,
-      promo_bulletin: promoJson,
-      promo_enabled: enabledStr,
-      promo_text_ar: textAr,
-      promo_code: code,
-      bulletin_text_ar: textAr,
-      bulletin_enabled: enabledStr,
-      bulletin_visible: enabledStr,
-    };
-
-    for (const [key, value] of Object.entries(keysToUpdate)) {
-      const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
-      if (existing.length > 0) {
-        await db.update(settings).set({ value }).where(eq(settings.key, key));
-      } else {
-        await db.insert(settings).values({ key, value });
-      }
-    }
-
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true, data: promoData, promo: promoData };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error saving promo" };
-  }
-}
-
-export const adminSavePromoAction = savePromoAction;
-export const publishPromoAction = savePromoAction;
-
-export async function adminSaveScannedRowsAction(rows: any[]) {
-  try {
-    const list = Array.isArray(rows) ? rows : [];
-    if (list.length === 0) return { success: false, ok: false, error: "قائمة الأصناف فارغة." };
-
-    const existingCats = await db.select().from(categories).catch(() => []);
-    const catMap = new Map<string, string>();
-    for (let i = 0; i < existingCats.length; i++) {
-      catMap.set(existingCats[i].nameAr.trim().toLowerCase(), existingCats[i].id);
-    }
-
-    let nextSortOrder = existingCats.length;
-
-    for (let i = 0; i < list.length; i++) {
-      const r = list[i];
-      const catNameAr = String(r.categoryNameAr || r.categoryAr || "أصناف المنيو").trim();
-      const itemNameAr = String(r.itemNameAr || r.nameAr || "").trim();
-      const descAr = String(r.descriptionAr || "").trim();
-      const priceNum = Number(r.price || 0);
-
-      if (!itemNameAr) continue;
-
-      let catId = catMap.get(catNameAr.toLowerCase());
-      if (!catId) {
-        catId = `cat-${Date.now()}-${i}`;
-        await db.insert(categories).values({
-          id: catId,
-          nameAr: catNameAr,
-          nameEn: catNameAr,
-          sortOrder: nextSortOrder++,
+    // 1. تحديث الإعلانات الترويجية والعروض المؤقتة
+    if (formData.promo) {
+      const p = formData.promo;
+      await db
+        .insert(settings)
+        .values({ key: "promo_enabled", value: p.enabled ? "true" : "false" })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: p.enabled ? "true" : "false" },
         });
-        catMap.set(catNameAr.toLowerCase(), catId);
+
+      await db
+        .insert(settings)
+        .values({ key: "promo_text_ar", value: p.textAr || "" })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: p.textAr || "" },
+        });
+
+      await db
+        .insert(settings)
+        .values({ key: "promo", value: JSON.stringify(p) })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: JSON.stringify(p) },
+        });
+    }
+
+    // 2. تحديث جدول مناطق التوصيل الفعلي وتخزين نسخة احتياطية
+    if (formData.zones && Array.isArray(formData.zones)) {
+      // حفظ في جدول deliveryZones المباشر
+      await db.delete(deliveryZones);
+      for (let i = 0; i < formData.zones.length; i++) {
+        const z = formData.zones[i];
+        await db.insert(deliveryZones).values({
+          nameAr: String(z.nameAr || z.name || "منطقة"),
+          nameEn: String(z.nameEn || z.nameAr || ""),
+          deliveryFee: Number(z.deliveryFee || z.fee || 0),
+          estimatedMinutes: String(z.estimatedMinutes || z.time || "30-45 دقيقة"),
+          sortOrder: i,
+          isActive: true,
+        } as any);
       }
 
-      await db.insert(menuItems).values({
-        id: `item-${Date.now()}-${i}`,
-        categoryId: catId,
-        nameAr: itemNameAr,
-        nameEn: itemNameAr,
-        descriptionAr: descAr,
-        price: priceNum,
-        imageUrl: "",
-        badge: "",
-        isAvailable: 1,
-        sortOrder: i,
-      });
+      // حفظ نسخة JSON في جدول settings كحماية إضافية
+      await db
+        .insert(settings)
+        .values({ key: "delivery_zones", value: JSON.stringify(formData.zones) })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: JSON.stringify(formData.zones) },
+        });
     }
 
-    revalidatePath("/", "layout");
-    revalidatePath("/menu", "layout");
-    revalidatePath("/admin", "layout");
-    return { success: true, ok: true };
-  } catch (err: any) {
-    return { success: false, ok: false, error: err?.message || "فشل حفظ الأصناف." };
+    // إجبار Next.js على مسح كاش الواجهة الرئيسية وإعادة بنائها بالبيانات الجديدة فوراً
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/menu");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("saveZonesAndPromoAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ التعديلات" };
   }
 }
 
-export async function updateOrderStatusAction(arg1: any, arg2?: any) {
+// =========================================================================
+// 5. حفظ بيانات العميل (VIP Customer Upsert)
+// =========================================================================
+export async function upsertCustomerAction(data: {
+  code: string;
+  name: string;
+  phone: string;
+  loyaltyPoints?: number;
+  discountPercent?: number;
+}) {
   try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const orderId = payload?.orderId || payload?.id || arg1;
-    const status = payload?.status || arg2;
-    await db.update(orders).set({ status: String(status) }).where(eq(orders.id, Number(orderId)));
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
+    const code = String(data.code || "").trim();
+    const name = String(data.name || "").trim();
+    const phone = String(data.phone || "").trim();
 
-export const adminSetOrderStatusAction = updateOrderStatusAction;
-
-export async function deleteOrderAction(arg1: any, arg2?: any) {
-  try {
-    const { payload } = resolveArgs(arg1, arg2);
-    const idNum = Number(payload?.id || payload);
-    await db.delete(orderLines).where(eq(orderLines.orderId, idNum));
-    await db.delete(orders).where(eq(orders.id, idNum));
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
-  }
-}
-
-export async function upsertCustomerAction(data: any) {
-  try {
-    if (data?.id) {
-      await db.update(customers).set({
-        name: String(data.name || ""),
-        fullName: String(data.name || ""),
-        phone: String(data.phone || ""),
-        primaryPhone: String(data.phone || ""),
-        loyaltyPoints: Number(data.loyaltyPoints ?? 0),
-        discountPercent: Number(data.discountPercent ?? 0),
-      }).where(eq(customers.id, Number(data.id)));
-    } else {
-      const code = data?.code || `LION-${Math.floor(100000 + Math.random() * 900000)}`;
-      await db.insert(customers).values({
+    const [customer] = await db
+      .insert(customers)
+      .values({
         code,
-        name: String(data?.name || "عميل"),
-        fullName: String(data?.name || "عميل"),
-        phone: String(data?.phone || ""),
-        primaryPhone: String(data?.phone || ""),
-        loyaltyPoints: Number(data?.loyaltyPoints ?? 0),
-        discountPercent: Number(data?.discountPercent ?? 0),
-      });
-    }
-    revalidatePath("/admin", "layout");
-    return { ok: true, success: true };
-  } catch (err: unknown) {
-    return { ok: false, success: false, error: "Error" };
+        name,
+        fullName: name,
+        phone,
+        primaryPhone: phone,
+        loyaltyPoints: Number(data.loyaltyPoints || 50),
+        discountPercent: Number(data.discountPercent || 10),
+        totalSpent: 0,
+        totalOrders: 0,
+      } as any)
+      .onConflictDoUpdate({
+        target: customers.code,
+        set: {
+          name,
+          phone,
+        },
+      })
+      .returning();
+
+    revalidatePath("/admin");
+    return { success: true, customer };
+  } catch (error: any) {
+    console.error("upsertCustomerAction error:", error);
+    return { success: false, error: error?.message || "فشل تسجيل بيانات العميل" };
   }
 }
