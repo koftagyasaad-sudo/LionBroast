@@ -42,46 +42,75 @@ export async function updateFrontendAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 2. إدارة الأقسام (MenuTab)
+// 2. إدارة الأقسام (MenuTab) - دعم كامل لـ upsert و create و update
 // =========================================================================
+export async function upsertCategoryAction(data: {
+  id?: string | number;
+  nameAr: string;
+  nameEn?: string;
+  image?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}) {
+  try {
+    const nameAr = String(data.nameAr || "").trim();
+    if (!nameAr) throw new Error("اسم القسم مطلوب");
+    const nameEn = String(data.nameEn || nameAr).trim();
+
+    if (data.id) {
+      const catId = Number(data.id);
+      await db
+        .update(categories)
+        .set({
+          nameAr,
+          nameEn,
+          image: data.image || undefined,
+          sortOrder: data.sortOrder !== undefined ? Number(data.sortOrder) : undefined,
+          isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
+        } as any)
+        .where(eq(categories.id, catId as any));
+
+      revalidatePath("/");
+      revalidatePath("/menu");
+      revalidatePath("/admin");
+      return { success: true };
+    } else {
+      const slug =
+        nameEn
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || `cat-${Date.now()}`;
+
+      const [inserted] = await db
+        .insert(categories)
+        .values({
+          nameAr,
+          nameEn,
+          slug,
+          image: data.image || "/img/hero-1.png",
+          sortOrder: Number(data.sortOrder || 0),
+          isActive: true,
+        } as any)
+        .returning();
+
+      revalidatePath("/");
+      revalidatePath("/menu");
+      revalidatePath("/admin");
+      return { success: true, category: inserted };
+    }
+  } catch (error: any) {
+    console.error("upsertCategoryAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ القسم" };
+  }
+}
+
 export async function createCategoryAction(data: {
   nameAr: string;
   nameEn?: string;
   image?: string;
   sortOrder?: number;
 }) {
-  try {
-    const nameAr = String(data.nameAr || "").trim();
-    if (!nameAr) throw new Error("اسم القسم بالعربية مطلوب");
-
-    const nameEn = String(data.nameEn || nameAr).trim();
-    const slug =
-      nameEn
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || `cat-${Date.now()}`;
-
-    const [inserted] = await db
-      .insert(categories)
-      .values({
-        nameAr,
-        nameEn,
-        slug,
-        image: data.image || "/img/hero-1.png",
-        sortOrder: Number(data.sortOrder || 0),
-        isActive: true,
-      } as any)
-      .returning();
-
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
-
-    return { success: true, category: inserted };
-  } catch (error: any) {
-    console.error("createCategoryAction error:", error);
-    return { success: false, error: error?.message || "فشل إضافة القسم" };
-  }
+  return upsertCategoryAction(data);
 }
 
 export async function updateCategoryAction(
@@ -94,22 +123,7 @@ export async function updateCategoryAction(
     isActive: boolean;
   }>
 ) {
-  try {
-    const catId = Number(id);
-    await db
-      .update(categories)
-      .set(data as any)
-      .where(eq(categories.id, catId as any));
-
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
-
-    return { success: true };
-  } catch (error: any) {
-    console.error("updateCategoryAction error:", error);
-    return { success: false, error: error?.message || "فشل تعديل القسم" };
-  }
+  return upsertCategoryAction({ id, nameAr: data.nameAr || "", ...data });
 }
 
 export async function deleteCategoryAction(categoryId: string | number) {
@@ -131,8 +145,74 @@ export async function deleteCategoryAction(categoryId: string | number) {
 }
 
 // =========================================================================
-// 3. إدارة الأصناف والوجبات (MenuTab)
+// 3. إدارة الأصناف والوجبات (MenuTab) - دعم كامل لـ upsert و create و update
 // =========================================================================
+export async function upsertMenuItemAction(data: {
+  id?: string | number;
+  categoryId: string | number;
+  nameAr: string;
+  nameEn?: string;
+  price: number;
+  descriptionAr?: string;
+  image?: string;
+  badge?: string;
+  sortOrder?: number;
+  isAvailable?: boolean;
+}) {
+  try {
+    const nameAr = String(data.nameAr || "").trim();
+    if (!nameAr) throw new Error("اسم الوجبة مطلوب");
+
+    if (data.id) {
+      const itemId = Number(data.id);
+      const updateData: any = {
+        nameAr,
+        nameEn: data.nameEn || nameAr,
+        categoryId: Number(data.categoryId),
+        price: Number(data.price || 0),
+        descriptionAr: data.descriptionAr || "",
+        image: data.image || undefined,
+        badge: data.badge || null,
+        sortOrder: data.sortOrder !== undefined ? Number(data.sortOrder) : undefined,
+        isAvailable: data.isAvailable !== undefined ? Boolean(data.isAvailable) : undefined,
+      };
+
+      await db
+        .update(menuItems)
+        .set(updateData)
+        .where(eq(menuItems.id, itemId as any));
+
+      revalidatePath("/");
+      revalidatePath("/menu");
+      revalidatePath("/admin");
+      return { success: true };
+    } else {
+      const [inserted] = await db
+        .insert(menuItems)
+        .values({
+          categoryId: Number(data.categoryId),
+          nameAr,
+          nameEn: String(data.nameEn || nameAr).trim(),
+          price: Number(data.price || 0),
+          descriptionAr: String(data.descriptionAr || ""),
+          image: data.image || "/img/hero-1.png",
+          badge: data.badge || null,
+          sortOrder: Number(data.sortOrder || 0),
+          isAvailable: true,
+        } as any)
+        .returning();
+
+      revalidatePath("/");
+      revalidatePath("/menu");
+      revalidatePath("/admin");
+      return { success: true, item: inserted };
+    }
+  } catch (error: any) {
+    console.error("upsertMenuItemAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ الوجبة" };
+  }
+}
+
 export async function createMenuItemAction(data: {
   categoryId: string | number;
   nameAr: string;
@@ -143,31 +223,7 @@ export async function createMenuItemAction(data: {
   badge?: string;
   sortOrder?: number;
 }) {
-  try {
-    const [inserted] = await db
-      .insert(menuItems)
-      .values({
-        categoryId: Number(data.categoryId),
-        nameAr: String(data.nameAr).trim(),
-        nameEn: String(data.nameEn || data.nameAr).trim(),
-        price: Number(data.price || 0),
-        descriptionAr: String(data.descriptionAr || ""),
-        image: data.image || "/img/hero-1.png",
-        badge: data.badge || null,
-        sortOrder: Number(data.sortOrder || 0),
-        isAvailable: true,
-      } as any)
-      .returning();
-
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
-
-    return { success: true, item: inserted };
-  } catch (error: any) {
-    console.error("createMenuItemAction error:", error);
-    return { success: false, error: error?.message || "فشل إضافة الوجبة" };
-  }
+  return upsertMenuItemAction(data);
 }
 
 export async function updateMenuItemAction(
@@ -184,26 +240,7 @@ export async function updateMenuItemAction(
     isAvailable: boolean;
   }>
 ) {
-  try {
-    const itemId = Number(id);
-    const updateData: any = { ...data };
-    if (updateData.categoryId) updateData.categoryId = Number(updateData.categoryId);
-    if (updateData.price) updateData.price = Number(updateData.price);
-
-    await db
-      .update(menuItems)
-      .set(updateData)
-      .where(eq(menuItems.id, itemId as any));
-
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath("/admin");
-
-    return { success: true };
-  } catch (error: any) {
-    console.error("updateMenuItemAction error:", error);
-    return { success: false, error: error?.message || "فشل تعديل الوجبة" };
-  }
+  return upsertMenuItemAction({ id, categoryId: data.categoryId || 0, nameAr: data.nameAr || "", price: data.price || 0, ...data });
 }
 
 export async function deleteMenuItemAction(itemId: string | number) {
@@ -223,7 +260,58 @@ export async function deleteMenuItemAction(itemId: string | number) {
 }
 
 // =========================================================================
-// 4. إدارة الطلبات (OrdersTab)
+// 4. حفظ الأصناف الممسوحة بالـ AI (adminSaveScannedRowsAction)
+// =========================================================================
+export async function adminSaveScannedRowsAction(data: any) {
+  try {
+    const rows = Array.isArray(data) ? data : data?.rows || data?.items || [];
+    for (const row of rows) {
+      const categoryName = String(row.categoryName || row.categoryAr || row.category || "عام").trim();
+      
+      const existingCategories = await db.select().from(categories).where(eq(categories.nameAr, categoryName));
+      let targetCategoryId: number;
+
+      if (existingCategories.length > 0) {
+        targetCategoryId = existingCategories[0].id;
+      } else {
+        const slug = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const [newCat] = await db.insert(categories).values({
+          nameAr: categoryName,
+          nameEn: row.categoryEn || categoryName,
+          slug,
+          image: "/img/hero-1.png",
+          isActive: true,
+        } as any).returning();
+        targetCategoryId = newCat.id;
+      }
+
+      if (row.nameAr || row.name) {
+        await db.insert(menuItems).values({
+          categoryId: targetCategoryId,
+          nameAr: String(row.nameAr || row.name).trim(),
+          nameEn: String(row.nameEn || row.nameAr || row.name).trim(),
+          price: Number(row.price || 0),
+          descriptionAr: String(row.descriptionAr || row.description || ""),
+          image: row.image || "/img/hero-1.png",
+          badge: row.badge || null,
+          isAvailable: true,
+        } as any);
+      }
+    }
+
+    revalidatePath("/");
+    revalidatePath("/menu");
+    revalidatePath("/admin");
+
+    return { success: true, count: rows.length };
+  } catch (error: any) {
+    console.error("adminSaveScannedRowsAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ الأصناف الممسوحة" };
+  }
+}
+
+// =========================================================================
+// 5. إدارة الطلبات (OrdersTab)
 // =========================================================================
 export async function updateOrderStatusAction(
   orderId: string | number,
@@ -258,7 +346,7 @@ export async function deleteOrderAction(orderId: string | number) {
 }
 
 // =========================================================================
-// 5. إدارة العمليات والإعدادات التشغيلية (OpsTab)
+// 6. إدارة العمليات والإعدادات التشغيلية (OpsTab)
 // =========================================================================
 export async function saveOpsSettingsAction(data: Record<string, any>) {
   try {
@@ -282,7 +370,7 @@ export async function saveOpsSettingsAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 6. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner)
+// 7. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner)
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -352,7 +440,7 @@ export async function scanMenuAction(imageBase64: string) {
     if (!response.ok) {
       return {
         success: false,
-        error: "تعذر الاتصال بسيرفر الذكاء الاصطناعي، يرجى مراجعة المفتاح وصلاحيته.",
+        error: "تعذر الاتصال بسيرفر الذكاء الاصطناعي، يرجى مراجعة المفتاح وحصته في Google AI Studio.",
       };
     }
 
@@ -367,7 +455,7 @@ export async function scanMenuAction(imageBase64: string) {
     if (parsed.categories && Array.isArray(parsed.categories)) {
       for (let i = 0; i < parsed.categories.length; i++) {
         const cat = parsed.categories[i];
-        const resCat = await createCategoryAction({
+        const resCat = await upsertCategoryAction({
           nameAr: cat.nameAr,
           nameEn: cat.nameEn,
           sortOrder: i,
@@ -376,7 +464,7 @@ export async function scanMenuAction(imageBase64: string) {
         if (resCat.success && resCat.category && Array.isArray(cat.items)) {
           for (let j = 0; j < cat.items.length; j++) {
             const it = cat.items[j];
-            await createMenuItemAction({
+            await upsertMenuItemAction({
               categoryId: resCat.category.id,
               nameAr: it.nameAr,
               nameEn: it.nameEn,
@@ -404,8 +492,12 @@ export async function scanMenuAction(imageBase64: string) {
   }
 }
 
+export async function adminScanMenuAction(imageBase64: string) {
+  return scanMenuAction(imageBase64);
+}
+
 // =========================================================================
-// 7. إدارة المناطق والإعلانات (تحديث الواجهة الفوري)
+// 8. إدارة المناطق والإعلانات (تحديث الواجهة الفوري)
 // =========================================================================
 export async function saveZonesAndPromoAction(formData: {
   zones?: any[];
@@ -482,7 +574,7 @@ export async function savePromoAction(promo: any) {
 }
 
 // =========================================================================
-// 8. حفظ بيانات العميل (VIP Customer Upsert)
+// 9. حفظ بيانات العميل (VIP Customer Upsert)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
