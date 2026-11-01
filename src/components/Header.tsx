@@ -42,84 +42,64 @@ export default function Header({ frontend, settings }: HeaderProps) {
   return (
     <>
       <header
-        className="fixed top-0 inset-x-0 z-50 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 shadow-xl"
-        style={{ height: "76px", maxHeight: "76px" }}
+        className="fixed top-0 inset-x-0 z-50 h-20 bg-carbon-950/90 backdrop-blur-xl border-b border-white/10 shadow-xl"
         dir="rtl"
       >
         <div className="mx-auto max-w-7xl h-full px-4 md:px-8 flex items-center justify-between gap-4">
           
           {/* الشعار واسم المطعم */}
           <Link href="/" className="flex items-center gap-3 shrink-0 group">
-            <div
-              className="rounded-2xl overflow-hidden bg-orange-500/10 border border-orange-500/30 p-1 flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition"
-              style={{
-                width: "44px",
-                height: "44px",
-                minWidth: "44px",
-                maxWidth: "44px",
-                maxHeight: "44px",
-              }}
-            >
+            <div className="w-11 h-11 rounded-2xl overflow-hidden bg-brand-500/10 border border-brand-500/30 p-1 flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
                 alt={brandNameAr}
-                width={36}
-                height={36}
-                style={{
-                  width: "36px",
-                  height: "36px",
-                  maxWidth: "36px",
-                  maxHeight: "36px",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-                className="rounded-xl"
+                className="w-full h-full object-contain rounded-xl"
               />
             </div>
 
             <div className="flex flex-col">
-              <span className="font-black text-base sm:text-lg text-white group-hover:text-orange-400 transition tracking-tight">
+              <span className="font-black text-base sm:text-lg text-white group-hover:text-brand-400 transition tracking-tight">
                 {brandNameAr}
               </span>
-              <span className="text-[9px] font-black text-amber-400 tracking-wider font-mono">
+              <span className="text-[10px] font-black text-amber-400 tracking-wider font-mono">
                 {brandNameEn}
               </span>
             </div>
           </Link>
 
           {/* روابط التنقل الرئيسية */}
-          <nav className="hidden lg:flex items-center gap-1 text-xs font-bold text-zinc-300">
+          <nav className="hidden lg:flex items-center gap-1 text-xs font-bold text-white/70">
             <Link
               href="/"
-              className="rounded-xl px-3.5 py-2 hover:bg-zinc-900 hover:text-white transition"
+              className="rounded-xl px-4 py-2 hover:bg-white/10 hover:text-white transition"
             >
               الرئيسية
             </Link>
             <Link
               href="/menu"
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 hover:bg-zinc-900 hover:text-white transition"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 hover:bg-white/10 hover:text-white transition"
             >
-              <UtensilsCrossed className="w-3.5 h-3.5 text-orange-500" />
+              <UtensilsCrossed className="w-3.5 h-3.5 text-brand-500" />
               <span>المنيو</span>
             </Link>
             <Link
               href="/#best"
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 hover:bg-zinc-900 hover:text-white transition"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 hover:bg-white/10 hover:text-white transition"
             >
               <Flame className="w-3.5 h-3.5 text-red-500" />
               <span>الأكثر مبيعاً</span>
             </Link>
             <Link
               href="/#zones"
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 hover:bg-zinc-900 hover:text-white transition"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 hover:bg-white/10 hover:text-white transition"
             >
               <MapPin className="w-3.5 h-3.5 text-emerald-400" />
               <span>مناطق التوصيل</span>
             </Link>
             <Link
               href="/#location"
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 hover:bg-zinc-900 hover:text-white transition"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 hover:bg-white/10 hover:text-white transition"
             >
               <PhoneCall className="w-3.5 h-3.5 text-amber-400" />
               <span>الفروع والتواصل</span>
@@ -140,12 +120,12 @@ export default function Header({ frontend, settings }: HeaderProps) {
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 rounded-2xl bg-orange-600 hover:bg-orange-500 px-4 py-2 text-xs font-black text-white shadow-lg transition active:scale-95 cursor-pointer"
+              className="relative flex items-center gap-2 rounded-2xl bg-brand-500 hover:bg-brand-600 px-4 py-2 text-xs font-black text-white shadow-xl glow-brand transition active:scale-95 cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               <span className="hidden sm:inline">السلة</span>
               {cartCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-white text-zinc-950 font-black text-[10px] grid place-items-center">
+                <span className="w-5 h-5 rounded-full bg-white text-carbon-950 font-black text-[10px] grid place-items-center">
                   {cartCount}
                 </span>
               )}
@@ -154,7 +134,7 @@ export default function Header({ frontend, settings }: HeaderProps) {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="grid lg:hidden w-10 h-10 place-items-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white transition cursor-pointer"
+              className="grid lg:hidden w-10 h-10 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/80 hover:text-white transition cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -163,39 +143,39 @@ export default function Header({ frontend, settings }: HeaderProps) {
 
         {/* قائمة الموبايل */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-b border-zinc-800 bg-zinc-950 px-6 py-6 space-y-3">
+          <div className="lg:hidden border-b border-white/10 bg-carbon-950 px-6 py-6 space-y-3">
             <Link
               href="/"
               onClick={() => setMobileMenuOpen(false)}
-              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-zinc-900"
+              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-white/5"
             >
               الرئيسية
             </Link>
             <Link
               href="/menu"
               onClick={() => setMobileMenuOpen(false)}
-              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-zinc-900"
+              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-white/5"
             >
               قائمة الطعام (المنيو)
             </Link>
             <Link
               href="/#best"
               onClick={() => setMobileMenuOpen(false)}
-              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-zinc-900"
+              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-white/5"
             >
               الأكثر طلباً ومبيعاً 🔥
             </Link>
             <Link
               href="/#zones"
               onClick={() => setMobileMenuOpen(false)}
-              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-zinc-900"
+              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-white/5"
             >
               مناطق وأسعار التوصيل 🛵
             </Link>
             <Link
               href="/#location"
               onClick={() => setMobileMenuOpen(false)}
-              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-zinc-900"
+              className="block rounded-xl p-2.5 text-sm font-bold text-white hover:bg-white/5"
             >
               الفرع والاتصال المباشر 📞
             </Link>
