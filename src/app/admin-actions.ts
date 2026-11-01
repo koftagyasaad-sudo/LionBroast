@@ -13,7 +13,7 @@ import {
 import { eq, desc } from "drizzle-orm";
 
 // =========================================================================
-// 1. الدالة المركزية للوحة التحكم (AdminShell.tsx)
+// 1. الدالة الشاملة المركزية للوحة التحكم (AdminShell.tsx)
 // =========================================================================
 export async function adminGetAllAction() {
   try {
@@ -55,37 +55,54 @@ export async function adminGetAllAction() {
   }
 }
 
-// =========================================================================
-// 2. تبويب الواجهة (FrontendTab)
-// =========================================================================
-export async function saveFrontendSettingsAction(data: Record<string, any>) {
-  try {
-    for (const [key, value] of Object.entries(data)) {
-      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
-      await db
-        .insert(settings)
-        .values({ key, value: stringValue })
-        .onConflictDoUpdate({
-          target: settings.key,
-          set: { value: stringValue },
-        });
-    }
+export const getAllAdminDataAction = adminGetAllAction;
 
-    revalidatePath("/");
+// =========================================================================
+// 2. إدارة الطلبات (OrdersTab.tsx) - حل الخطأ الظاهر في Vercel
+// =========================================================================
+export async function adminSetOrderStatusAction(
+  orderId: string | number,
+  status: string
+) {
+  try {
+    const id = Number(orderId);
+    if (isNaN(id)) throw new Error("معرف الطلب غير صالح");
+
+    await db
+      .update(orders)
+      .set({ status } as any)
+      .where(eq(orders.id, id as any));
+
     revalidatePath("/admin");
     return { success: true };
   } catch (error: any) {
-    console.error("saveFrontendSettingsAction error:", error);
-    return { success: false, error: error?.message || "فشل حفظ إعدادات الواجهة" };
+    console.error("adminSetOrderStatusAction error:", error);
+    return { success: false, error: error?.message || "فشل تحديث حالة الطلب" };
   }
 }
 
-export async function updateFrontendAction(data: Record<string, any>) {
-  return saveFrontendSettingsAction(data);
+// تصدير المرادفات البديلة لمنع أي تعارض
+export const updateOrderStatusAction = adminSetOrderStatusAction;
+
+export async function adminDeleteOrderAction(orderId: string | number) {
+  try {
+    const id = Number(orderId);
+    if (isNaN(id)) throw new Error("معرف الطلب غير صالح");
+
+    await db.delete(orders).where(eq(orders.id, id as any));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error: any) {
+    console.error("adminDeleteOrderAction error:", error);
+    return { success: false, error: error?.message || "فشل حذف الطلب" };
+  }
 }
 
+export const deleteOrderAction = adminDeleteOrderAction;
+
 // =========================================================================
-// 3. تبويب الأقسام (MenuTab)
+// 3. إدارة الأقسام (MenuTab.tsx)
 // =========================================================================
 export async function upsertCategoryAction(data: {
   id?: string | number;
@@ -147,14 +164,7 @@ export async function upsertCategoryAction(data: {
   }
 }
 
-export async function createCategoryAction(data: {
-  nameAr: string;
-  nameEn?: string;
-  image?: string;
-  sortOrder?: number;
-}) {
-  return upsertCategoryAction(data);
-}
+export const createCategoryAction = upsertCategoryAction;
 
 export async function updateCategoryAction(
   id: string | number,
@@ -186,8 +196,10 @@ export async function deleteCategoryAction(categoryId: string | number) {
   }
 }
 
+export const adminDeleteCategoryAction = deleteCategoryAction;
+
 // =========================================================================
-// 4. تبويب الأصناف والوجبات (MenuTab)
+// 4. إدارة الأصناف والوجبات (MenuTab.tsx)
 // =========================================================================
 export async function upsertMenuItemAction(data: {
   id?: string | number;
@@ -255,18 +267,7 @@ export async function upsertMenuItemAction(data: {
   }
 }
 
-export async function createMenuItemAction(data: {
-  categoryId: string | number;
-  nameAr: string;
-  nameEn?: string;
-  price: number;
-  descriptionAr?: string;
-  image?: string;
-  badge?: string;
-  sortOrder?: number;
-}) {
-  return upsertMenuItemAction(data);
-}
+export const createMenuItemAction = upsertMenuItemAction;
 
 export async function updateMenuItemAction(
   id: string | number,
@@ -306,8 +307,10 @@ export async function deleteMenuItemAction(itemId: string | number) {
   }
 }
 
+export const adminDeleteMenuItemAction = deleteMenuItemAction;
+
 // =========================================================================
-// 5. حفظ واعتماد أصناف الذكاء الاصطناعي (adminSaveScannedRowsAction)
+// 5. حفظ واعتماد أصناف الذكاء الاصطناعي (MenuTab.tsx)
 // =========================================================================
 export async function adminSaveScannedRowsAction(data: any) {
   try {
@@ -362,6 +365,8 @@ export async function adminSaveScannedRowsAction(data: any) {
     return { success: false, error: error?.message || "فشل حفظ الأصناف الممسوحة" };
   }
 }
+
+export const saveScannedRowsAction = adminSaveScannedRowsAction;
 
 // =========================================================================
 // 6. ماسح المنيو بالذكاء الاصطناعي (AI Scanner)
@@ -486,12 +491,10 @@ export async function scanMenuAction(imageBase64: string) {
   }
 }
 
-export async function adminScanMenuAction(imageBase64: string) {
-  return scanMenuAction(imageBase64);
-}
+export const adminScanMenuAction = scanMenuAction;
 
 // =========================================================================
-// 7. تبويب العمليات والمناطق والإعلانات (OpsTab)
+// 7. تبويب العمليات والمناطق والإعلانات (OpsTab.tsx)
 // =========================================================================
 export async function upsertZoneAction(data: {
   id?: string | number;
@@ -539,6 +542,9 @@ export async function upsertZoneAction(data: {
   }
 }
 
+export const createZoneAction = upsertZoneAction;
+export const updateZoneAction = upsertZoneAction;
+
 export async function deleteZoneAction(zoneId: string | number) {
   try {
     const id = Number(zoneId);
@@ -552,6 +558,8 @@ export async function deleteZoneAction(zoneId: string | number) {
     return { success: false, error: error?.message || "فشل حذف المنطقة" };
   }
 }
+
+export const adminDeleteZoneAction = deleteZoneAction;
 
 export async function savePromoAction(promo: {
   enabled: boolean;
@@ -647,43 +655,38 @@ export async function saveOpsSettingsAction(data: Record<string, any>) {
   }
 }
 
-// =========================================================================
-// 8. تبويب الطلبات (OrdersTab)
-// =========================================================================
-export async function updateOrderStatusAction(
-  orderId: string | number,
-  status: string
-) {
-  try {
-    const id = Number(orderId);
-    await db
-      .update(orders)
-      .set({ status } as any)
-      .where(eq(orders.id, id as any));
+export const updateOpsSettingsAction = saveOpsSettingsAction;
 
+// =========================================================================
+// 8. تبويب الواجهة (FrontendTab.tsx)
+// =========================================================================
+export async function saveFrontendSettingsAction(data: Record<string, any>) {
+  try {
+    for (const [key, value] of Object.entries(data)) {
+      const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      await db
+        .insert(settings)
+        .values({ key, value: stringValue })
+        .onConflictDoUpdate({
+          target: settings.key,
+          set: { value: stringValue },
+        });
+    }
+
+    revalidatePath("/");
     revalidatePath("/admin");
     return { success: true };
   } catch (error: any) {
-    console.error("updateOrderStatusAction error:", error);
-    return { success: false, error: error?.message || "فشل تحديث حالة الطلب" };
+    console.error("saveFrontendSettingsAction error:", error);
+    return { success: false, error: error?.message || "فشل حفظ إعدادات الواجهة" };
   }
 }
 
-export async function deleteOrderAction(orderId: string | number) {
-  try {
-    const id = Number(orderId);
-    await db.delete(orders).where(eq(orders.id, id as any));
-
-    revalidatePath("/admin");
-    return { success: true };
-  } catch (error: any) {
-    console.error("deleteOrderAction error:", error);
-    return { success: false, error: error?.message || "فشل حذف الطلب" };
-  }
-}
+export const updateFrontendAction = saveFrontendSettingsAction;
+export const adminSaveFrontendAction = saveFrontendSettingsAction;
 
 // =========================================================================
-// 9. بطاقة العميل VIP (CustomerQRCode)
+// 9. بطاقة العميل VIP (CustomerQRCode.tsx)
 // =========================================================================
 export async function upsertCustomerAction(data: {
   code: string;
@@ -726,3 +729,5 @@ export async function upsertCustomerAction(data: {
     return { success: false, error: error?.message || "فشل تسجيل بيانات العميل" };
   }
 }
+
+export const saveCustomerAction = upsertCustomerAction;
