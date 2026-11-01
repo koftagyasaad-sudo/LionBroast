@@ -12,15 +12,16 @@ body {
   overflow-x: hidden;
 }
 
+/* توهج اللون البرتقالي الأسدي الموحد */
 .glow-brand {
-  box-shadow: 0 0 35px -5px rgba(249, 115, 22, 0.45);
+  box-shadow: 0 0 35px -5px rgba(234, 88, 12, 0.45);
 }
 
 .glow-brand:hover {
-  box-shadow: 0 0 45px -2px rgba(249, 115, 22, 0.65);
+  box-shadow: 0 0 45px -2px rgba(234, 88, 12, 0.65);
 }
 
-/* تحسين شريط التمرير */
+/* شريط تمرير ناعم ومظلم */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -35,5 +36,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #f97316;
+  background: #ea580c;
 }
