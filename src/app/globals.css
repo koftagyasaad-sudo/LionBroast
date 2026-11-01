@@ -2,34 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --radius-curved: 1.75rem;
-}
-
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  font-family: inherit;
+  background-color: #09090b;
+  color: #ffffff;
   overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* فرض الكيرفات الدائرية الفخمة على كافة عناصر الموقع تلقائياً */
-.rounded-2xl {
-  border-radius: 1.25rem !important;
+/* قاعدة حماية جذرية: منع أي صورة من تخطي حدود عنصرها الأب */
+img {
+  max-width: 100%;
+  height: auto;
 }
 
-.rounded-3xl {
-  border-radius: 2rem !important;
-}
-
-input, select, textarea {
-  border-radius: 1.1rem !important;
-}
-
-/* تأثير التوهج البرتقالي الأسدي */
 .glow-brand {
   box-shadow: 0 0 35px -5px rgba(249, 115, 22, 0.45);
 }
@@ -38,7 +26,6 @@ input, select, textarea {
   box-shadow: 0 0 45px -2px rgba(249, 115, 22, 0.65);
 }
 
-/* تحسين شريط التمرير */
 ::-webkit-scrollbar {
   width: 8px;
 }
