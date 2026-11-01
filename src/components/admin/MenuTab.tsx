@@ -12,12 +12,8 @@ import {
 import {
   Plus,
   Trash2,
-  Edit2,
-  Save,
-  Sparkles,
   Upload,
   Check,
-  Flame,
   Layers,
   UtensilsCrossed,
   ScanLine,
@@ -25,12 +21,11 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
-  Image as ImageIcon,
-  DollarSign,
-  FileText,
+  Save,
+  Sparkles,
+  Edit3,
 } from "lucide-react";
 
-// دالة ضغط الصورة داخل المتصفح لمنع خطأ تجاوز حجم البيانات المسموح به
 async function compressImageToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -72,7 +67,6 @@ async function compressImageToDataUrl(file: File): Promise<string> {
 }
 
 export default function MenuTab({ bundle, onReload, categories: propCats, items: propItems }: any) {
-  // دمج مصادر البيانات بمرونة
   const initialCats = bundle?.categories || propCats || [];
   const initialItems = bundle?.menuItems || bundle?.items || propItems || [];
 
@@ -82,19 +76,21 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     initialCats[0]?.id || ""
   );
 
-  // حالات إضافة صنف وقسم جديد
   const [newCatName, setNewCatName] = useState("");
   const [catLoading, setCatLoading] = useState(false);
 
+  // حالة إضافة صنف يدوي
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemDesc, setItemDesc] = useState("");
-  const [itemImage, setItemImage] = useState("/img/hero-1.png");
-  const [itemBadge, setItemBadge] = useState("");
   const [itemLoading, setItemLoading] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
 
-  // حالات ماسح الذكاء الاصطناعي بنظام DG-Menu
+  // حالة تعديل صنف موجود (Edit Modal)
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // ماسح الذكاء الاصطناعي
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
@@ -102,7 +98,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
   const [scannedRows, setScannedRows] = useState<any[]>([]);
   const [saveRowsLoading, setSaveRowsLoading] = useState(false);
 
-  // 1. إضافة قسم جديد
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
@@ -135,7 +130,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 2. حذف قسم
   const handleDeleteCategory = async (id: number | string) => {
     if (!confirm("هل أنت متأكد من حذف هذا القسم بالكامل؟")) return;
     try {
@@ -151,7 +145,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 3. إضافة صنف يدوي وتثبيته مباشرة
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName.trim() || !itemPrice) return;
@@ -170,8 +163,7 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
         nameEn: itemName.trim(),
         price: Number(itemPrice),
         descriptionAr: itemDesc.trim(),
-        image: itemImage || "/img/hero-1.png",
-        badge: itemBadge.trim() || null,
+        image: "/img/hero-1.png",
         isAvailable: true,
       };
 
@@ -182,7 +174,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
         setItemName("");
         setItemPrice("");
         setItemDesc("");
-        setItemBadge("");
         setShowItemModal(false);
         onReload?.();
       }
@@ -193,7 +184,39 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 4. حذف صنف
+  // حفظ التعديلات على وجبة قائمة
+  const handleSaveEditItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editingItem.nameAr.trim() || !editingItem.price) return;
+
+    setEditLoading(true);
+    try {
+      const res = await upsertMenuItemAction({
+        id: editingItem.id,
+        categoryId: editingItem.categoryId || activeCatId,
+        nameAr: editingItem.nameAr.trim(),
+        nameEn: editingItem.nameEn || editingItem.nameAr.trim(),
+        price: Number(editingItem.price),
+        descriptionAr: editingItem.descriptionAr || "",
+        image: editingItem.image || "/img/hero-1.png",
+        badge: editingItem.badge || null,
+        isAvailable: editingItem.isAvailable !== undefined ? editingItem.isAvailable : true,
+      });
+
+      if (res.success) {
+        setItems((prev) =>
+          prev.map((it) => (it.id === editingItem.id ? { ...it, ...editingItem } : it))
+        );
+        setEditingItem(null);
+        onReload?.();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleDeleteItem = async (id: number | string) => {
     if (!confirm("هل أنت متأكد من حذف هذه الوجبة؟")) return;
     try {
@@ -205,7 +228,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 5. رفع صورة المنيو وتجهيزها للماسح
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -220,19 +242,21 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 6. تشغيل ماسح المنيو DG-Menu
   const handleExecuteScan = async () => {
     if (!scanPreview) return;
 
     setScanLoading(true);
-    setScanStatus("جاري تحليل صورة المنيو وتفريغ الأصناف والأسعار بالذكاء الاصطناعي 🦁...");
+    setScanStatus("جاري فحص وتفريغ أصناف المنيو بدقة...");
     try {
       const res = await scanMenuAction(scanPreview);
       if (res.success) {
         const rows = res.rows || res.items || [];
         setScannedRows(rows);
-        setScanStatus(res.message || `تم بنجاح استخراج ${rows.length} وجبة من المنيو.`);
-        onReload?.();
+        setScanStatus("تم استخراج الأصناف بنجاح! راجع وعدل أي خطأ مباشرة في الجدول أدناه قبل الاعتماد 🦁");
+        if (res.categories && res.categories.length > 0) {
+          setCats(res.categories);
+          setActiveCatId(res.categories[0]?.id || "");
+        }
       } else {
         setScanStatus(res.error || "تعذر إكمال المسح، يرجى المحاولة مرة أخرى.");
       }
@@ -243,7 +267,20 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // 7. اعتماد وحفظ جدول الأصناف الممسوحة دفعة واحدة
+  // تعديل محتوى سطر في جدول المسح قبل الحفظ
+  const handleUpdateScannedRow = (index: number, field: string, value: any) => {
+    setScannedRows((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleDeleteScannedRow = (index: number) => {
+    setScannedRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // اعتماد وحفظ الأصناف ونقلها فوراً لواجهة الأصناف
   const handleConfirmSaveAllRows = async () => {
     if (scannedRows.length === 0) return;
 
@@ -251,7 +288,9 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     try {
       const res = await adminSaveScannedRowsAction(scannedRows);
       if (res.success) {
-        alert("تم اعتماد وحفظ جميع أصناف المنيو في قاعدة البيانات بنجاح 🦁");
+        // دمج الأصناف فورياً في واجهة التعديل
+        setItems((prev) => [...prev, ...scannedRows]);
+        alert(`تم بنجاح اعتماد ${scannedRows.length} صنف وإضافتها للقائمة والموقع الخارجي 🦁`);
         setScannedRows([]);
         setScanPreview(null);
         setScanStatus(null);
@@ -265,27 +304,26 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
     }
   };
 
-  // الأصناف التابعة للقسم النشط حالياً
   const currentCategoryItems = items.filter(
-    (it) => String(it.categoryId) === String(activeCatId)
+    (it) => String(it.categoryId) === String(activeCatId) || (!it.categoryId && cats[0]?.id === activeCatId)
   );
 
   return (
     <div className="space-y-8" dir="rtl">
       
-      {/* ================= 1. ماسح المنيو الذكي (نظام DG-Menu المتطور) ================= */}
+      {/* 1. ماسح المنيو مع جدول المراجعة القابل للتعديل المباشر */}
       <div className="rounded-3xl border border-orange-500/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 md:p-8 shadow-2xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="space-y-1 text-right">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-0.5 text-xs font-black text-orange-400">
               <ScanLine className="size-3.5" />
-              <span>ماسح المنيو التلقائي الذكي · DG-Menu Engine</span>
+              <span>ماسح المنيو الذكي · Smart DG-Menu</span>
             </span>
             <h2 className="text-xl md:text-2xl font-black text-white">
-              إدخال وتحديث المنيو بضغطة زر 🍗
+              استخراج الأصناف وتعديلها فورياً 🍗
             </h2>
             <p className="text-xs text-zinc-400">
-              ارفع صورة منيو المطعم أو البوستر، وسيقوم النظام فوراً باستخراج كافة الساندوتشات والوجبات والأسعار وتوزيعها في جداول منظمة.
+              ارفع صورة المنيو، وسيتم استخراج الأصناف في جدول تفاعلي يمكنك تعديل أي اسم أو سعر فيه قبل الحفظ.
             </p>
           </div>
 
@@ -320,7 +358,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
           </div>
         </div>
 
-        {/* حالة وتنبيهات المسح */}
         {scanStatus && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-3.5 text-xs font-bold text-orange-300">
             <AlertCircle className="size-4 shrink-0" />
@@ -328,14 +365,14 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
           </div>
         )}
 
-        {/* جدول استعراض الأصناف الممسوحة (DG-Menu Table) */}
+        {/* جدول استعراض وتعديل الأصناف الممسوحة مباشرة */}
         {scannedRows.length > 0 && (
           <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="size-5 text-emerald-400" />
                 <h3 className="text-sm font-black text-white">
-                  تم استخراج ({scannedRows.length}) وجبة وصنف بنجاح
+                  تم استخراج ({scannedRows.length}) وجبة (يمكنك تعديل أي خانة مباشرة الآن):
                 </h3>
               </div>
 
@@ -343,37 +380,68 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
                 type="button"
                 disabled={saveRowsLoading}
                 onClick={handleConfirmSaveAllRows}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-lg transition cursor-pointer"
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-6 py-2.5 text-xs font-black text-white shadow-lg transition cursor-pointer"
               >
                 {saveRowsLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                <span>اعتماد وحفظ كافة الأصناف في المنيو فوراً 🦁</span>
+                <span>تأكيد واعتماد الأصناف ونشرها في الموقع فوراً 🦁</span>
               </button>
             </div>
 
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-right text-xs">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 font-bold">
                     <th className="py-2.5 px-3">القسم</th>
-                    <th className="py-2.5 px-3">اسم الوجبة</th>
-                    <th className="py-2.5 px-3">السعر (ج.م)</th>
-                    <th className="py-2.5 px-3">الوصف والتفاصيل</th>
+                    <th className="py-2.5 px-3">اسم الوجبة (قابل للتعديل)</th>
+                    <th className="py-2.5 px-3">السعر ج.م</th>
+                    <th className="py-2.5 px-3">الوصف</th>
+                    <th className="py-2.5 px-2 text-center">حذف</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-medium text-zinc-300">
                   {scannedRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-zinc-900/60 transition">
-                      <td className="py-2 px-3 font-bold text-amber-400">
-                        {row.categoryName || row.categoryAr || "عام"}
+                    <tr key={idx} className="hover:bg-zinc-900/40 transition">
+                      <td className="py-2 px-3">
+                        <input
+                          type="text"
+                          value={row.categoryName || row.categoryAr || "عام"}
+                          onChange={(e) => handleUpdateScannedRow(idx, "categoryName", e.target.value)}
+                          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-amber-400 outline-none focus:border-orange-500 w-28"
+                        />
                       </td>
-                      <td className="py-2 px-3 font-bold text-white">
-                        {row.nameAr || row.name}
+                      <td className="py-2 px-3">
+                        <input
+                          type="text"
+                          value={row.nameAr || row.name || ""}
+                          onChange={(e) => handleUpdateScannedRow(idx, "nameAr", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-white outline-none focus:border-orange-500 min-w-[140px]"
+                        />
                       </td>
-                      <td className="py-2 px-3 font-black text-emerald-400 font-mono">
-                        {row.price} ج.م
+                      <td className="py-2 px-3">
+                        <input
+                          type="number"
+                          value={row.price || 0}
+                          onChange={(e) => handleUpdateScannedRow(idx, "price", Number(e.target.value))}
+                          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-black text-emerald-400 text-center font-mono outline-none focus:border-emerald-500 w-20"
+                        />
                       </td>
-                      <td className="py-2 px-3 text-zinc-400 max-w-xs truncate">
-                        {row.descriptionAr || row.description || "—"}
+                      <td className="py-2 px-3">
+                        <input
+                          type="text"
+                          value={row.descriptionAr || row.description || ""}
+                          onChange={(e) => handleUpdateScannedRow(idx, "descriptionAr", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 outline-none focus:border-orange-500 min-w-[200px]"
+                        />
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteScannedRow(idx)}
+                          className="grid size-7 place-items-center rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition mx-auto"
+                          title="حذف هذا الصنف"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -384,7 +452,7 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
         )}
       </div>
 
-      {/* ================= 2. إدارة الأقسام (Categories) ================= */}
+      {/* 2. إدارة الأقسام */}
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 md:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -392,10 +460,9 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
               <Layers className="size-5 text-orange-500" />
               <span>أقسام قائمة الطعام ({cats.length})</span>
             </h3>
-            <p className="text-xs text-zinc-400">اضغط على أي قسم لعرض وتعديل الأصناف الموجودة بداخله.</p>
+            <p className="text-xs text-zinc-400">اضغط على أي قسم لعرض وتعديل الأصناف التابعة له.</p>
           </div>
 
-          {/* نموذج إضافة قسم سريع */}
           <form onSubmit={handleAddCategory} className="flex items-center gap-2">
             <input
               type="text"
@@ -416,7 +483,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
           </form>
         </div>
 
-        {/* كروت الأقسام الأفقية */}
         <div className="flex flex-wrap items-center gap-2.5 pt-2">
           {cats.map((cat) => {
             const isActive = String(cat.id) === String(activeCatId);
@@ -458,7 +524,7 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
         </div>
       </div>
 
-      {/* ================= 3. إدارة الوجبات والأصناف داخل القسم المحدد ================= */}
+      {/* 3. قائمة الأصناف مع زر التعديل ✎ وزر الحذف 🗑 */}
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 md:p-8 space-y-6">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div className="space-y-1">
@@ -467,12 +533,12 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
               <span>
                 أصناف قسم:{" "}
                 <span className="text-orange-400">
-                  {cats.find((c) => String(c.id) === String(activeCatId))?.nameAr || "القسم المحدد"}
+                  {cats.find((c) => String(c.id) === String(activeCatId))?.nameAr || "القسم الحالي"}
                 </span>{" "}
                 ({currentCategoryItems.length})
               </span>
             </h3>
-            <p className="text-xs text-zinc-400">إضافة وتعديل وحذف الوجبات في هذا القسم يدوياً.</p>
+            <p className="text-xs text-zinc-400">يمكنك تعديل أي صنف في أي وقت بالضغط على أيقونة التعديل ✎.</p>
           </div>
 
           <button
@@ -485,7 +551,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
           </button>
         </div>
 
-        {/* شبكة كروت الأصناف */}
         {currentCategoryItems.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {currentCategoryItems.map((item) => (
@@ -515,17 +580,28 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
 
                 <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs">
                   <span className="text-[10px] font-bold text-zinc-500">
-                    {item.isAvailable ? "متوفر للطلب ✅" : "غير متاح حالياً ❌"}
+                    {item.isAvailable ? "متوفر للطلب ✅" : "غير متاح ❌"}
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteItem(item.id)}
-                    className="flex items-center gap-1 text-[11px] font-bold text-red-400/80 hover:text-red-400 transition cursor-pointer"
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span>حذف الوجبة</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem(item)}
+                      className="flex items-center gap-1 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 px-2.5 py-1 text-[11px] font-bold transition cursor-pointer"
+                    >
+                      <Edit3 className="size-3" />
+                      <span>تعديل</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="grid size-7 place-items-center rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition cursor-pointer"
+                      title="حذف الوجبة"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -534,7 +610,7 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
           <div className="py-12 text-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20">
             <UtensilsCrossed className="size-8 mx-auto text-zinc-600 mb-2" />
             <p className="text-xs font-bold text-zinc-400">
-              لا توجد وجبات مسجلة في هذا القسم حتى الآن.
+              لا توجد وجبات مسجلة في هذا القسم حالياً.
             </p>
             <button
               type="button"
@@ -542,20 +618,101 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
               className="mt-3 inline-flex items-center gap-1.5 text-xs font-black text-orange-400 hover:text-orange-300"
             >
               <Plus className="size-3.5" />
-              <span>اضغط هنا لإضافة أول صنف يدوي</span>
+              <span>اضغط هنا لإضافة صنف يدوي</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* ================= 4. نافذة إضافة صنف يدوي منبثقة ================= */}
+      {/* 4. نافذة تعديل وجبة قائمة (Edit Item Modal) */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 space-y-4 text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Edit3 className="size-4 text-orange-500" />
+                <span>تعديل الوجبة: {editingItem.nameAr}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="text-zinc-500 hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditItem} className="space-y-3.5 text-right">
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  اسم الوجبة:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingItem.nameAr}
+                  onChange={(e) => setEditingItem({ ...editingItem, nameAr: e.target.value })}
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-orange-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  السعر بالجنيه (EGP):
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={editingItem.price}
+                  onChange={(e) => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-black text-white outline-none focus:border-orange-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                  الوصف والمكونات:
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingItem.descriptionAr || ""}
+                  onChange={(e) => setEditingItem({ ...editingItem, descriptionAr: e.target.value })}
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white outline-none focus:border-orange-500 resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="flex-1 rounded-2xl border border-zinc-800 bg-zinc-900 py-3 text-xs font-bold text-zinc-400 hover:text-white"
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl bg-orange-600 hover:bg-orange-500 py-3 text-xs font-black text-white shadow-xl transition disabled:opacity-50"
+                >
+                  {editLoading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  <span>حفظ التعديل الآن</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. نافذة إضافة صنف يدوي */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 space-y-4 text-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-black text-white flex items-center gap-2">
                 <Plus className="size-4 text-orange-500" />
-                <span>إضافة وجبة وصنف جديد</span>
+                <span>إضافة صنف جديد</span>
               </h3>
               <button
                 type="button"
@@ -569,7 +726,7 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
             <form onSubmit={handleAddItem} className="space-y-3.5 text-right">
               <div>
                 <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                  اسم الوجبة بالعربي:
+                  اسم الوجبة:
                 </label>
                 <input
                   type="text"
@@ -589,7 +746,6 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
                   type="number"
                   required
                   min="0"
-                  step="1"
                   value={itemPrice}
                   onChange={(e) => setItemPrice(e.target.value)}
                   placeholder="مثال: 120"
@@ -599,13 +755,13 @@ export default function MenuTab({ bundle, onReload, categories: propCats, items:
 
               <div>
                 <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                  وصف المكونات والوجبة:
+                  الوصف والمكونات:
                 </label>
                 <textarea
                   rows={2}
                   value={itemDesc}
                   onChange={(e) => setItemDesc(e.target.value)}
-                  placeholder="مثال: قطع استربس مقرمشة + بطاطس + صوص شيدر..."
+                  placeholder="مثال: دجاج مقرمش + صوص شيدر + بطاطس..."
                   className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white placeholder:text-zinc-600 outline-none focus:border-orange-500 resize-none"
                 />
               </div>
