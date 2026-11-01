@@ -1,143 +1,103 @@
 "use client";
 
-import { useState } from "react";
-import { MapPin, Clock, Search, Bike, Sparkles, Navigation, ShieldCheck } from "lucide-react";
-
-interface ZoneItem {
-  id: string | number;
-  nameAr?: string;
-  name?: string;
-  fee?: number;
-  price?: number;
-  estimatedMinutes?: number;
-}
+import { MapPin, Clock, Bike, ShieldCheck, Sparkles } from "lucide-react";
 
 interface ZonesSectionProps {
-  zones?: ZoneItem[];
-  deliveryZones?: ZoneItem[];
+  zones?: any[];
+  deliveryZones?: any[];
   settings?: any;
 }
 
-export default function ZonesSection({ zones, deliveryZones }: ZonesSectionProps) {
-  const [searchTerm, setSearchTerm] = useState("");
+export default function ZonesSection({ zones, deliveryZones, settings }: ZonesSectionProps) {
+  // دمج وقراءة المناطق سواء جاءت من الجدول المباشر أو من إعدادات الواجهة
+  const rawList =
+    (zones && zones.length > 0 ? zones : null) ||
+    (deliveryZones && deliveryZones.length > 0 ? deliveryZones : null) ||
+    (settings?.delivery_zones && Array.isArray(settings.delivery_zones)
+      ? settings.delivery_zones
+      : null);
 
-  const rawList = zones || deliveryZones || [];
-  const fallbackZones: ZoneItem[] = [
-    { id: 1, nameAr: "دسوق - وسط البلد وشارع الجيش", fee: 15, estimatedMinutes: 25 },
-    { id: 2, nameAr: "دسوق - منطقة المستشفى والمحطة", fee: 15, estimatedMinutes: 25 },
-    { id: 3, nameAr: "دسوق - حي الكشلة والميدان الإبراهيمي", fee: 15, estimatedMinutes: 30 },
-    { id: 4, nameAr: "دسوق - دحروج وقرى الساحل", fee: 20, estimatedMinutes: 35 },
-    { id: 5, nameAr: "القرى والمناطق المجاورة لدسوق", fee: 25, estimatedMinutes: 40 },
+  const defaultZones = [
+    { nameAr: "وسط البلد - شارع الجيش والميدان", deliveryFee: 10, estimatedMinutes: "20-30 دقيقة" },
+    { nameAr: "محيط مستشفى النيل ودرويش", deliveryFee: 10, estimatedMinutes: "20-30 دقيقة" },
+    { nameAr: "شارع الشركات والكورنيش", deliveryFee: 15, estimatedMinutes: "25-35 دقيقة" },
+    { nameAr: "طريق فوة والقرى المجاورة", deliveryFee: 25, estimatedMinutes: "35-45 دقيقة" },
   ];
 
-  const currentList = rawList.length > 0 ? rawList : fallbackZones;
-
-  const filtered = currentList.filter((z) => {
-    const name = String(z.nameAr || z.name || "").toLowerCase();
-    return name.includes(searchTerm.trim().toLowerCase());
-  });
+  const list = rawList && rawList.length > 0 ? rawList : defaultZones;
 
   return (
-    <section
-      id="zones"
-      className="py-24 relative overflow-hidden bg-gradient-to-b from-stone-950 via-zinc-900 to-stone-950 text-white border-y border-brand-500/20"
-      dir="rtl"
-    >
-      {/* خلفية معبرة عن خريطة ومسارات الدليفري */}
-      <div className="absolute inset-0 opacity-[0.06] pointer-events-none bg-[radial-gradient(#f97316_1px,transparent_1px)] [background-size:24px_24px]" />
-      
-      {/* دوائر ضوئية لمسارات التوصيل السريع */}
-      <div className="absolute -top-32 right-10 size-96 rounded-full bg-brand-500/15 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 left-10 size-96 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-
-      {/* خطوط تعبيرية لشوارع وسكوتر دليفري في الخلفية */}
-      <div className="absolute top-1/2 -right-16 -translate-y-1/2 opacity-10 pointer-events-none hidden lg:block text-brand-500">
-        <Bike className="size-96" />
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 md:px-8 relative z-10">
-        {/* عنوان السكشن */}
-        <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/15 px-4 py-1.5 text-xs font-black text-brand-400 shadow-sm">
-            <Bike className="size-4 animate-bounce" />
-            <span>أسطول دليفري بروست الأسد السريع في خدمتك 🛵</span>
+    <section id="zones" className="py-16 bg-carbon-950 text-white border-t border-white/5" dir="rtl">
+      <div className="mx-auto max-w-7xl px-4 md:px-8 space-y-8">
+        
+        {/* رأس السكشن */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="space-y-2 text-right">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-black text-emerald-400">
+              <Bike className="size-3.5 text-emerald-400" />
+              <span>خدمة الدليفري السريع في دسوق</span>
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white">
+              مناطق وأسعار التوصيل الميداني 🛵
+            </h2>
+            <p className="text-xs sm:text-sm text-white/60 font-medium">
+              نوصلك طلبك ساخن ومقرمش لأي مكان في دسوق والمناطق والقرى المجاورة في أسرع وقت.
+            </p>
           </div>
 
-          <h2 className="text-3xl md:text-5xl font-black tracking-tight text-white drop-shadow-md">
-            مناطق وأسعار التوصيل 📍
-          </h2>
-
-          <p className="text-sm md:text-base text-white/70 max-w-xl mx-auto leading-relaxed">
-            طلبك بيوصلك سخن مولع ومقرمش في أسرع وقت لحد باب بيتك في دسوق والمناطق المحيطة بها بأفضل تسعيرة.
-          </p>
-
-          {/* شريط البحث المباشر في المناطق */}
-          <div className="pt-4 max-w-md mx-auto">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ابحث عن منطقتك أو قريتك في دسوق..."
-                className="w-full rounded-2xl border border-white/20 bg-black/60 px-11 py-3.5 text-sm font-bold text-white placeholder:text-white/40 focus:border-brand-500 focus:outline-none transition shadow-2xl backdrop-blur-md"
-              />
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 size-4 text-brand-400" />
-            </div>
+          <div className="inline-flex items-center gap-2 rounded-2xl bg-white/5 border border-white/10 px-4 py-2.5 text-xs font-bold text-amber-400 w-fit">
+            <Sparkles className="size-4" />
+            <span>توصيل فوري من 10 صباحاً حتى 4 فجراً</span>
           </div>
         </div>
 
-        {/* شبكة كروت المناطق */}
-        {filtered.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((zone, idx) => {
-              const displayName = String(zone.nameAr || zone.name || "منطقة دسوق").trim();
-              const price = Number(zone.fee ?? zone.price ?? 15);
-              const minutes = Number(zone.estimatedMinutes ?? 25);
+        {/* شبكة كروت مناطق التوصيل */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {list.map((z: any, idx: number) => {
+            const fee = Number(z.deliveryFee || z.fee || 0);
+            const name = z.nameAr || z.name || "منطقة دسوق";
+            const time = z.estimatedMinutes || z.time || "25-35 دقيقة";
 
-              return (
-                <div
-                  key={zone.id || idx}
-                  className="group relative rounded-3xl border border-white/10 bg-zinc-950/80 p-6 transition duration-300 hover:border-brand-500/60 hover:bg-black/90 hover:-translate-y-1.5 shadow-xl backdrop-blur-md flex flex-col justify-between"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3.5">
-                      <div className="grid size-12 place-items-center rounded-2xl bg-brand-500/20 text-brand-400 ring-2 ring-brand-500/30 group-hover:scale-110 transition shadow-inner">
-                        <MapPin className="size-6" />
-                      </div>
-                      <h3 className="text-base font-extrabold text-white group-hover:text-amber-400 transition leading-snug">
-                        {displayName}
-                      </h3>
-                    </div>
+            return (
+              <div
+                key={idx}
+                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-carbon-900 to-carbon-950 p-6 shadow-xl hover:border-brand-500/40 transition duration-300 flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="size-10 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400 group-hover:scale-105 transition">
+                    <MapPin className="size-5" />
+                  </div>
+                  <h3 className="text-base font-black text-white group-hover:text-brand-400 transition leading-snug">
+                    {name}
+                  </h3>
+                </div>
 
-                    <div className="text-left shrink-0">
-                      <span className="text-2xl font-black text-amber-400">{price}</span>
-                      <span className="text-xs font-bold text-white/60 mr-1">ج.م</span>
-                    </div>
+                <div className="pt-6 mt-4 border-t border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-white/60">
+                    <Clock className="size-3.5 text-amber-400" />
+                    <span>{time}</span>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-bold">
-                    <div className="flex items-center gap-1.5 text-emerald-400">
-                      <Clock className="size-4" />
-                      <span>{minutes} دقيقة تقريباً</span>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-[11px] text-brand-400 font-semibold">
-                      <Navigation className="size-3" />
-                      <span>توصيل مباشر</span>
-                    </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-emerald-400">{fee}</span>
+                    <span className="text-[10px] font-bold text-white/40">ج.م</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-3xl border border-dashed border-white/15 bg-black/40 p-12 text-center max-w-md mx-auto">
-            <Sparkles className="size-8 text-brand-500 mx-auto mb-3" />
-            <p className="text-sm font-bold text-white">لم يتم العثور على منطقة بهذا الاسم</p>
-            <p className="text-xs text-white/40 mt-1">
-              نوصل لجميع أنحاء دسوق والقرى المجاورة، كلمنا على الخط الساخن للتأكيد!
-            </p>
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* شريط الضمان والتأكيد */}
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 flex flex-wrap items-center justify-center gap-6 text-xs font-bold text-white/60 text-center">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-emerald-400" />
+            <span>تغليف حراري مخصص للحفاظ على قرمشة وسخونة البروست</span>
+          </span>
+          <span className="text-white/20 hidden sm:inline">•</span>
+          <span>لطلب الدليفري الفوري كلمنا على: <strong className="text-amber-400 font-mono" dir="ltr">0248813666</strong></span>
+        </div>
+
       </div>
     </section>
   );
