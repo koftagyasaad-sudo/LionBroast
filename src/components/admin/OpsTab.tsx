@@ -15,10 +15,8 @@ import {
   Save,
   CheckCircle2,
   Megaphone,
-  Sparkles,
   Loader2,
   RefreshCw,
-  PhoneCall,
   Store,
 } from "lucide-react";
 
@@ -257,4 +255,111 @@ export default function OpsTab({ bundle, onReload, settings: propSettings, zones
               <Megaphone className="size-3.5" />
               <span>بانر الإعلانات الترويجية والعروض المؤقتة</span>
             </span>
-            <h3 className="text-xl font-black text-white">إعلان الواجهة المؤ
+            <h3 className="text-xl font-black text-white">إعلان الواجهة المؤقت 📢</h3>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-white">
+            <span>تفعيل الإعلان:</span>
+            <input
+              type="checkbox"
+              checked={promoEnabled}
+              onChange={(e) => setPromoEnabled(e.target.checked)}
+              className="size-4 accent-orange-600 rounded cursor-pointer"
+            />
+          </label>
+        </div>
+
+        <form onSubmit={handleSavePromo} className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-300 mb-1.5">
+              نص العرض أو الإعلان الترويجي:
+            </label>
+            <textarea
+              rows={2}
+              required
+              value={promoText}
+              onChange={(e) => setPromoText(e.target.value)}
+              placeholder="اكتب تفاصيل العرض الترويجي ليظهر في أعلى الصفحة الرئيسية..."
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-3.5 text-xs font-bold text-white outline-none focus:border-orange-500 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={promoSaving}
+              className="flex items-center gap-2 rounded-2xl bg-orange-600 hover:bg-orange-500 px-6 py-2.5 text-xs font-black text-white shadow-xl transition cursor-pointer disabled:opacity-50"
+            >
+              {promoSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              <span>حفظ ونشر الإعلان فوراً</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. بيانات الفرع والتواصل */}
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 md:p-8 space-y-6 shadow-xl">
+        <div className="border-b border-zinc-800 pb-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-0.5 text-xs font-black text-blue-400">
+            <Store className="size-3.5" />
+            <span>معلومات الفرع وأرقام الدليفري المباشرة</span>
+          </span>
+          <h3 className="text-xl font-black text-white mt-1">بيانات التواصل والفرع 📞</h3>
+        </div>
+
+        <form onSubmit={handleSaveOps} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-300 mb-1">الخط الساخن للطلبات:</label>
+            <input
+              type="text"
+              value={hotline}
+              onChange={(e) => setHotline(e.target.value)}
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-orange-500 font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-300 mb-1">رقم الواتساب:</label>
+            <input
+              type="text"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-orange-500 font-mono"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-bold text-zinc-300 mb-1">عنوان الفرع في دسوق:</label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-bold text-zinc-300 mb-1">مواعيد العمل واستقبال الطلبات:</label>
+            <input
+              type="text"
+              value={workingHours}
+              onChange={(e) => setWorkingHours(e.target.value)}
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={opsSaving}
+              className="flex items-center gap-2 rounded-2xl bg-orange-600 hover:bg-orange-500 px-6 py-2.5 text-xs font-black text-white shadow-xl transition cursor-pointer disabled:opacity-50"
+            >
+              {opsSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              <span>حفظ بيانات الفرع</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
