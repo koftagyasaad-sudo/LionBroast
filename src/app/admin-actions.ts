@@ -37,13 +37,12 @@ export async function saveFrontendSettingsAction(data: Record<string, any>) {
   }
 }
 
-// دالة متوافقة مع التسميات البديلة
 export async function updateFrontendAction(data: Record<string, any>) {
   return saveFrontendSettingsAction(data);
 }
 
 // =========================================================================
-// 2. إدارة الأقسام (MenuTab) - حل مشكلة إضافة الأقسام يدوياً
+// 2. إدارة الأقسام (MenuTab)
 // =========================================================================
 export async function createCategoryAction(data: {
   nameAr: string;
@@ -203,7 +202,7 @@ export async function updateMenuItemAction(
     return { success: true };
   } catch (error: any) {
     console.error("updateMenuItemAction error:", error);
-    return { success: false, error: error?.message || "فشل تعديل الصنف" };
+    return { success: false, error: error?.message || "فشل تعديل الوجبة" };
   }
 }
 
@@ -259,7 +258,7 @@ export async function deleteOrderAction(orderId: string | number) {
 }
 
 // =========================================================================
-// 5. إدارة العمليات والإعدادات العامة (OpsTab)
+// 5. إدارة العمليات والإعدادات التشغيلية (OpsTab)
 // =========================================================================
 export async function saveOpsSettingsAction(data: Record<string, any>) {
   try {
@@ -283,7 +282,7 @@ export async function saveOpsSettingsAction(data: Record<string, any>) {
 }
 
 // =========================================================================
-// 6. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner) بنظام DG-Menu
+// 6. ماسح المنيو بالذكاء الاصطناعي (AI Menu Scanner)
 // =========================================================================
 export async function scanMenuAction(imageBase64: string) {
   try {
@@ -295,8 +294,7 @@ export async function scanMenuAction(imageBase64: string) {
     if (!apiKey) {
       return {
         success: false,
-        error:
-          "مفتاح الذكاء الاصطناعي (GEMINI_API_KEY) غير مضاف في Vercel Environment Variables. برجاء إضافته لتفعيل الماسح.",
+        error: "مفتاح الذكاء الاصطناعي (GEMINI_API_KEY) غير مضاف في Vercel Environment Variables.",
       };
     }
 
@@ -354,7 +352,7 @@ export async function scanMenuAction(imageBase64: string) {
     if (!response.ok) {
       return {
         success: false,
-        error: "تعذر الاتصال بسيرفر الذكاء الاصطناعي، تأكد من صحة المفتاح وحصته في Google AI Studio.",
+        error: "تعذر الاتصال بسيرفر الذكاء الاصطناعي، يرجى مراجعة المفتاح وصلاحيته.",
       };
     }
 
@@ -398,11 +396,11 @@ export async function scanMenuAction(imageBase64: string) {
     return {
       success: true,
       data: parsed,
-      message: "تم مسح المنيو واستخراج الأصناف وإضافتها لقاعدة البيانات بنجاح 🦁",
+      message: "تم استخراج الأصناف وإضافتها لقاعدة البيانات بنجاح 🦁",
     };
   } catch (error: any) {
     console.error("scanMenuAction error:", error);
-    return { success: false, error: error?.message || "حدث خطأ أثناء مسح المنيو." };
+    return { success: false, error: error?.message || "حدث خطأ أثناء معالجة الصورة." };
   }
 }
 
@@ -479,7 +477,6 @@ export async function saveZonesAndPromoAction(formData: {
   }
 }
 
-// دالة بديلة للتوافق
 export async function savePromoAction(promo: any) {
   return saveZonesAndPromoAction({ promo });
 }
